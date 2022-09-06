@@ -1,6 +1,9 @@
 # VitaDB Downloader
 VitaDB Downloader is the official PSVita/PSTV client for [VitaDB](https://vitadb.rinnegatamante.it/), the first database ever made for PSVITA/PSTV homebrew.
 
+## Requirements
+In order to run VitaDB Downloader, you need <b>libshacccg.suprx</b>. If you don't have it installed already, you can install it by following this guide: https://samilops2.gitbook.io/vita-troubleshooting-guide/shader-compiler/extract-libshacccg.suprx
+
 ## Features
 - Searching by author/homebrew name.
 - Filtering apps by category.
