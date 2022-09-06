@@ -1177,18 +1177,18 @@ int main(int argc, char *argv[]) {
 			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0, 1.0f), "Size:");
 			ImGui::SetCursorPosY(116);
 			ImGui::SetCursorPosX(140);
-			char sizes[64];
+			char size_str[64];
 			char *dummy;
-			int64_t sz;
+			uint64_t sz;
 			if (strlen(hovered->data_link) > 5) {
-				sz = strtoll(hovered->size, &dummy, 10);
-				int64_t sz2 = strtoll(hovered->data_size, &dummy, 10);
-				sprintf(sizes, "VPK: %.2f MBs, Data: %.2f MBs", (float)sz / (float)(1024 * 1024), (float)sz2 / (float)(1024 * 1024));
+				sz = strtoull(hovered->size, &dummy, 10);
+				uint64_t sz2 = strtoull(hovered->data_size, &dummy, 10);
+				sprintf(size_str, "VPK: %.2f %s, Data: %.2f %s", format(sz), sizes[quota(sz)], format(sz2), sizes[quota(sz2)]);
 			} else {
-				sz = strtoll(hovered->size, &dummy, 10);
-				sprintf(sizes, "VPK: %.2f MBs", (float)sz / (float)(1024 * 1024));
+				sz = strtoull(hovered->size, &dummy, 10);
+				sprintf(size_str, "VPK: %.2f %s", format(sz), sizes[quota(sz)]);
 			}
-			ImGui::Text(sizes);
+			ImGui::Text(size_str);
 		}
 		ImGui::SetCursorPosY(470);
 		ImGui::Text("Current sorting mode: %s", sort_modes_str[sort_idx]);
