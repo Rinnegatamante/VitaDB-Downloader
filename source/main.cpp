@@ -739,6 +739,8 @@ const char *sort_modes_str[] = {
 	"Least Downloaded",
 	"Alphabetical (A-Z)",
 	"Alphabetical (Z-A)",
+	"Smallest",
+	"Largest"
 };
 const char *filter_modes[] = {
 	"All Categories",
@@ -803,6 +805,22 @@ void sort_applist(AppSelection *start) {
 				break;
 			case 5: // Z-A
 				if (strcasecmp(ptr1->name, ptr1->next->name) < 0) {
+					swap_apps(ptr1, ptr1->next); 
+					swapped = 1; 
+				}
+				break;
+			case 6: // Smallest
+				d1 = strtoll(ptr1->size, &dummy, 10) + strtoll(ptr1->data_size, &dummy, 10);
+				d2 = strtoll(ptr1->next->size, &dummy, 10) + strtoll(ptr1->next->data_size, &dummy, 10);
+				if (d1 > d2) {
+					swap_apps(ptr1, ptr1->next); 
+					swapped = 1; 
+				}
+				break;
+			case 7: // Largest
+				d1 = strtoll(ptr1->size, &dummy, 10) + strtoll(ptr1->data_size, &dummy, 10);
+				d2 = strtoll(ptr1->next->size, &dummy, 10) + strtoll(ptr1->next->data_size, &dummy, 10);
+				if (d1 < d2) {
 					swap_apps(ptr1, ptr1->next); 
 					swapped = 1; 
 				}
