@@ -1039,6 +1039,21 @@ int main(int argc, char *argv[]) {
 			ImGui::EndCombo();
 		}
 		ImGui::PopItemWidth();
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("Sort Mode: ");
+		ImGui::SameLine();
+		ImGui::PushItemWidth(-1.0f);
+		if (ImGui::BeginCombo("##combo2", sort_modes_str[sort_idx])) {
+			for (int n = 0; n < sizeof(sort_modes_str) / sizeof(*sort_modes_str); n++) {
+				bool is_selected = sort_idx == n;
+				if (ImGui::Selectable(sort_modes_str[n], is_selected))
+					sort_idx = n;
+				if (is_selected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+		ImGui::PopItemWidth();
 		ImGui::Separator();
 		
 		AppSelection *g = apps;
@@ -1211,6 +1226,9 @@ int main(int argc, char *argv[]) {
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !show_screenshots) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
+			go_to_top = true;
+		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !show_screenshots) {
+			filter_idx = (filter_idx + 1) % (sizeof(filter_modes) / sizeof(*filter_modes));
 			go_to_top = true;
 		}
 		oldpad = pad.buttons;
