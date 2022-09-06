@@ -552,7 +552,9 @@ char *unescape(char *src) {
 	return res;
 }
 
-void AppendAppDatabase(const char *file) {
+bool update_detected = false;
+AppSelection *AppendAppDatabase(const char *file) {
+	AppSelection *res = nullptr;
 	FILE *f = fopen(file, "rb");
 	if (f) {
 		fseek(f, 0, SEEK_END);
@@ -576,6 +578,12 @@ void AppendAppDatabase(const char *file) {
 			ptr = extractValue(node->author, ptr, "author", nullptr);
 			ptr = extractValue(node->type, ptr, "type", nullptr);
 			ptr = extractValue(node->id, ptr, "id", nullptr);
+			if (!strncmp(node->id, "877", 3)) { // VitaDB Downloader, check if newer than running version
+				if (strncmp(&version[2], VERSION, 3)) {
+					res = node;
+					update_detected = true;
+				}
+			}
 			ptr = extractValue(node->date, ptr, "date", nullptr);
 			ptr = extractValue(node->screenshots, ptr, "screenshots", nullptr);
 			ptr = extractValue(node->desc, ptr, "long_description", &node->desc);
@@ -591,6 +599,7 @@ void AppendAppDatabase(const char *file) {
 		fclose(f);
 		free(buffer);
 	}
+	return res;
 }
 
 static char fname[512], ext_fname[512], read_buffer[8192];
@@ -905,9 +914,6 @@ int main(int argc, char *argv[]) {
 	ImGui_ImplVitaGL_GamepadUsage(true);
 	ImGui_ImplVitaGL_MouseStickUsage(false);
 	sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, 0);
-
-	// Checking for updates
-	// TODO
 	
 	// Start background audio playback
 	SceUID thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
@@ -920,7 +926,7 @@ int main(int argc, char *argv[]) {
 		DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading apps list", 1, true);
 		res = sceKernelGetThreadInfo(thd, &info);
 	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
-	AppendAppDatabase("ux0:data/VitaDB/apps.json");
+	hovered = AppendAppDatabase("ux0:data/VitaDB/apps.json");
 	
 	// Downloading icons
 	SceIoStat stat;
@@ -978,7 +984,7 @@ int main(int argc, char *argv[]) {
 	AppSelection *decrement_stack[4096];
 	AppSelection *decremented_app = nullptr;
 	int decrement_stack_idx = 0;
-	for (;;) {
+	while (!update_detected) {
 		if (old_sort_idx != sort_idx) {
 			old_sort_idx = sort_idx;
 			sort_applist(apps);
@@ -1337,4 +1343,11 @@ int main(int argc, char *argv[]) {
 			show_screenshots = 2;
 		}
 	}
+	
+	// Installing update
+	download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=877", "Downloading update");
+	sceAppMgrUmount("app0:");
+	extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/");
+	sceIoRemove(TEMP_DOWNLOAD_NAME);
+	sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
 }
