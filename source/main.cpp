@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <string>
 #include <soloud.h>
-#include <soloud_wavstream.h>
+#include <soloud_wav.h>
 #include "head.h"
 #include "unzip.h"
 #include "sha1.h"
@@ -834,6 +834,22 @@ void scePromoterUtilTerm() {
 	sceSysmoduleUnloadModuleInternalWithArg(SCE_SYSMODULE_INTERNAL_PAF, 0, NULL, &opt);
 }
 
+static int musicThread(unsigned int args, void *arg) {
+	// Starting background music
+	SoLoud::Soloud audio_engine;
+	SoLoud::Wav bg_mus;
+	audio_engine.init();
+	if (!bg_mus.load("ux0:/data/VitaDB/bg.ogg")) {
+		bg_mus.setLooping(true);
+		audio_engine.playBackground(bg_mus);
+	} else {
+		return sceKernelExitDeleteThread(0);
+	}
+	for (;;) {
+		sceKernelDelayThread(500 * 1000 * 1000);
+	}
+}
+
 int main(int argc, char *argv[]) {
 	SceIoStat st1, st2;
 	// Checking for libshacccg.suprx existence
@@ -893,17 +909,12 @@ int main(int argc, char *argv[]) {
 	// Checking for updates
 	// TODO
 	
-	// Starting background music
-	SoLoud::Soloud audio_engine;
-	SoLoud::WavStream bg_mus;
-	audio_engine.init();
-	if (!bg_mus.load("ux0:/data/VitaDB/bg.ogg")) {
-		bg_mus.setLooping(true);
-		audio_engine.playBackground(bg_mus);
-	}
+	// Start background audio playback
+	SceUID thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
+	sceKernelStartThread(thd, 0, NULL);
 	
 	// Downloading apps list
-	SceUID thd = sceKernelCreateThread("Apps List Downloader", &appListThread, 0x10000100, 0x100000, 0, 0, NULL);
+	thd = sceKernelCreateThread("Apps List Downloader", &appListThread, 0x10000100, 0x100000, 0, 0, NULL);
 	sceKernelStartThread(thd, 0, NULL);
 	do {
 		DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading apps list", 1, true);
