@@ -848,7 +848,7 @@ static int musicThread(unsigned int args, void *arg) {
 	SoLoud::Soloud audio_engine;
 	SoLoud::Wav bg_mus;
 	audio_engine.init();
-	if (!bg_mus.load("ux0:/data/VitaDB/bg.ogg")) {
+	if (bg_mus.load("ux0:/data/VitaDB/bg.ogg") >= 0) {
 		bg_mus.setLooping(true);
 		audio_engine.playBackground(bg_mus);
 	} else {
