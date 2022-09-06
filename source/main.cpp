@@ -10,6 +10,8 @@
 #include <curl/curl.h>
 #include <stdio.h>
 #include <string>
+#include <soloud.h>
+#include <soloud_wavstream.h>
 #include "head.h"
 #include "unzip.h"
 #include "sha1.h"
@@ -891,6 +893,15 @@ int main(int argc, char *argv[]) {
 	// Checking for updates
 	// TODO
 	
+	// Starting background music
+	SoLoud::Soloud audio_engine;
+	SoLoud::WavStream bg_mus;
+	audio_engine.init();
+	if (!bg_mus.load("ux0:/data/VitaDB/bg.ogg")) {
+		bg_mus.setLooping(true);
+		audio_engine.playBackground(bg_mus);
+	}
+	
 	// Downloading apps list
 	SceUID thd = sceKernelCreateThread("Apps List Downloader", &appListThread, 0x10000100, 0x100000, 0, 0, NULL);
 	sceKernelStartThread(thd, 0, NULL);
@@ -902,7 +913,41 @@ int main(int argc, char *argv[]) {
 	
 	// Downloading icons
 	SceIoStat stat;
+	bool needs_icons_pack = false;
 	if (sceIoGetstat("ux0:data/VitaDB/icons", &stat) < 0) {
+		needs_icons_pack = true;
+	} else {
+		time_t cur_time, last_time;
+		cur_time = time(NULL);
+		FILE *f = fopen("ux0:data/VitaDB/last_boot.txt", "r");
+		if (f) {
+			fscanf(f, "%ld", &last_time);
+			fclose(f);
+			//sceClibPrintf("cur time is %ld and last time is %ld\n", cur_time, last_time);
+			if (cur_time - last_time > 2592000) {
+				init_interactive_msg_dialog("A long time passed since your last visit. Do you want to download all apps icons in one go?");
+				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+					vglSwapBuffers(GL_TRUE);
+				}
+				// Workaround to prevent message dialog "burn in" on background
+				for (int i = 0; i < 10; i++) {
+					glClear(GL_COLOR_BUFFER_BIT);
+					vglSwapBuffers(GL_FALSE);
+				}
+				SceMsgDialogResult msg_res;
+				memset(&msg_res, 0, sizeof(SceMsgDialogResult));
+				sceMsgDialogGetResult(&msg_res);
+				sceMsgDialogTerm();
+				if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
+					needs_icons_pack = true;
+				}
+			}
+		}
+		f = fopen("ux0:data/VitaDB/last_boot.txt", "w");
+		fprintf(f, "%ld", cur_time);
+		fclose(f);
+	}
+	if (needs_icons_pack) {
 		download_file("https://vitadb.rinnegatamante.it/icons_zip.php", "Downloading apps icons");
 		sceIoMkdir("ux0:data/VitaDB/icons", 0777);
 		extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/icons/");

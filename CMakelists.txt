@@ -35,6 +35,7 @@ target_link_libraries(VitaDB
   m
   z
   stdc++
+  soloud
   vitaGL
   vitashark
   SceShaccCgExt
