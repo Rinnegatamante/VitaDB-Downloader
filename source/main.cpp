@@ -1225,7 +1225,7 @@ int main(int argc, char *argv[]) {
 				glBindTexture(GL_TEXTURE_2D, previous_frame);
 				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 				vglFree(scr_data);
-				init_interactive_msg_dialog("This homebrew has also data files. Do you wish to install them as well?");
+				init_interactive_msg_dialog("This homebrew also has data files. Do you wish to install them as well?");
 				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 					vglSwapBuffers(GL_TRUE);
 				}
