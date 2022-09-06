@@ -5,6 +5,7 @@
 #include <vitasdk.h>
 #include <vitaGL.h>
 #include <imgui_vita.h>
+#include <imgui_internal.h>
 #include <bzlib.h>
 #include <curl/curl.h>
 #include <stdio.h>
@@ -19,7 +20,7 @@
 #define MEM_BUFFER_SIZE (32 * 1024 * 1024)
 #define SCR_WIDTH 960
 #define SCR_HEIGHT 544
-#define VERSION "1.0"
+#define VERSION "1.1"
 #define TEMP_DOWNLOAD_NAME "ux0:data/VitaDB/temp.tmp"
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
@@ -884,6 +885,7 @@ int main(int argc, char *argv[]) {
 	ImGui::GetIO().MouseDrawCursor = false;
 	ImGui_ImplVitaGL_TouchUsage(false);
 	ImGui_ImplVitaGL_GamepadUsage(true);
+	ImGui_ImplVitaGL_MouseStickUsage(false);
 	sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, 0);
 
 	// Checking for updates
@@ -910,9 +912,16 @@ int main(int argc, char *argv[]) {
 	//printf("start\n");
 	char ver_str[64];
 	bool calculate_ver_len = true;
+	bool go_to_top = false;
+	bool fast_increment = false;
+	bool fast_decrement = false;
+	bool is_app_hovered;
 	float ver_len = 0.0f;
 	uint32_t oldpad;
 	int filtered_entries;
+	AppSelection *decrement_stack[4096];
+	AppSelection *decremented_app = nullptr;
+	int decrement_stack_idx = 0;
 	for (;;) {
 		if (old_sort_idx != sort_idx) {
 			old_sort_idx = sort_idx;
@@ -947,6 +956,11 @@ int main(int argc, char *argv[]) {
 		if (ImGui::Button(app_name_filter, ImVec2(-1.0f, 0.0f))) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 		}
+		if (go_to_top) {
+			ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
+			ImGui::SetScrollHere();
+			go_to_top = false;
+		}
 		ImGui::PopStyleVar();
 		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Category: ");
@@ -967,6 +981,8 @@ int main(int argc, char *argv[]) {
 		
 		AppSelection *g = apps;
 		filtered_entries = 0;
+		int increment_idx = 0;
+		is_app_hovered = false;
 		while (g) {
 			if (filterApps(g)) {
 				g = g->next;
@@ -977,12 +993,39 @@ int main(int argc, char *argv[]) {
 					to_download = g;
 				}
 				if (ImGui::IsItemHovered()) {
+					is_app_hovered = true;
 					hovered = g;
+					if (fast_increment)
+						increment_idx = 1;
+					else if (fast_decrement) {
+						if (decrement_stack_idx == 0)
+							fast_decrement = false;
+						else
+							decremented_app = decrement_stack[decrement_stack_idx >= 20 ? (decrement_stack_idx - 20) : 0];
+					}
+				} else if (increment_idx) {
+					increment_idx++;
+					if (increment_idx == 21) {
+						ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
+						ImGui::SetScrollHere();
+						increment_idx = 0;
+					}
+				} else if (fast_decrement) {
+					if (!decremented_app)
+						decrement_stack[decrement_stack_idx++] = g;
+					else if (decremented_app == g) {
+						ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
+						ImGui::SetScrollHere();
+						fast_decrement = false;
+					}	
 				}
 				filtered_entries++;
 			}
 			g = g->next;
 		}
+		if (decrement_stack_idx == filtered_entries || !is_app_hovered)
+			fast_decrement = false;
+		fast_increment = false;
 		ImGui::End();
 
 		ImGui::SetNextWindowPos(ImVec2(553, 21), ImGuiSetCond_Always);
@@ -1083,14 +1126,27 @@ int main(int argc, char *argv[]) {
 			sort_idx -= 1;
 			if (sort_idx < 0)
 				sort_idx = (sizeof(sort_modes_str) / sizeof(sort_modes_str[0])) - 1;
+			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_screenshots) {
 			sort_idx = (sort_idx + 1) % (sizeof(sort_modes_str) / sizeof(sort_modes_str[0]));
+			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && strlen(hovered->screenshots) > 5) {
 			show_screenshots = show_screenshots ? 0 : 1;
-		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && show_screenshots) {
-			cur_ss_idx--;
-		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT) && show_screenshots) {
-			cur_ss_idx++;
+		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT)) {
+			if (show_screenshots)
+				cur_ss_idx--;
+			else {
+				fast_decrement = true;
+				decrement_stack_idx = 0;
+				decremented_app = nullptr;
+			}
+		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT)) {
+			if (show_screenshots)
+				cur_ss_idx++;
+			else
+				fast_increment = true;
+		} else if (pad.buttons & SCE_CTRL_CIRCLE && !show_screenshots) {
+			go_to_top = true;
 		}
 		oldpad = pad.buttons;
 		
