@@ -14,6 +14,13 @@ VitaDB Downloader is the official PSVita/PSTV client for [VitaDB](https://vitadb
 - Background music (You can customize it by changing ux0:data/VitaDB/bg.ogg with your own preferred track).
 
 ## Changelog
+### v.1.2
+- Added possibility to start a search rapidly by pressing the Triangle button.
+- Fixed a bug causing the app to crash if the background music file was missing.
+- Fixed a bug preventing the app to be updated from within the app itself.
+- Added auto updater.
+- Fixed an issue causing crackling and stuttering with audio during archive extractions.
+
 ### v.1.1
 - Added a check when more than a month passed since last boot. If this happens, provide an option to the user to re-download all app icons at once.
 - Added possibility to fast scroll apps list with Left/Right arrows.
