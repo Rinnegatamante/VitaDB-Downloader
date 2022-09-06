@@ -994,7 +994,7 @@ int main(int argc, char *argv[]) {
 		
 		if (ImGui::BeginMainMenuBar()) {
 			char title[256];
-			sprintf(title, "VitaDB Downloader - Currently listing %d results", filtered_entries);
+			sprintf(title, "VitaDB Downloader - Currently listing %d results with '%s' filter", filtered_entries, filter_modes[filter_idx]);
 			ImGui::Text(title);
 			if (calculate_ver_len) {
 				calculate_ver_len = false;
