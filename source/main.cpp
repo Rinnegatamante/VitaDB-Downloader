@@ -22,7 +22,7 @@
 #define MEM_BUFFER_SIZE (32 * 1024 * 1024)
 #define SCR_WIDTH 960
 #define SCR_HEIGHT 544
-#define VERSION "1.1"
+#define VERSION "1.2"
 #define TEMP_DOWNLOAD_NAME "ux0:data/VitaDB/temp.tmp"
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
@@ -1256,24 +1256,31 @@ int main(int argc, char *argv[]) {
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 				}
 			}
-			sprintf(download_link, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", to_download->id);				
+			sprintf(download_link, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", to_download->id);
 			download_file(download_link, "Downloading vpk");
-			sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
-			extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/");
-			sceIoRemove(TEMP_DOWNLOAD_NAME);
-			makeHeadBin("ux0:data/VitaDB/vpk");
-			scePromoterUtilInit();
-			scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
-			int state = 0;
-			do {
-				int ret = scePromoterUtilityGetState(&state);
-				if (ret < 0)
-					break;
-				DrawTextDialog("Installing the app", true);
-				vglSwapBuffers(GL_TRUE);
-			} while (state);
-			scePromoterUtilTerm();
-			to_download = nullptr;
+			if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
+				sceAppMgrUmount("app0:");
+				extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/");
+				sceIoRemove(TEMP_DOWNLOAD_NAME);
+				sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
+			} else {
+				sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
+				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/");
+				sceIoRemove(TEMP_DOWNLOAD_NAME);
+				makeHeadBin("ux0:data/VitaDB/vpk");
+				scePromoterUtilInit();
+				scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
+				int state = 0;
+				do {
+					int ret = scePromoterUtilityGetState(&state);
+					if (ret < 0)
+						break;
+					DrawTextDialog("Installing the app", true);
+					vglSwapBuffers(GL_TRUE);
+				} while (state);
+				scePromoterUtilTerm();
+				to_download = nullptr;
+			}
 		}
 		
 		// Queued icon download
