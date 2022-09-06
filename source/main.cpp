@@ -1067,7 +1067,7 @@ int main(int argc, char *argv[]) {
 					}
 				} else if (increment_idx) {
 					increment_idx++;
-					if (increment_idx == 21) {
+					if (increment_idx == 21 || g->next == nullptr) {
 						ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
 						ImGui::SetScrollHere();
 						increment_idx = 0;
