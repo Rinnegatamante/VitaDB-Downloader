@@ -661,7 +661,8 @@ void LoadPreview(AppSelection *game) {
 	sprintf(banner_path, "ux0:data/VitaDB/icons/%s", game->icon);
 	uint8_t *icon_data = stbi_load(banner_path, &preview_width, &preview_height, NULL, 4);
 	if (icon_data) {
-		if (!preview_icon) glGenTextures(1, &preview_icon);
+		if (!preview_icon)
+			glGenTextures(1, &preview_icon);
 		glBindTexture(GL_TEXTURE_2D, preview_icon);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, preview_width, preview_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
 		float scale = MIN(PREVIEW_WIDTH / (float)preview_width, PREVIEW_HEIGHT / (float)preview_height);
@@ -703,7 +704,8 @@ void LoadScreenshot() {
 		sprintf(banner_path, "ux0:data/VitaDB/ss%d.png", cur_ss_idx);
 		shot_data = stbi_load(banner_path, &w, &h, NULL, 4);
 	}
-	if (!preview_shot) glGenTextures(1, &preview_shot);
+	if (!preview_shot)
+		glGenTextures(1, &preview_shot);
 	glBindTexture(GL_TEXTURE_2D, preview_shot);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, shot_data);
 	free(shot_data);
@@ -1099,6 +1101,7 @@ int main(int argc, char *argv[]) {
 				glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 				if (!previous_frame)
 					glGenTextures(1, &previous_frame);
+				glBindTexture(GL_TEXTURE_2D, previous_frame);
 				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 				vglFree(scr_data);
 				init_interactive_msg_dialog("This homebrew has also data files. Do you wish to install them as well?");
