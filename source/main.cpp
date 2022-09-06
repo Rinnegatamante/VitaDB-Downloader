@@ -1209,6 +1209,9 @@ int main(int argc, char *argv[]) {
 				fast_increment = true;
 		} else if (pad.buttons & SCE_CTRL_CIRCLE && !show_screenshots) {
 			go_to_top = true;
+		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !show_screenshots) {
+			init_interactive_ime_dialog("Insert search term", app_name_filter);
+			go_to_top = true;
 		}
 		oldpad = pad.buttons;
 		
