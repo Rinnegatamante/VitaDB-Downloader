@@ -17,6 +17,20 @@ In order to run VitaDB Downloader, you need <b>libshacccg.suprx</b>. If you don'
 - Background music (You can customize it by changing ux0:data/VitaDB/bg.ogg with your own preferred track).
 
 ## Changelog
+
+### v.1.3
+- Made so that fast paging down with right arrow will go as down as the very last entry.
+- Made visible on the top menubar the currently in-use filter for the apps list.
+- Reworded data files installation question to sound more correct.
+- Added Smallest and Largest sorting modes.
+- Added a dropmenu to change sorting mode (L / R is still usable for cycling between sorting modes).
+- Added possibility to cycle between category filters with Square button.
+- Using different granularity (B, KB, MB, GB) for homebrew sizes depending on the size itself.
+- Added free and total storage info on bottom right of the screen.
+- Aligned to left homebrew names in the apps list.
+- Added support for backgrounds (Both static (ux0:data/VitaDB/bg.png) and animated (ux0:data/VitaDB/bg.mp4)).
+- Added a check prior downloading an app wether free storage is enough to install it.
+
 ### v.1.2
 - Added possibility to start a search rapidly by pressing the Triangle button.
 - Fixed a bug causing the app to crash if the background music file was missing.
