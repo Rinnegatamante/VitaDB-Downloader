@@ -24,6 +24,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -fpermissive -fdiagnostics-color=always -W
 
 add_executable(VitaDB
   source/main.cpp
+  source/player.cpp
   source/ioapi.c
   source/unzip.c
   source/sha1.c
@@ -45,6 +46,7 @@ target_link_libraries(VitaDB
   crypto
   taihen_stub
   kubridge_stub
+  SceAvPlayer_stub
   SceAppMgr_stub
   SceAppUtil_stub
   SceAudio_stub

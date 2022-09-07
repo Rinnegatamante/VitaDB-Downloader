@@ -29,6 +29,10 @@
 #define PREVIEW_HEIGHT 128.0f
 #define PREVIEW_WIDTH  128.0f
 
+extern void video_open(const char *path);
+extern GLuint video_get_frame(int *width, int *height);
+extern void video_close();
+
 int _newlib_heap_size_user = 200 * 1024 * 1024;
 int console_language;
 
@@ -700,7 +704,7 @@ void download_file(char *url, char *text) {
 }
 
 static int preview_width, preview_height, preview_x, preview_y;
-GLuint preview_icon = 0, preview_shot = 0, previous_frame = 0;
+GLuint preview_icon = 0, preview_shot = 0, previous_frame = 0, bg_image = 0;
 bool need_icon = false;
 int show_screenshots = 0; // 0 = off, 1 = download, 2 = show
 void LoadPreview(AppSelection *game) {
@@ -760,6 +764,26 @@ void LoadScreenshot() {
 	glBindTexture(GL_TEXTURE_2D, preview_shot);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, shot_data);
 	free(shot_data);
+}
+
+bool has_animated_bg = false;
+void LoadBackground() {
+	int w, h;
+	
+	FILE *f = fopen("ux0:data/VitaDB/bg.mp4", "rb");
+	if (f) {
+		fclose(f);
+		video_open("ux0:data/VitaDB/bg.mp4");
+		has_animated_bg = true;
+	} else {
+		uint8_t *bg_data = stbi_load("ux0:data/VitaDB/bg.png", &w, &h, NULL, 4);
+		if (bg_data) {
+			glGenTextures(1, &bg_image);
+			glBindTexture(GL_TEXTURE_2D, bg_image);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, bg_data);
+			free(bg_data);
+		}
+	}
 }
 
 void swap_apps(AppSelection *a, AppSelection *b) {
@@ -916,12 +940,76 @@ static int musicThread(unsigned int args, void *arg) {
 	}
 }
 
+float *bg_attributes = nullptr;
+void DrawBackground() {
+	if (!bg_attributes)
+		bg_attributes = (float*)malloc(sizeof(float) * 22);
+
+	if (has_animated_bg) {
+		int anim_w, anim_h;
+		GLuint anim_bg = video_get_frame(&anim_w, &anim_h);
+		if (anim_bg == 0xDEADBEEF)
+			return;
+		glBindTexture(GL_TEXTURE_2D, anim_bg);
+	} else {
+		glBindTexture(GL_TEXTURE_2D, bg_image);
+	}
+	glDisable(GL_DEPTH_TEST);
+	glDepthMask(GL_FALSE);
+	glEnable(GL_BLEND);
+	glDisable(GL_ALPHA_TEST);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	
+	bg_attributes[0] = 0.0f;
+	bg_attributes[1] = 0.0f;
+	bg_attributes[2] = 0.0f;
+	bg_attributes[3] = 960.0f;
+	bg_attributes[4] = 0.0f;
+	bg_attributes[5] = 0.0f;
+	bg_attributes[6] = 0.0f;
+	bg_attributes[7] = 544.0f;
+	bg_attributes[8] = 0.0f;
+	bg_attributes[9] = 960.0f;
+	bg_attributes[10] = 544.0f;
+	bg_attributes[11] = 0.0f;
+	vglVertexPointerMapped(bg_attributes);
+	
+	bg_attributes[12] = 0.0f;
+	bg_attributes[13] = 0.0f;
+	bg_attributes[14] = 1.0f;
+	bg_attributes[15] = 0.0f;
+	bg_attributes[16] = 0.0f;
+	bg_attributes[17] = 1.0f;
+	bg_attributes[18] = 1.0f;
+	bg_attributes[19] = 1.0f;
+	vglTexCoordPointerMapped(&bg_attributes[12]);
+	
+	uint16_t *bg_indices = (uint16_t*)&bg_attributes[20];
+	bg_indices[0] = 0;
+	bg_indices[1] = 1;
+	bg_indices[2] = 2;
+	bg_indices[3] = 3;
+	vglIndexPointerMapped(bg_indices);
+
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+	glEnableClientState(GL_COLOR_ARRAY);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrthof(0, 960, 544, 0, -1, 1);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	vglDrawObjects(GL_TRIANGLE_STRIP, 4, GL_TRUE);
+	glDisableClientState(GL_COLOR_ARRAY);
+}
+
 int main(int argc, char *argv[]) {
 	SceIoStat st1, st2;
 	// Checking for libshacccg.suprx existence
 	if (!(sceIoGetstat("ur0:/data/libshacccg.suprx", &st1) >= 0 || sceIoGetstat("ur0:/data/external/libshacccg.suprx", &st2) >= 0))
 		early_fatal_error("Error: Runtime shader compiler (libshacccg.suprx) is not installed.");
 	
+	sceSysmoduleLoadModule(SCE_SYSMODULE_AVPLAYER);
 	scePowerSetArmClockFrequency(444);
 	scePowerSetBusClockFrequency(222);
 	sceIoMkdir("ux0:data/VitaDB", 0777);
@@ -1041,11 +1129,15 @@ int main(int argc, char *argv[]) {
 	AppSelection *decrement_stack[4096];
 	AppSelection *decremented_app = nullptr;
 	int decrement_stack_idx = 0;
+	LoadBackground();
 	while (!update_detected) {
 		if (old_sort_idx != sort_idx) {
 			old_sort_idx = sort_idx;
 			sort_applist(apps);
 		}
+		
+		if (bg_image || has_animated_bg)
+			DrawBackground();
 		
 		ImGui_ImplVitaGL_NewFrame();
 		
@@ -1064,6 +1156,8 @@ int main(int argc, char *argv[]) {
 			ImGui::EndMainMenuBar();
 		}
 		
+		if (bg_image || has_animated_bg)
+			ImGui::SetNextWindowBgAlpha(0.3f);
 		ImGui::SetNextWindowPos(ImVec2(0, 21), ImGuiSetCond_Always);
 		ImGui::SetNextWindowSize(ImVec2(553, 523), ImGuiSetCond_Always);
 		ImGui::Begin("##main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -1120,6 +1214,7 @@ int main(int argc, char *argv[]) {
 		filtered_entries = 0;
 		int increment_idx = 0;
 		is_app_hovered = false;
+		ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
 		while (g) {
 			if (filterApps(g)) {
 				g = g->next;
@@ -1160,11 +1255,14 @@ int main(int argc, char *argv[]) {
 			}
 			g = g->next;
 		}
+		ImGui::PopStyleVar();
 		if (decrement_stack_idx == filtered_entries || !is_app_hovered)
 			fast_decrement = false;
 		fast_increment = false;
 		ImGui::End();
-
+		
+		if (bg_image || has_animated_bg)
+			ImGui::SetNextWindowBgAlpha(0.3f);
 		ImGui::SetNextWindowPos(ImVec2(553, 21), ImGuiSetCond_Always);
 		ImGui::SetNextWindowSize(ImVec2(407, 523), ImGuiSetCond_Always);
 		ImGui::Begin("Info Window", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
