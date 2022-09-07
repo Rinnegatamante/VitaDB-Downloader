@@ -32,6 +32,30 @@
 int _newlib_heap_size_user = 200 * 1024 * 1024;
 int console_language;
 
+uint64_t get_free_storage() {
+	uint64_t free_storage, dummy;
+	SceIoDevInfo info;
+	int res = sceIoDevctl("ux0:", 0x3001, NULL, 0, &info, sizeof(SceIoDevInfo));
+	if (res >= 0)
+		free_storage = info.free_size;
+	else
+		sceAppMgrGetDevInfo("ux0:", &dummy, &free_storage);
+	
+	return free_storage;
+}
+
+uint64_t get_total_storage() {
+	uint64_t total_storage, dummy;
+	SceIoDevInfo info;
+	int res = sceIoDevctl("ux0:", 0x3001, NULL, 0, &info, sizeof(SceIoDevInfo));
+	if (res >= 0)
+		total_storage = info.max_size;
+	else
+		sceAppMgrGetDevInfo("ux0:", &total_storage, &dummy);
+	
+	return total_storage;
+}
+
 typedef struct{
 	uint32_t magic;
 	uint32_t version;
@@ -1192,15 +1216,17 @@ int main(int argc, char *argv[]) {
 				sprintf(size_str, "VPK: %.2f %s", format(sz), sizes[quota(sz)]);
 			}
 			ImGui::Text(size_str);
+			ImGui::SetCursorPosY(470);
+			if (strlen(hovered->screenshots) > 5) {
+				ImGui::TextColored(ImVec4(1.0f, 1.0f, 0, 1.0f), "Press Start to view screenshots");
+			}
 		}
-		ImGui::SetCursorPosY(470);
-		ImGui::Text("Current sorting mode: %s", sort_modes_str[sort_idx]);
 		ImGui::SetCursorPosY(486);
-		ImGui::TextColored(ImVec4(1.0f, 1.0f, 0, 1.0f), "Press L/R to change sorting mode");
+		ImGui::Text("Current sorting mode: %s", sort_modes_str[sort_idx]);
 		ImGui::SetCursorPosY(502);
-		if (hovered && strlen(hovered->screenshots) > 5) {
-			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0, 1.0f), "Press Start to view screenshots");
-		}
+		uint64_t total_space = get_total_storage();
+		uint64_t free_space = get_free_storage();
+		ImGui::Text("Free Space: %.2f %s / %.2f %s", format(free_space), sizes[quota(free_space)], format(total_space), sizes[quota(total_space)]);
 		ImGui::End();
 		
 		if (show_screenshots == 2) {
