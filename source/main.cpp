@@ -1000,7 +1000,9 @@ void DrawBackground() {
 	glOrthof(0, 960, 544, 0, -1, 1);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 	vglDrawObjects(GL_TRIANGLE_STRIP, 4, GL_TRUE);
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	glDisableClientState(GL_COLOR_ARRAY);
 }
 
