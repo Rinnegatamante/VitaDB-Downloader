@@ -1045,7 +1045,7 @@ int main(int argc, char *argv[]) {
 		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Category: ");
 		ImGui::SameLine();
-		ImGui::PushItemWidth(-1.0f);
+		ImGui::PushItemWidth(190.0f);
 		if (ImGui::BeginCombo("##combo", filter_modes[filter_idx])) {
 			for (int n = 0; n < sizeof(filter_modes) / sizeof(*filter_modes); n++) {
 				bool is_selected = filter_idx == n;
@@ -1058,6 +1058,9 @@ int main(int argc, char *argv[]) {
 		}
 		ImGui::PopItemWidth();
 		ImGui::AlignTextToFramePadding();
+		ImGui::SameLine();
+		ImGui::Spacing();
+		ImGui::SameLine();
 		ImGui::Text("Sort Mode: ");
 		ImGui::SameLine();
 		ImGui::PushItemWidth(-1.0f);
