@@ -22,7 +22,7 @@
 #define MEM_BUFFER_SIZE (32 * 1024 * 1024)
 #define SCR_WIDTH 960
 #define SCR_HEIGHT 544
-#define VERSION "1.2"
+#define VERSION "1.3"
 #define TEMP_DOWNLOAD_NAME "ux0:data/VitaDB/temp.tmp"
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
