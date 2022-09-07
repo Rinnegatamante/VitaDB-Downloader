@@ -239,6 +239,21 @@ int init_interactive_msg_dialog(const char *msg) {
 	return sceMsgDialogInit(&param);
 }
 
+int init_msg_dialog(const char *msg) {
+	SceMsgDialogUserMessageParam msg_param;
+	memset(&msg_param, 0, sizeof(msg_param));
+	msg_param.buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_OK;
+	msg_param.msg = (SceChar8 *)msg;
+
+	SceMsgDialogParam param;
+	sceMsgDialogParamInit(&param);
+	_sceCommonDialogSetMagicNumber(&param.commonParam);
+	param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
+	param.userMsgParam = &msg_param;
+
+	return sceMsgDialogInit(&param);
+}
+
 static uint16_t dialog_res_text[SCE_IME_DIALOG_MAX_TEXT_LENGTH + 1];
 bool is_ime_active = false;
 void getDialogTextResult(char *text) {
@@ -1226,7 +1241,7 @@ int main(int argc, char *argv[]) {
 		ImGui::SetCursorPosY(502);
 		uint64_t total_space = get_total_storage();
 		uint64_t free_space = get_free_storage();
-		ImGui::Text("Free Space: %.2f %s / %.2f %s", format(free_space), sizes[quota(free_space)], format(total_space), sizes[quota(total_space)]);
+		ImGui::Text("Free storage: %.2f %s / %.2f %s", format(free_space), sizes[quota(free_space)], format(total_space), sizes[quota(total_space)]);
 		ImGui::End();
 		
 		if (show_screenshots == 2) {
@@ -1325,10 +1340,33 @@ int main(int argc, char *argv[]) {
 				sceMsgDialogGetResult(&msg_res);
 				sceMsgDialogTerm();
 				if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
+					// Check if enough storage is left for the install
+					char *dummy;
+					uint64_t sz = strtoull(to_download->size, &dummy, 10);
+					uint64_t sz2 = strtoull(to_download->data_size, &dummy, 10);
+					if (free_space < (sz + sz2) * 2) {
+						init_msg_dialog("Not enough free storage to install this application. Installation aborted.");
+						while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+							vglSwapBuffers(GL_TRUE);
+						}
+						to_download = nullptr;
+						continue;
+					}
 					download_file(to_download->data_link, "Downloading data files");
 					extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/");
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 				}
+			}
+			// Check if enough storage is left for the install
+			char *dummy;
+			uint64_t sz = strtoull(to_download->size, &dummy, 10);
+			if (free_space < sz * 2) {
+				init_msg_dialog("Not enough free storage to install this application. Installation aborted.");
+				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+					vglSwapBuffers(GL_TRUE);
+				}
+				to_download = nullptr;
+				continue;
 			}
 			sprintf(download_link, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", to_download->id);
 			download_file(download_link, "Downloading vpk");
