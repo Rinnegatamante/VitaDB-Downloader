@@ -774,6 +774,7 @@ void LoadBackground() {
 	if (f) {
 		fclose(f);
 		video_open("ux0:data/VitaDB/bg.mp4");
+		sceKernelDelayThread(1000 * 1000);
 		has_animated_bg = true;
 	} else {
 		uint8_t *bg_data = stbi_load("ux0:data/VitaDB/bg.png", &w, &h, NULL, 4);
