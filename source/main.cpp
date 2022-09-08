@@ -35,6 +35,7 @@
 #include "utils.h"
 #include "dialogs.h"
 #include "network.h"
+#include "md5.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -56,6 +57,12 @@ int old_ss_idx = -1;
 static char download_link[512];
 char app_name_filter[128] = {0};
 
+enum {
+	APP_UNTRACKED,
+	APP_OUTDATED,
+	APP_UPDATED
+};
+
 struct AppSelection {
 	char name[192];
 	char icon[128];
@@ -68,8 +75,10 @@ struct AppSelection {
 	char downloads[16];
 	char size[16];
 	char data_size[16];
+	char hash[34];
 	char *requirements;
 	char data_link[128];
+	int state;
 	AppSelection *next;
 };
 
@@ -114,9 +123,11 @@ AppSelection *AppendAppDatabase(const char *file) {
 		char *ptr = buffer;
 		char *end, *end2;
 		do {
-			char name[128], version[64];
+			DrawTextDialog("Parsing apps list", true);
+			char name[128], version[64], hash[40], titleid[12], fname[64];
 			//printf("extract\n");
 			ptr = extractValue(name, ptr, "name", nullptr);
+			//printf("parsing %s\n", name);
 			if (!ptr)
 				break;
 			AppSelection *node = (AppSelection*)malloc(sizeof(AppSelection));
@@ -134,12 +145,61 @@ AppSelection *AppendAppDatabase(const char *file) {
 				}
 			}
 			ptr = extractValue(node->date, ptr, "date", nullptr);
+			ptr = extractValue(titleid, ptr, "titleid", nullptr);
 			ptr = extractValue(node->screenshots, ptr, "screenshots", nullptr);
 			ptr = extractValue(node->desc, ptr, "long_description", &node->desc);
 			node->desc = unescape(node->desc);
 			ptr = extractValue(node->downloads, ptr, "downloads", nullptr);
 			ptr = extractValue(node->size, ptr, "size", nullptr);
 			ptr = extractValue(node->data_size, ptr, "data_size", nullptr);
+			ptr = extractValue(node->hash, ptr, "hash", nullptr);
+			//printf("db hash %s\n", node->hash);
+			sprintf(fname, "ux0:app/%s/hash.vdb", titleid);
+			FILE *f  = fopen(fname, "r");
+			char cur_hash[40];
+			if (f) {
+				//printf("found hash file\n");
+				fread(cur_hash, 1, 32, f);
+				cur_hash[32] = 0;
+				fclose(f);
+				if (strncmp(cur_hash, node->hash, 32))
+					node->state = APP_OUTDATED;
+				else
+					node->state = APP_UPDATED;
+			} else {
+				//printf("hash file not found, calculating md5\n");
+				sprintf(fname, "ux0:app/%s/eboot.bin", titleid);
+				f = fopen(fname, "r");
+				if (f) {
+					//printf("eboot.bin found, starting md5sum\n");
+					MD5Context ctx;
+					MD5Init(&ctx);
+					fseek(f, 0, SEEK_END);
+					int file_size = ftell(f);
+					fseek(f, 0, SEEK_SET);
+					unsigned char *file_buf = (unsigned char *)malloc(file_size);
+					fread(file_buf, 1, file_size, f);
+					fclose(f);
+					MD5Update(&ctx, file_buf, file_size);
+					unsigned char md5_buf[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+					MD5Final(md5_buf, &ctx);
+					sprintf(cur_hash, "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
+						md5_buf[0], md5_buf[1], md5_buf[2], md5_buf[3], md5_buf[4], md5_buf[5], md5_buf[6], md5_buf[7], md5_buf[8],
+						md5_buf[9], md5_buf[10], md5_buf[11], md5_buf[12], md5_buf[13], md5_buf[14], md5_buf[15]);
+					free(file_buf);
+					//printf("local hash %s\n", cur_hash);
+					if (strncmp(cur_hash, node->hash, 32))
+						node->state = APP_OUTDATED;
+					else
+						node->state = APP_UPDATED;
+					sprintf(fname, "ux0:app/%s/hash.vdb", titleid);
+					f = fopen(fname, "w");
+					fwrite(cur_hash, 1, 32, f);
+					fclose(f);
+				} else
+					node->state = APP_UNTRACKED;
+			}
+			//printf("hash part done\n");
 			ptr = extractValue(node->requirements, ptr, "requirements", &node->requirements);
 			if (node->requirements)
 				node->requirements = unescape(node->requirements);
@@ -151,6 +211,7 @@ AppSelection *AppendAppDatabase(const char *file) {
 		fclose(f);
 		free(buffer);
 	}
+	//printf("finished parsing\n");
 	return res;
 }
 
@@ -636,6 +697,7 @@ int main(int argc, char *argv[]) {
 		DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading apps list", 1, true);
 		res = sceKernelGetThreadInfo(thd, &info);
 	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
+	sceAppMgrUmount("app0:");
 	hovered = AppendAppDatabase("ux0:data/VitaDB/apps.json");
 	
 	// Downloading icons
@@ -793,6 +855,7 @@ int main(int argc, char *argv[]) {
 				continue;
 			}
 			if ((strlen(app_name_filter) == 0) || (strlen(app_name_filter) > 0 && (strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter)))) {
+				float y = ImGui::GetCursorPosY() + 2.0f;
 				if (ImGui::Button(g->name, ImVec2(-1.0f, 0.0f))) {
 					to_download = g;
 				}
@@ -822,6 +885,26 @@ int main(int argc, char *argv[]) {
 						ImGui::SetScrollHere();
 						fast_decrement = false;
 					}	
+				}
+				ImVec2 tag_len;
+				switch (g->state) {
+				case APP_UNTRACKED:
+					tag_len = ImGui::CalcTextSize("Not Installed");
+					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
+					ImGui::TextColored(ImVec4(1, 1, 1, 1), "Not Installed");
+					break;
+				case APP_OUTDATED:
+					tag_len = ImGui::CalcTextSize("Outdated");
+					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
+					ImGui::TextColored(ImVec4(1, 0, 0, 1), "Outdated");
+					break;
+				case APP_UPDATED:
+					tag_len = ImGui::CalcTextSize("Updated");
+					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
+					ImGui::TextColored(ImVec4(0, 1, 0, 1), "Updated");
+					break;
+				default:
+					break;
 				}
 				filtered_entries++;
 			}
@@ -1082,7 +1165,6 @@ int main(int argc, char *argv[]) {
 			sprintf(download_link, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", to_download->id);
 			download_file(download_link, "Downloading vpk");
 			if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
-				sceAppMgrUmount("app0:");
 				extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/");
 				sceIoRemove(TEMP_DOWNLOAD_NAME);
 				sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
@@ -1091,6 +1173,10 @@ int main(int argc, char *argv[]) {
 				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/");
 				sceIoRemove(TEMP_DOWNLOAD_NAME);
 				makeHeadBin("ux0:data/VitaDB/vpk");
+				FILE *f = fopen("ux0:data/VitaDB/hash.vdb", "w");
+				fwrite(to_download->hash, 1, 32, f);
+				fclose(f);
+				to_download->state = APP_UPDATED;
 				scePromoterUtilInit();
 				scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
 				int state = 0;
@@ -1170,7 +1256,6 @@ int main(int argc, char *argv[]) {
 	
 	// Installing update
 	download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=877", "Downloading update");
-	sceAppMgrUmount("app0:");
 	extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/");
 	sceIoRemove(TEMP_DOWNLOAD_NAME);
 	sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);

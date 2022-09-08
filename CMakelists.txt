@@ -32,6 +32,7 @@ add_executable(VitaDB
   source/ioapi.c
   source/unzip.c
   source/sha1.c
+  source/md5.c
 )
 
 target_link_libraries(VitaDB
