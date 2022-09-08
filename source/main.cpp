@@ -1188,7 +1188,6 @@ int main(int argc, char *argv[]) {
 				FILE *f = fopen("ux0:data/VitaDB/hash.vdb", "w");
 				fwrite(to_download->hash, 1, 32, f);
 				fclose(f);
-				to_download->state = APP_UPDATED;
 				scePromoterUtilInit();
 				scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
 				int state = 0;
@@ -1200,14 +1199,15 @@ int main(int argc, char *argv[]) {
 					vglSwapBuffers(GL_TRUE);
 				} while (state);
 				scePromoterUtilTerm();
-				to_download = nullptr;
 				if (sceIoGetstat("ux0:/data/VitaDB/vpk/eboot.bin", &st1) >= 0) {
 					init_msg_dialog("The installation process failed.");
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 						vglSwapBuffers(GL_TRUE);
 					}
 					recursive_rmdir("ux0:/data/VitaDB/vpk");
-				}
+				} else
+					to_download->state = APP_UPDATED;
+				to_download = nullptr;
 			}
 		}
 		
