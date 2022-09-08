@@ -1,3 +1,21 @@
+/*
+ * This file is part of VitaDB Downloader
+ * Copyright 2022 Rinnegatamante
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published
+ * by the Free Software Foundation, version 3 of the License, or (at your
+ * option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
 #include <iostream>
 #include <string>
 #include <locale>
@@ -7,431 +25,35 @@
 #include <imgui_vita.h>
 #include <imgui_internal.h>
 #include <bzlib.h>
-#include <curl/curl.h>
 #include <stdio.h>
 #include <string>
 #include <soloud.h>
 #include <soloud_wav.h>
-#include "head.h"
 #include "unzip.h"
-#include "sha1.h"
+#include "player.h"
+#include "promoter.h"
+#include "utils.h"
+#include "dialogs.h"
+#include "network.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#define MEM_BUFFER_SIZE (32 * 1024 * 1024)
-#define SCR_WIDTH 960
-#define SCR_HEIGHT 544
 #define VERSION "1.3"
-#define TEMP_DOWNLOAD_NAME "ux0:data/VitaDB/temp.tmp"
+
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
 #define PREVIEW_HEIGHT 128.0f
 #define PREVIEW_WIDTH  128.0f
 
-extern void video_open(const char *path);
-extern GLuint video_get_frame(int *width, int *height);
-extern void video_close();
-
 int _newlib_heap_size_user = 200 * 1024 * 1024;
 int console_language;
-
-void recursive_rmdir(const char *path) {
-	SceUID d = sceIoDopen(path);
-	if (d >= 0) {
-		SceIoDirent g_dir;
-		while (sceIoDread(d, &g_dir) > 0) {
-			char fpath[512];
-			sprintf(fpath, "%s/%s", path, g_dir.d_name);
-			if (SCE_S_ISDIR(g_dir.d_stat.st_mode))
-				recursive_rmdir(fpath);
-			else
-				sceIoRemove(fpath);
-		}
-		sceIoDclose(d);
-		sceIoRmdir(path);
-	}
-}
-
-uint64_t get_free_storage() {
-	uint64_t free_storage, dummy;
-	SceIoDevInfo info;
-	int res = sceIoDevctl("ux0:", 0x3001, NULL, 0, &info, sizeof(SceIoDevInfo));
-	if (res >= 0)
-		free_storage = info.free_size;
-	else
-		sceAppMgrGetDevInfo("ux0:", &dummy, &free_storage);
-	
-	return free_storage;
-}
-
-uint64_t get_total_storage() {
-	uint64_t total_storage, dummy;
-	SceIoDevInfo info;
-	int res = sceIoDevctl("ux0:", 0x3001, NULL, 0, &info, sizeof(SceIoDevInfo));
-	if (res >= 0)
-		total_storage = info.max_size;
-	else
-		sceAppMgrGetDevInfo("ux0:", &total_storage, &dummy);
-	
-	return total_storage;
-}
-
-typedef struct{
-	uint32_t magic;
-	uint32_t version;
-	uint32_t keyTableOffset;
-	uint32_t dataTableOffset;
-	uint32_t indexTableEntries;
-} sfo_header_t;
-
-typedef struct{
-	uint16_t keyOffset;
-	uint16_t param_fmt;
-	uint32_t paramLen;
-	uint32_t paramMaxLen;
-	uint32_t dataOffset;
-} sfo_entry_t;
-
-// Taken from VHBB, thanks to devnoname120
-static void fpkg_hmac(const uint8_t* data, unsigned int len, uint8_t hmac[16]) {
-	SHA1_CTX ctx;
-	char sha1[20];
-	char buf[64];
-
-	sha1_init(&ctx);
-	sha1_update(&ctx, (BYTE*)data, len);
-	sha1_final(&ctx, (BYTE*)sha1);
-
-	sceClibMemset(buf, 0, 64);
-	sceClibMemcpy(&buf[0], &sha1[4], 8);
-	sceClibMemcpy(&buf[8], &sha1[4], 8);
-	sceClibMemcpy(&buf[16], &sha1[12], 4);
-	buf[20] = sha1[16];
-	buf[21] = sha1[1];
-	buf[22] = sha1[2];
-	buf[23] = sha1[3];
-	sceClibMemcpy(&buf[24], &buf[16], 8);
-
-	sha1_init(&ctx);
-	sha1_update(&ctx, (BYTE*)buf, 64);
-	sha1_final(&ctx, (BYTE*)sha1);
-	sceClibMemcpy(hmac, sha1, 16);
-}
-void makeHeadBin(const char *dir) {
-	uint8_t hmac[16];
-	uint32_t off;
-	uint32_t len;
-	uint32_t out;
-
-	char head_path[256];
-	char param_path[256];
-	sprintf(head_path, "%s/sce_sys/package/head.bin", dir);
-	sprintf(param_path, "%s/sce_sys/param.sfo", dir);
-	
-	SceUID fileHandle = sceIoOpen(head_path, SCE_O_RDONLY, 0777);
-	if (fileHandle >= 0) {
-		sceIoClose(fileHandle);
-		return;
-	}
-
-	FILE* f = fopen(param_path,"rb");
-	
-	if (f == NULL)
-		return;
-	
-	sfo_header_t hdr;
-	fread(&hdr, sizeof(sfo_header_t), 1, f);
-	
-	if (hdr.magic != 0x46535000){
-		fclose(f);
-		return;
-	}
-	
-	uint8_t* idx_table = (uint8_t*)malloc((sizeof(sfo_entry_t)*hdr.indexTableEntries));
-	fread(idx_table, sizeof(sfo_entry_t)*hdr.indexTableEntries, 1, f);
-	sfo_entry_t* entry_table = (sfo_entry_t*)idx_table;
-	fseek(f, hdr.keyTableOffset, SEEK_SET);
-	uint8_t* key_table = (uint8_t*)malloc(hdr.dataTableOffset - hdr.keyTableOffset);
-	fread(key_table, hdr.dataTableOffset - hdr.keyTableOffset, 1, f);
-	
-	char titleid[12];
-	char contentid[48];
-	
-	for (int i=0; i < hdr.indexTableEntries; i++) {
-		char param_name[256];
-		sprintf(param_name, "%s", (char*)&key_table[entry_table[i].keyOffset]);
-			
-		if (strcmp(param_name, "TITLE_ID") == 0){ // Application Title ID
-			fseek(f, hdr.dataTableOffset + entry_table[i].dataOffset, SEEK_SET);
-			fread(titleid, entry_table[i].paramLen, 1, f);
-		} else if (strcmp(param_name, "CONTENT_ID") == 0) { // Application Content ID
-			fseek(f, hdr.dataTableOffset + entry_table[i].dataOffset, SEEK_SET);
-			fread(contentid, entry_table[i].paramLen, 1, f);
-		}
-	}
-
-	// Free sfo buffer
-	free(idx_table);
-	free(key_table);
-
-	// Allocate head.bin buffer
-	uint8_t* head_bin = (uint8_t*)malloc(size_head);
-	sceClibMemcpy(head_bin, head, size_head);
-
-	// Write full title id
-	char full_title_id[48];
-	snprintf(full_title_id, sizeof(full_title_id), "EP9000-%s_00-0000000000000000", titleid);
-	strncpy((char*)&head_bin[0x30], strlen(contentid) > 0 ? contentid : full_title_id, 48);
-
-	// hmac of pkg header
-	len = __builtin_bswap32(*(uint32_t*)&head_bin[0xD0]);
-	fpkg_hmac(&head_bin[0], len, hmac);
-	sceClibMemcpy(&head_bin[len], hmac, 16);
-
-	// hmac of pkg info
-	off = __builtin_bswap32(*(uint32_t*)&head_bin[0x8]);
-	len = __builtin_bswap32(*(uint32_t*)&head_bin[0x10]);
-	out = __builtin_bswap32(*(uint32_t*)&head_bin[0xD4]);
-	fpkg_hmac(&head_bin[off], len - 64, hmac);
-	sceClibMemcpy(&head_bin[out], hmac, 16);
-
-	// hmac of everything
-	len = __builtin_bswap32(*(uint32_t*)&head_bin[0xE8]);
-	fpkg_hmac(&head_bin[0], len, hmac);
-	sceClibMemcpy(&head_bin[len], hmac, 16);
-
-	// Make dir
-	char pkg_dir[256];
-	sprintf(pkg_dir, "%s/sce_sys/package", dir);
-	sceIoMkdir(pkg_dir, 0777);
-
-	// Write head.bin
-	fclose(f);
-	f = fopen(head_path, "wb");
-	fwrite(head_bin, 1, size_head, f);
-	fclose(f);
-
-	free(head_bin);
-}
-
-void recursive_mkdir(char *dir) {
-	char *p = dir;
-	while (p) {
-		char *p2 = strstr(p, "/");
-		if (p2) {
-			p2[0] = 0;
-			sceIoMkdir(dir, 0777);
-			p = p2 + 1;
-			p2[0] = '/';
-		} else break;
-	}
-}
-
-void early_fatal_error(const char *msg) {
-	vglInit(0);
-	SceMsgDialogUserMessageParam msg_param;
-	sceClibMemset(&msg_param, 0, sizeof(SceMsgDialogUserMessageParam));
-	msg_param.buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_OK;
-	msg_param.msg = (const SceChar8*)msg;
-	SceMsgDialogParam param;
-	sceMsgDialogParamInit(&param);
-	param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
-	param.userMsgParam = &msg_param;
-	sceMsgDialogInit(&param);
-	while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-		vglSwapBuffers(GL_TRUE);
-	}
-	sceKernelExitProcess(0);
-}
-
-int init_interactive_msg_dialog(const char *msg) {
-	SceMsgDialogUserMessageParam msg_param;
-	memset(&msg_param, 0, sizeof(msg_param));
-	msg_param.buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_YESNO;
-	msg_param.msg = (SceChar8 *)msg;
-
-	SceMsgDialogParam param;
-	sceMsgDialogParamInit(&param);
-	_sceCommonDialogSetMagicNumber(&param.commonParam);
-	param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
-	param.userMsgParam = &msg_param;
-
-	return sceMsgDialogInit(&param);
-}
-
-int init_msg_dialog(const char *msg) {
-	SceMsgDialogUserMessageParam msg_param;
-	memset(&msg_param, 0, sizeof(msg_param));
-	msg_param.buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_OK;
-	msg_param.msg = (SceChar8 *)msg;
-
-	SceMsgDialogParam param;
-	sceMsgDialogParamInit(&param);
-	_sceCommonDialogSetMagicNumber(&param.commonParam);
-	param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
-	param.userMsgParam = &msg_param;
-
-	return sceMsgDialogInit(&param);
-}
-
-static uint16_t dialog_res_text[SCE_IME_DIALOG_MAX_TEXT_LENGTH + 1];
-bool is_ime_active = false;
-void getDialogTextResult(char *text) {
-	// Converting text from UTF16 to UTF8
-	std::u16string utf16_str = (char16_t*)dialog_res_text;
-	std::string utf8_str = std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.to_bytes(utf16_str.data());
-	strcpy(text, utf8_str.c_str());
-}
-void init_interactive_ime_dialog(const char *msg, const char *start_text) {
-	SceImeDialogParam params;
-	
-	sceImeDialogParamInit(&params);
-	params.type = SCE_IME_TYPE_BASIC_LATIN;
-			
-	// Converting texts from UTF8 to UTF16
-	std::string utf8_str = msg;
-	std::u16string utf16_str = std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.from_bytes(utf8_str.data());
-	std::string utf8_arg = start_text;
-	std::u16string utf16_arg = std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.from_bytes(utf8_arg.data());
-			
-	params.title = (const SceWChar16*)utf16_str.c_str();
-	sceClibMemset(dialog_res_text, 0, sizeof(dialog_res_text));
-	sceClibMemcpy(dialog_res_text, utf16_arg.c_str(), utf16_arg.length() * 2);
-	params.initialText = dialog_res_text;
-	params.inputTextBuffer = dialog_res_text;
-			
-	params.maxTextLength = SCE_IME_DIALOG_MAX_TEXT_LENGTH;
-			
-	sceImeDialogInit(&params);
-	is_ime_active = true;
-}
-
-static char *sizes[] = {
-	"B",
-	"KB",
-	"MB",
-	"GB"
-};
-
-static float format(float len) {
-	while (len > 1024) len = len / 1024.0f;
-	return len;
-}
-
-static uint8_t quota(uint64_t len) {
-	uint8_t ret = 0;
-	while (len > 1024) {
-		ret++;
-		len = len / 1024;
-	}
-	return ret;
-}
-
-void DrawExtractorDialog(int index, float file_extracted_bytes, float extracted_bytes, float file_total_bytes, float total_bytes, char *filename, int num_files) {
-	ImGui_ImplVitaGL_NewFrame();
-	
-	char msg1[256], msg2[256];
-	sprintf(msg1, "%s (%d / %d)", "Extracting archive...", index, num_files);
-	sprintf(msg2, "%s (%.2f %s / %.2f %s)", filename, format(file_extracted_bytes), sizes[quota(file_extracted_bytes)], format(file_total_bytes), sizes[quota(file_total_bytes)]);
-	ImVec2 pos1 = ImGui::CalcTextSize(msg1);
-	ImVec2 pos2 = ImGui::CalcTextSize(msg2);
-	
-	ImGui::GetIO().MouseDrawCursor = false;
-	ImGui::SetNextWindowPos(ImVec2((SCR_WIDTH / 2) - 200, (SCR_HEIGHT / 2) - 50), ImGuiSetCond_Always);
-	ImGui::SetNextWindowSize(ImVec2(400, 100), ImGuiSetCond_Always);
-	ImGui::Begin("", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
-	ImGui::SetCursorPos(ImVec2((400 - pos1.x) / 2, 20));
-	ImGui::Text(msg1);
-	ImGui::SetCursorPos(ImVec2((400 - pos2.x) / 2, 40));
-	ImGui::Text(msg2);
-	ImGui::SetCursorPos(ImVec2(100, 60));
-	ImGui::ProgressBar(extracted_bytes / total_bytes, ImVec2(200, 0));
-	
-	ImGui::End();
-	glViewport(0, 0, static_cast<int>(ImGui::GetIO().DisplaySize.x), static_cast<int>(ImGui::GetIO().DisplaySize.y));
-	ImGui::Render();
-	ImGui_ImplVitaGL_RenderDrawData(ImGui::GetDrawData());
-	vglSwapBuffers(GL_FALSE);
-	sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
-}
-
-void DrawDownloaderDialog(int index, float downloaded_bytes, float total_bytes, char *text, int passes, bool self_contained) {
-	sceKernelPowerTick(0);
-	
-	if (self_contained)
-		ImGui_ImplVitaGL_NewFrame();
-	
-	char msg[512];
-	sprintf(msg, "%s (%d / %d)", text, index, passes);
-	ImVec2 pos = ImGui::CalcTextSize(msg);
-
-	ImGui::SetNextWindowPos(ImVec2((SCR_WIDTH / 2) - 200, (SCR_HEIGHT / 2) - 50), ImGuiSetCond_Always);
-	ImGui::SetNextWindowSize(ImVec2(400, 100), ImGuiSetCond_Always);
-	ImGui::Begin("downloader", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
-	
-	ImGui::SetCursorPos(ImVec2((400 - pos.x) / 2, 20));
-	ImGui::Text(msg);
-	if (total_bytes < 4000000000.0f) {
-		sprintf(msg, "%.2f %s / %.2f %s", format(downloaded_bytes), sizes[quota(downloaded_bytes)], format(total_bytes), sizes[quota(total_bytes)]);
-		pos = ImGui::CalcTextSize(msg);
-		ImGui::SetCursorPos(ImVec2((400 - pos.x) / 2, 40));
-		ImGui::Text(msg);
-		ImGui::SetCursorPos(ImVec2(100, 60));
-		ImGui::ProgressBar(downloaded_bytes / total_bytes, ImVec2(200, 0));
-	} else {
-		sprintf(msg, "%.2f %s", format(downloaded_bytes), sizes[quota(downloaded_bytes)]);
-		pos = ImGui::CalcTextSize(msg);
-		ImGui::SetCursorPos(ImVec2((400 - pos.x) / 2, 50));
-		ImGui::Text(msg);
-	}
-	
-	ImGui::End();
-	
-	if (self_contained) {
-		glViewport(0, 0, static_cast<int>(ImGui::GetIO().DisplaySize.x), static_cast<int>(ImGui::GetIO().DisplaySize.y));
-		ImGui::Render();
-		ImGui_ImplVitaGL_RenderDrawData(ImGui::GetDrawData());
-		vglSwapBuffers(GL_FALSE);
-	}
-}
-
-void DrawTextDialog(char *text, bool self_contained) {
-	sceKernelPowerTick(0);
-	
-	if (self_contained)
-		ImGui_ImplVitaGL_NewFrame();
-	
-	ImVec2 pos = ImGui::CalcTextSize(text);
-
-	ImGui::SetNextWindowPos(ImVec2((SCR_WIDTH / 2) - 200, (SCR_HEIGHT / 2) - 50), ImGuiSetCond_Always);
-	ImGui::SetNextWindowSize(ImVec2(400, 100), ImGuiSetCond_Always);
-	ImGui::Begin("text dialog", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
-	
-	ImGui::SetCursorPos(ImVec2((400 - pos.x) / 2, 20));
-	ImGui::Text(text);
-	ImGui::End();
-	
-	if (self_contained) {
-		glViewport(0, 0, static_cast<int>(ImGui::GetIO().DisplaySize.x), static_cast<int>(ImGui::GetIO().DisplaySize.y));
-		ImGui::Render();
-		ImGui_ImplVitaGL_RenderDrawData(ImGui::GetDrawData());
-		vglSwapBuffers(GL_FALSE);
-	}
-}
 
 int filter_idx = 0;
 int cur_ss_idx;
 int old_ss_idx = -1;
-volatile char generic_url[512];
+
 static char download_link[512];
-static CURL *curl_handle = NULL;
-static volatile uint64_t total_bytes = 0xFFFFFFFF;
-static volatile uint64_t downloaded_bytes = 0;
-static volatile uint8_t downloader_pass = 1;
-uint8_t *generic_mem_buffer = nullptr;
-static FILE *fh;
-char *bytes_string;
 char app_name_filter[128] = {0};
 
 struct AppSelection {
@@ -453,105 +75,6 @@ struct AppSelection {
 static AppSelection *old_hovered = NULL;
 AppSelection *apps = nullptr;
 
-static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *stream) {
-	if (total_bytes > MEM_BUFFER_SIZE) {
-		if (!fh)
-			fh = fopen(TEMP_DOWNLOAD_NAME, "wb");
-		fwrite(ptr, 1, nmemb, fh);
-	} else {
-		uint8_t *dst = &generic_mem_buffer[downloaded_bytes];
-		sceClibMemcpy(dst, ptr, nmemb);
-	}
-	downloaded_bytes += nmemb;
-	if (total_bytes < downloaded_bytes) total_bytes = downloaded_bytes;
-	return nmemb;
-}
-
-static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata) {
-	char *ptr = strcasestr(buffer, "Content-Length");
-	if (ptr != NULL) sscanf(ptr, "Content-Length: %llu", &total_bytes);
-	return nitems;
-}
-
-static void startDownload(const char *url) {
-	curl_easy_reset(curl_handle);
-	curl_easy_setopt(curl_handle, CURLOPT_URL, url);
-	curl_easy_setopt(curl_handle, CURLOPT_HTTPGET, 1L);
-	curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36");
-	curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0L);
-	curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 0L);
-	curl_easy_setopt(curl_handle, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
-	curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, 10L);
-	curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
-	curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
-	curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_cb);
-	curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, bytes_string); // Dummy
-	curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, header_cb);
-	curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, bytes_string); // Dummy
-	curl_easy_setopt(curl_handle, CURLOPT_RESUME_FROM, downloaded_bytes);
-	curl_easy_setopt(curl_handle, CURLOPT_BUFFERSIZE, 524288);
-	struct curl_slist *headerchunk = NULL;
-	headerchunk = curl_slist_append(headerchunk, "Accept: */*");
-	headerchunk = curl_slist_append(headerchunk, "Content-Type: application/json");
-	headerchunk = curl_slist_append(headerchunk, "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36");
-	headerchunk = curl_slist_append(headerchunk, "Content-Length: 0");
-	curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headerchunk);
-	curl_easy_perform(curl_handle);
-}
-
-static int appListThread(unsigned int args, void *arg) {
-	curl_handle = curl_easy_init();
-	downloader_pass = 1;
-	downloaded_bytes = 0;
-
-	SceIoStat stat;
-	sceIoGetstat("ux0:data/VitaDB/apps.json", &stat);
-	total_bytes = stat.st_size;
-
-	startDownload("https://vitadb.rinnegatamante.it/list_hbs_json.php");
-
-	if (downloaded_bytes > 12 * 1024) {
-		fh = fopen("ux0:data/VitaDB/apps.json", "wb");
-		fwrite(generic_mem_buffer, 1, downloaded_bytes, fh);
-		fclose(fh);
-	}
-	downloaded_bytes = total_bytes;
-	curl_easy_cleanup(curl_handle);
-	sceKernelExitDeleteThread(0);
-	return 0;
-}
-
-static int downloadThread(unsigned int args, void *arg) {
-	curl_handle = curl_easy_init();
-	//printf("downloading %s\n", generic_url);
-	char *url = (char *)generic_url;
-	char *space = strstr(url, " ");
-	char *s = url;
-	char final_url[512] = "";
-	fh = NULL;
-	while (space) {
-		space[0] = 0;
-		sprintf(final_url, "%s%s%%20", final_url, s);
-		space[0] = ' ';
-		s = space + 1;
-		space = strstr(s, " ");
-	}
-	sprintf(final_url, "%s%s", final_url, s);
-	//printf("starting download of %s\n", final_url);
-	downloader_pass = 1;
-	downloaded_bytes = 0;
-	total_bytes = 180; /* 20 KB */
-	startDownload(final_url);
-	if (downloaded_bytes > 180 && total_bytes <= MEM_BUFFER_SIZE) {
-		fh = fopen(TEMP_DOWNLOAD_NAME, "wb");
-		fwrite(generic_mem_buffer, 1, downloaded_bytes, fh);
-	}
-	fclose(fh);
-	downloaded_bytes = total_bytes;
-	curl_easy_cleanup(curl_handle);
-	return sceKernelExitDeleteThread(0);
-}
-
 char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 	char label[32];
 	sprintf(label, "\"%s\": \"", val);
@@ -569,47 +92,6 @@ char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 	memcpy(dst, ptr, end2 - ptr);
 	dst[end2 - ptr] = 0;
 	return end2 + 1;
-}
-
-char *unescape(char *src) {
-	char *res = malloc(strlen(src) + 1);
-	uint32_t i = 0;
-	char *s = src;
-	while (*s) {
-		char c = *s;
-		int incr = 1;
-		if (c == '\\' && s[1]) {
-			switch (s[1]) {
-			case '\\':
-				c = '\\';
-				incr = 2;
-				break;
-			case 'n':
-				c = '\n';
-				incr = 2;
-				break;
-			case 't':
-				c = '\t';
-				incr = 2;
-				break;
-			case '\'':
-				c = '\'';
-				incr = 2;
-				break;
-			case '\"':
-				c = '\"';
-				incr = 2;
-				break;
-			default:
-				break;
-			}
-		}
-		res[i++] = c;
-		s += incr;
-	}
-	res[i] = 0;
-	free(src);
-	return res;
 }
 
 bool update_detected = false;
@@ -705,19 +187,6 @@ void extract_file(char *file, char *dir) {
 	}
 	unzClose(zipfile);
 	ImGui::GetIO().MouseDrawCursor = false;
-}
-
-void download_file(char *url, char *text) {
-	SceKernelThreadInfo info;
-	info.size = sizeof(SceKernelThreadInfo);
-	int res = 0;
-	SceUID thd = sceKernelCreateThread("Generic Downloader", &downloadThread, 0x10000100, 0x100000, 0, 0, NULL);
-	sprintf(generic_url, url);
-	sceKernelStartThread(thd, 0, NULL);
-	do {
-		DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, text, 1, true);
-		res = sceKernelGetThreadInfo(thd, &info);
-	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 }
 
 static int preview_width, preview_height, preview_x, preview_y;
@@ -922,24 +391,6 @@ bool filterApps(AppSelection *p) {
 			return true;
 	}
 	return false;
-}
-
-void scePromoterUtilInit() {
-	uint32_t ptr[0x100] = { 0 };
-	ptr[0] = 0;
-	ptr[1] = (uint32_t)&ptr[0];
-	uint32_t scepaf_argp[] = { 0x400000, 0xEA60, 0x40000, 0, 0 };
-	sceSysmoduleLoadModuleInternalWithArg(SCE_SYSMODULE_INTERNAL_PAF, sizeof(scepaf_argp), scepaf_argp, (SceSysmoduleOpt *)ptr);
-	sceSysmoduleLoadModuleInternal(SCE_SYSMODULE_INTERNAL_PROMOTER_UTIL);
-	scePromoterUtilityInit();
-}
-
-void scePromoterUtilTerm() {
-	scePromoterUtilityExit();
-	sceSysmoduleUnloadModuleInternal(SCE_SYSMODULE_INTERNAL_PROMOTER_UTIL);
-	SceSysmoduleOpt opt;
-	sceClibMemset(&opt.flags, 0, sizeof(opt));
-	sceSysmoduleUnloadModuleInternalWithArg(SCE_SYSMODULE_INTERNAL_PAF, 0, NULL, &opt);
 }
 
 static int musicThread(unsigned int args, void *arg) {
@@ -1348,10 +799,10 @@ int main(int argc, char *argv[]) {
 			if (strlen(hovered->data_link) > 5) {
 				sz = strtoull(hovered->size, &dummy, 10);
 				uint64_t sz2 = strtoull(hovered->data_size, &dummy, 10);
-				sprintf(size_str, "VPK: %.2f %s, Data: %.2f %s", format(sz), sizes[quota(sz)], format(sz2), sizes[quota(sz2)]);
+				sprintf(size_str, "VPK: %.2f %s, Data: %.2f %s", format_size(sz), format_size_str(sz), format_size(sz2), format_size_str(sz2));
 			} else {
 				sz = strtoull(hovered->size, &dummy, 10);
-				sprintf(size_str, "VPK: %.2f %s", format(sz), sizes[quota(sz)]);
+				sprintf(size_str, "VPK: %.2f %s", format_size(sz), format_size_str(sz));
 			}
 			ImGui::Text(size_str);
 			ImGui::SetCursorPosY(470);
@@ -1364,7 +815,7 @@ int main(int argc, char *argv[]) {
 		ImGui::SetCursorPosY(502);
 		uint64_t total_space = get_total_storage();
 		uint64_t free_space = get_free_storage();
-		ImGui::Text("Free storage: %.2f %s / %.2f %s", format(free_space), sizes[quota(free_space)], format(total_space), sizes[quota(total_space)]);
+		ImGui::Text("Free storage: %.2f %s / %.2f %s", format_size(free_space), format_size_str(free_space), format_size(total_space), format_size_str(total_space));
 		ImGui::End();
 		
 		if (show_screenshots == 2) {

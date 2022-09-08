@@ -23,8 +23,12 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-optimize-sibling-calls -fdiagnostics-co
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -fpermissive -fdiagnostics-color=always -Wno-write-strings -DGIT_VERSION=\"${GIT_HASH}\" -std=c++11")
 
 add_executable(VitaDB
+  source/dialogs.cpp
   source/main.cpp
+  source/network.cpp
   source/player.cpp
+  source/promoter.cpp
+  source/utils.cpp
   source/ioapi.c
   source/unzip.c
   source/sha1.c
