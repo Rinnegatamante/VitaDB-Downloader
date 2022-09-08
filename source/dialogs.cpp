@@ -185,8 +185,11 @@ void DrawDownloaderDialog(int index, float downloaded_bytes, float total_bytes, 
 	}
 }
 
-void DrawTextDialog(char *text, bool self_contained) {
+void DrawTextDialog(char *text, bool self_contained, bool clear_screen) {
 	sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
+	
+	if (clear_screen)
+		glClear(GL_COLOR_BUFFER_BIT);
 	
 	if (self_contained)
 		ImGui_ImplVitaGL_NewFrame();

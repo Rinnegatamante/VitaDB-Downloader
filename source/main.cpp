@@ -48,7 +48,6 @@
 #define PREVIEW_WIDTH  128.0f
 
 int _newlib_heap_size_user = 200 * 1024 * 1024;
-
 int filter_idx = 0;
 int cur_ss_idx;
 int old_ss_idx = -1;
@@ -112,6 +111,10 @@ char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 
 bool update_detected = false;
 void AppendAppDatabase(const char *file) {
+	// Burning on screen the parsing text dialog
+	for (int i = 0; i < 3; i++) {
+		DrawTextDialog("Parsing apps list", true, true);
+	}
 	FILE *f = fopen(file, "rb");
 	if (f) {
 		fseek(f, 0, SEEK_END);
@@ -123,7 +126,6 @@ void AppendAppDatabase(const char *file) {
 		char *ptr = buffer;
 		char *end, *end2;
 		do {
-			DrawTextDialog("Parsing apps list", true);
 			char name[128], version[64], fname[64], cur_hash[40];
 			//printf("extract\n");
 			ptr = extractValue(name, ptr, "name", nullptr);
@@ -652,19 +654,6 @@ int main(int argc, char *argv[]) {
 	memset(&appUtilParam, 0, sizeof(SceAppUtilInitParam));
 	memset(&appUtilBootParam, 0, sizeof(SceAppUtilBootParam));
 	sceAppUtilInit(&appUtilParam, &appUtilBootParam);
-	sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG, &console_language);
-	
-	// Check if Lite Edition is being launched
-	SceAppUtilAppEventParam eventParam;
-	memset(&eventParam, 0, sizeof(SceAppUtilAppEventParam));
-	sceAppUtilReceiveAppEvent(&eventParam);
-	if (eventParam.type == 0x05) {
-		char buffer[2048];
-		memset(buffer, 0, 2048);
-		sceAppUtilAppEventParseLiveArea(&eventParam, buffer);
-		if (strstr(buffer, "lite") != NULL)
-			lite_mode = true;
-	}
 	
 	// Initializing sceCommonDialog
 	SceCommonDialogConfigParam cmnDlgCfgParam;
@@ -1207,7 +1196,7 @@ int main(int argc, char *argv[]) {
 					int ret = scePromoterUtilityGetState(&state);
 					if (ret < 0)
 						break;
-					DrawTextDialog("Installing the app", true);
+					DrawTextDialog("Installing the app", true, false);
 					vglSwapBuffers(GL_TRUE);
 				} while (state);
 				scePromoterUtilTerm();

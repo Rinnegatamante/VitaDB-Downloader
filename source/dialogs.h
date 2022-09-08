@@ -26,7 +26,7 @@ void init_interactive_ime_dialog(const char *msg, const char *start_text);
 
 void DrawExtractorDialog(int index, float file_extracted_bytes, float extracted_bytes, float file_total_bytes, float total_bytes, char *filename, int num_files);
 void DrawDownloaderDialog(int index, float downloaded_bytes, float total_bytes, char *text, int passes, bool self_contained);
-void DrawTextDialog(char *text, bool self_contained);
+void DrawTextDialog(char *text, bool self_contained, bool clear_screen);
 
 void getDialogTextResult(char *text);
 
