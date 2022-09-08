@@ -645,10 +645,14 @@ int main(int argc, char *argv[]) {
 		if (ImGui::Button(app_name_filter, ImVec2(-1.0f, 0.0f))) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 		}
+		if (ImGui::IsItemHovered()) {
+			hovered = nullptr;
+		}
 		if (go_to_top) {
 			ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
 			ImGui::SetScrollHere();
 			go_to_top = false;
+			hovered = nullptr;
 		}
 		ImGui::PopStyleVar();
 		ImGui::AlignTextToFramePadding();
@@ -664,6 +668,9 @@ int main(int argc, char *argv[]) {
 					ImGui::SetItemDefaultFocus();
 			}
 			ImGui::EndCombo();
+		}
+		if (ImGui::IsItemHovered()) {
+			hovered = nullptr;
 		}
 		ImGui::PopItemWidth();
 		ImGui::AlignTextToFramePadding();
@@ -682,6 +689,9 @@ int main(int argc, char *argv[]) {
 					ImGui::SetItemDefaultFocus();
 			}
 			ImGui::EndCombo();
+		}
+		if (ImGui::IsItemHovered()) {
+			hovered = nullptr;
 		}
 		ImGui::PopItemWidth();
 		ImGui::Separator();
