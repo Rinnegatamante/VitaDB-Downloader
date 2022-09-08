@@ -545,9 +545,15 @@ void DrawBackground() {
 	glDisableClientState(GL_COLOR_ARRAY);
 }
 
+ImVec4 TextLabel = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+ImVec4 TextOutdated = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+ImVec4 TextUpdated = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+
 #define READ_FIRST_VAL(x) if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
 #define READ_NEXT_VAL(x) else if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
+#define READ_EXTRA_VAL(x) else if (strcmp(#x, buffer) == 0) x = ImVec4(values[0], values[1], values[2], values[3]);
 #define WRITE_VAL(a) fprintf(f, "%s=%f,%f,%f,%f\n", #a, style.Colors[ImGuiCol_##a].x, style.Colors[ImGuiCol_##a].y, style.Colors[ImGuiCol_##a].z, style.Colors[ImGuiCol_##a].w);
+#define WRITE_EXTRA_VAL(a) fprintf(f, "%s=%f,%f,%f,%f\n", #a, a.x, a.y, a.z, a.w);
 void set_gui_theme() {
 	ImGui::StyleColorsDark();
 	ImGuiStyle& style = ImGui::GetStyle();
@@ -586,6 +592,9 @@ void set_gui_theme() {
 			READ_NEXT_VAL(PlotHistogramHovered)
 			READ_NEXT_VAL(TextSelectedBg)
 			READ_NEXT_VAL(NavHighlight)
+			READ_EXTRA_VAL(TextLabel)
+			READ_EXTRA_VAL(TextOutdated)
+			READ_EXTRA_VAL(TextUpdated)
 		}
 		fclose(f);
 	} else { // Save default theme
@@ -618,6 +627,9 @@ void set_gui_theme() {
 		WRITE_VAL(PlotHistogramHovered)
 		WRITE_VAL(TextSelectedBg)
 		WRITE_VAL(NavHighlight)
+		WRITE_EXTRA_VAL(TextLabel)
+		WRITE_EXTRA_VAL(TextOutdated)
+		WRITE_EXTRA_VAL(TextUpdated)
 		fclose(f);
 	}
 }
@@ -891,17 +903,17 @@ int main(int argc, char *argv[]) {
 				case APP_UNTRACKED:
 					tag_len = ImGui::CalcTextSize("Not Installed");
 					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
-					ImGui::TextColored(ImVec4(1, 1, 1, 1), "Not Installed");
+					ImGui::Text("Not Installed");
 					break;
 				case APP_OUTDATED:
 					tag_len = ImGui::CalcTextSize("Outdated");
 					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
-					ImGui::TextColored(ImVec4(1, 0, 0, 1), "Outdated");
+					ImGui::TextColored(TextOutdated, "Outdated");
 					break;
 				case APP_UPDATED:
 					tag_len = ImGui::CalcTextSize("Updated");
 					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
-					ImGui::TextColored(ImVec4(0, 1, 0, 1), "Updated");
+					ImGui::TextColored(TextUpdated, "Updated");
 					break;
 				default:
 					break;
@@ -925,23 +937,23 @@ int main(int argc, char *argv[]) {
 			LoadPreview(hovered);
 			ImGui::SetCursorPos(ImVec2(preview_x + PREVIEW_PADDING, preview_y + PREVIEW_PADDING));
 			ImGui::Image((void*)preview_icon, ImVec2(preview_width, preview_height));
-			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0, 1.0f), "Description:");
+			ImGui::TextColored(TextLabel, "Description:");
 			ImGui::TextWrapped(hovered->desc);
 			ImGui::SetCursorPosY(6);
 			ImGui::SetCursorPosX(140);
-			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0, 1.0f), "Last Update:");
+			ImGui::TextColored(TextLabel, "Last Update:");
 			ImGui::SetCursorPosY(22);
 			ImGui::SetCursorPosX(140);
 			ImGui::Text(hovered->date);
 			ImGui::SetCursorPosY(6);
 			ImGui::SetCursorPosX(330);
-			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0, 1.0f), "Downloads:");
+			ImGui::TextColored(TextLabel, "Downloads:");
 			ImGui::SetCursorPosY(22);
 			ImGui::SetCursorPosX(330);
 			ImGui::Text(hovered->downloads);
 			ImGui::SetCursorPosY(38);
 			ImGui::SetCursorPosX(140);
-			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0, 1.0f), "Category:");
+			ImGui::TextColored(TextLabel, "Category:");
 			ImGui::SetCursorPosY(54);
 			ImGui::SetCursorPosX(140);
 			switch (hovered->type[0]) {
@@ -963,13 +975,13 @@ int main(int argc, char *argv[]) {
 			}
 			ImGui::SetCursorPosY(70);
 			ImGui::SetCursorPosX(140);
-			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0, 1.0f), "Author:");
+			ImGui::TextColored(TextLabel, "Author:");
 			ImGui::SetCursorPosY(86);
 			ImGui::SetCursorPosX(140);
 			ImGui::Text(hovered->author);
 			ImGui::SetCursorPosY(100);
 			ImGui::SetCursorPosX(140);
-			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0, 1.0f), "Size:");
+			ImGui::TextColored(TextLabel, "Size:");
 			ImGui::SetCursorPosY(116);
 			ImGui::SetCursorPosX(140);
 			char size_str[64];
@@ -986,7 +998,7 @@ int main(int argc, char *argv[]) {
 			ImGui::Text(size_str);
 			ImGui::SetCursorPosY(470);
 			if (strlen(hovered->screenshots) > 5) {
-				ImGui::TextColored(ImVec4(1.0f, 1.0f, 0, 1.0f), "Press Start to view screenshots");
+				ImGui::TextColored(TextLabel, "Press Start to view screenshots");
 			}
 		}
 		ImGui::SetCursorPosY(486);
