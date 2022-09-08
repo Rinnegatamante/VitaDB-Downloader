@@ -68,6 +68,7 @@ struct AppSelection {
 	char downloads[16];
 	char size[16];
 	char data_size[16];
+	char *requirements;
 	char data_link[128];
 	AppSelection *next;
 };
@@ -85,8 +86,13 @@ char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 		return nullptr;
 	char *end2 = strstr(ptr, val[0] == 'l' ? "\"," : "\"");
 	if (dst == nullptr) {
-		dst = malloc(end2 - ptr + 1);
-		*new_ptr = dst;
+		if (end2 - ptr > 0) {
+			dst = malloc(end2 - ptr + 1);
+			*new_ptr = dst;
+		} else {
+			*new_ptr = nullptr;
+			return end2 + 1;
+		}
 	}
 	//printf("size: %d\n", end2 - ptr);
 	memcpy(dst, ptr, end2 - ptr);
@@ -115,6 +121,7 @@ AppSelection *AppendAppDatabase(const char *file) {
 				break;
 			AppSelection *node = (AppSelection*)malloc(sizeof(AppSelection));
 			node->desc = nullptr;
+			node->requirements = nullptr;
 			ptr = extractValue(node->icon, ptr, "icon", nullptr);
 			ptr = extractValue(version, ptr, "version", nullptr);
 			ptr = extractValue(node->author, ptr, "author", nullptr);
@@ -133,6 +140,9 @@ AppSelection *AppendAppDatabase(const char *file) {
 			ptr = extractValue(node->downloads, ptr, "downloads", nullptr);
 			ptr = extractValue(node->size, ptr, "size", nullptr);
 			ptr = extractValue(node->data_size, ptr, "data_size", nullptr);
+			ptr = extractValue(node->requirements, ptr, "requirements", &node->requirements);
+			if (node->requirements)
+				node->requirements = unescape(node->requirements);
 			ptr = extractValue(node->data_link, ptr, "data", nullptr);
 			sprintf(node->name, "%s %s", name, version);
 			node->next = apps;
@@ -645,9 +655,8 @@ int main(int argc, char *argv[]) {
 		if (ImGui::Button(app_name_filter, ImVec2(-1.0f, 0.0f))) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 		}
-		if (ImGui::IsItemHovered()) {
+		if (ImGui::IsItemHovered())
 			hovered = nullptr;
-		}
 		if (go_to_top) {
 			ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
 			ImGui::SetScrollHere();
@@ -669,9 +678,8 @@ int main(int argc, char *argv[]) {
 			}
 			ImGui::EndCombo();
 		}
-		if (ImGui::IsItemHovered()) {
+		if (ImGui::IsItemHovered())
 			hovered = nullptr;
-		}
 		ImGui::PopItemWidth();
 		ImGui::AlignTextToFramePadding();
 		ImGui::SameLine();
@@ -690,9 +698,8 @@ int main(int argc, char *argv[]) {
 			}
 			ImGui::EndCombo();
 		}
-		if (ImGui::IsItemHovered()) {
+		if (ImGui::IsItemHovered())
 			hovered = nullptr;
-		}
 		ImGui::PopItemWidth();
 		ImGui::Separator();
 		
@@ -881,7 +888,7 @@ int main(int argc, char *argv[]) {
 		
 		// Queued app download
 		if (to_download) {
-			if (strlen(to_download->data_link) > 5) {
+			if (to_download->requirements) {
 				uint8_t *scr_data = vglMalloc(960 * 544 * 4);
 				glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 				if (!previous_frame)
@@ -889,6 +896,47 @@ int main(int argc, char *argv[]) {
 				glBindTexture(GL_TEXTURE_2D, previous_frame);
 				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 				vglFree(scr_data);
+				init_msg_dialog("This homebrew has extra requirements in order to work properly:\n%s", to_download->requirements);
+				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+					vglSwapBuffers(GL_TRUE);
+				}
+				glMatrixMode(GL_PROJECTION);
+				glLoadIdentity();
+				glOrthof(0, 960, 544, 0, 0, 1);
+				glMatrixMode(GL_MODELVIEW);
+				glLoadIdentity();
+				float vtx[4 * 2] = {
+					  0, 544,
+					960, 544,
+					  0,   0,
+					960,   0
+				};
+				float txcoord[4 * 2] = {
+					  0,   0,
+					  1,   0,
+					  0,   1,
+					  1,   1
+				};
+				// Workaround to prevent message dialog "burn in" on background
+				for (int i = 0; i < 10; i++) {
+					glEnableClientState(GL_VERTEX_ARRAY);
+					glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+					glVertexPointer(2, GL_FLOAT, 0, vtx);
+					glTexCoordPointer(2, GL_FLOAT, 0, txcoord);
+					glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+					vglSwapBuffers(GL_FALSE);
+				}
+			}
+			if (strlen(to_download->data_link) > 5) {
+				if (!to_download->requirements) {
+					uint8_t *scr_data = vglMalloc(960 * 544 * 4);
+					glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
+					if (!previous_frame)
+						glGenTextures(1, &previous_frame);
+					glBindTexture(GL_TEXTURE_2D, previous_frame);
+					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
+					vglFree(scr_data);
+				}
 				init_interactive_msg_dialog("This homebrew also has data files. Do you wish to install them as well?");
 				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 					vglSwapBuffers(GL_TRUE);
