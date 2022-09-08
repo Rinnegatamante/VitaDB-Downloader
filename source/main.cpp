@@ -36,6 +36,23 @@ extern void video_close();
 int _newlib_heap_size_user = 200 * 1024 * 1024;
 int console_language;
 
+void recursive_rmdir(const char *path) {
+	SceUID d = sceIoDopen(path);
+	if (d >= 0) {
+		SceIoDirent g_dir;
+		while (sceIoDread(d, &g_dir) > 0) {
+			char fpath[512];
+			sprintf(fpath, "%s/%s", path, g_dir.d_name);
+			if (SCE_S_ISDIR(g_dir.d_stat.st_mode))
+				recursive_rmdir(fpath);
+			else
+				sceIoRemove(fpath);
+		}
+		sceIoDclose(d);
+		sceIoRmdir(path);
+	}
+}
+
 uint64_t get_free_storage() {
 	uint64_t free_storage, dummy;
 	SceIoDevInfo info;
@@ -1017,6 +1034,11 @@ int main(int argc, char *argv[]) {
 	scePowerSetBusClockFrequency(222);
 	sceIoMkdir("ux0:data/VitaDB", 0777);
 	
+	// Removing any failed app installation leftover
+	if (sceIoGetstat("ux0:/data/VitaDB/vpk/eboot.bin", &st1) >= 0) {
+		recursive_rmdir("ux0:/data/VitaDB/vpk");
+	}
+	
 	// Initializing sceAppUtil
 	SceAppUtilInitParam appUtilParam;
 	SceAppUtilBootParam appUtilBootParam;
@@ -1493,6 +1515,13 @@ int main(int argc, char *argv[]) {
 				} while (state);
 				scePromoterUtilTerm();
 				to_download = nullptr;
+				if (sceIoGetstat("ux0:/data/VitaDB/vpk/eboot.bin", &st1) >= 0) {
+					init_msg_dialog("The installation process failed.");
+					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+						vglSwapBuffers(GL_TRUE);
+					}
+					recursive_rmdir("ux0:/data/VitaDB/vpk");
+				}
 			}
 		}
 		
