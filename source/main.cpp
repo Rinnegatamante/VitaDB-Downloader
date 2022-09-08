@@ -48,7 +48,6 @@
 #define PREVIEW_WIDTH  128.0f
 
 int _newlib_heap_size_user = 200 * 1024 * 1024;
-int console_language;
 
 int filter_idx = 0;
 int cur_ss_idx;
@@ -60,7 +59,8 @@ char app_name_filter[128] = {0};
 enum {
 	APP_UNTRACKED,
 	APP_OUTDATED,
-	APP_UPDATED
+	APP_UPDATED,
+	APP_UNKNOWN
 };
 
 struct AppSelection {
@@ -70,6 +70,7 @@ struct AppSelection {
 	char type[2];
 	char id[8];
 	char date[12];
+	char titleid[10];
 	char screenshots[512];
 	char *desc;
 	char downloads[16];
@@ -110,8 +111,7 @@ char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 }
 
 bool update_detected = false;
-AppSelection *AppendAppDatabase(const char *file) {
-	AppSelection *res = nullptr;
+void AppendAppDatabase(const char *file) {
 	FILE *f = fopen(file, "rb");
 	if (f) {
 		fseek(f, 0, SEEK_END);
@@ -124,7 +124,7 @@ AppSelection *AppendAppDatabase(const char *file) {
 		char *end, *end2;
 		do {
 			DrawTextDialog("Parsing apps list", true);
-			char name[128], version[64], hash[40], titleid[12], fname[64];
+			char name[128], version[64], fname[64], cur_hash[40];
 			//printf("extract\n");
 			ptr = extractValue(name, ptr, "name", nullptr);
 			//printf("parsing %s\n", name);
@@ -139,13 +139,11 @@ AppSelection *AppendAppDatabase(const char *file) {
 			ptr = extractValue(node->type, ptr, "type", nullptr);
 			ptr = extractValue(node->id, ptr, "id", nullptr);
 			if (!strncmp(node->id, "877", 3)) { // VitaDB Downloader, check if newer than running version
-				if (strncmp(&version[2], VERSION, 3)) {
-					res = node;
+				if (strncmp(&version[2], VERSION, 3))
 					update_detected = true;
-				}
 			}
 			ptr = extractValue(node->date, ptr, "date", nullptr);
-			ptr = extractValue(titleid, ptr, "titleid", nullptr);
+			ptr = extractValue(node->titleid, ptr, "titleid", nullptr);
 			ptr = extractValue(node->screenshots, ptr, "screenshots", nullptr);
 			ptr = extractValue(node->desc, ptr, "long_description", &node->desc);
 			node->desc = unescape(node->desc);
@@ -154,9 +152,8 @@ AppSelection *AppendAppDatabase(const char *file) {
 			ptr = extractValue(node->data_size, ptr, "data_size", nullptr);
 			ptr = extractValue(node->hash, ptr, "hash", nullptr);
 			//printf("db hash %s\n", node->hash);
-			sprintf(fname, "ux0:app/%s/hash.vdb", titleid);
+			sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
 			FILE *f  = fopen(fname, "r");
-			char cur_hash[40];
 			if (f) {
 				//printf("found hash file\n");
 				fread(cur_hash, 1, 32, f);
@@ -168,7 +165,7 @@ AppSelection *AppendAppDatabase(const char *file) {
 					node->state = APP_UPDATED;
 			} else {
 				//printf("hash file not found, calculating md5\n");
-				sprintf(fname, "ux0:app/%s/eboot.bin", titleid);
+				sprintf(fname, "ux0:app/%s/eboot.bin", node->titleid);
 				f = fopen(fname, "r");
 				if (f) {
 					//printf("eboot.bin found, starting md5sum\n");
@@ -192,7 +189,7 @@ AppSelection *AppendAppDatabase(const char *file) {
 						node->state = APP_OUTDATED;
 					else
 						node->state = APP_UPDATED;
-					sprintf(fname, "ux0:app/%s/hash.vdb", titleid);
+					sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
 					f = fopen(fname, "w");
 					fwrite(cur_hash, 1, 32, f);
 					fclose(f);
@@ -212,7 +209,6 @@ AppSelection *AppendAppDatabase(const char *file) {
 		free(buffer);
 	}
 	//printf("finished parsing\n");
-	return res;
 }
 
 static char fname[512], ext_fname[512], read_buffer[8192];
@@ -658,10 +654,22 @@ int main(int argc, char *argv[]) {
 	sceAppUtilInit(&appUtilParam, &appUtilBootParam);
 	sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG, &console_language);
 	
+	// Check if Lite Edition is being launched
+	SceAppUtilAppEventParam eventParam;
+	memset(&eventParam, 0, sizeof(SceAppUtilAppEventParam));
+	sceAppUtilReceiveAppEvent(&eventParam);
+	if (eventParam.type == 0x05) {
+		char buffer[2048];
+		memset(buffer, 0, 2048);
+		sceAppUtilAppEventParseLiveArea(&eventParam, buffer);
+		if (strstr(buffer, "lite") != NULL)
+			lite_mode = true;
+	}
+	
 	// Initializing sceCommonDialog
 	SceCommonDialogConfigParam cmnDlgCfgParam;
 	sceCommonDialogConfigParamInit(&cmnDlgCfgParam);
-	cmnDlgCfgParam.language = (SceSystemParamLang)console_language;
+	sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG, (int *)&cmnDlgCfgParam.language);
 	sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_ENTER_BUTTON, (int *)&cmnDlgCfgParam.enterButtonAssign);
 	sceCommonDialogSetConfigParam(&cmnDlgCfgParam);
 	
@@ -710,7 +718,7 @@ int main(int argc, char *argv[]) {
 		res = sceKernelGetThreadInfo(thd, &info);
 	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 	sceAppMgrUmount("app0:");
-	hovered = AppendAppDatabase("ux0:data/VitaDB/apps.json");
+	AppendAppDatabase("ux0:data/VitaDB/apps.json");
 	
 	// Downloading icons
 	SceIoStat stat;
@@ -916,6 +924,9 @@ int main(int argc, char *argv[]) {
 					ImGui::TextColored(TextUpdated, "Updated");
 					break;
 				default:
+					tag_len = ImGui::CalcTextSize("Unknown");
+					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
+					ImGui::Text("Unknown");
 					break;
 				}
 				filtered_entries++;

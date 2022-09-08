@@ -20,7 +20,7 @@ execute_process(COMMAND git describe --abbrev=6 --dirty --always
 )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-optimize-sibling-calls -fdiagnostics-color=always -g -Wl,-q,--allow-multiple-definition -D_GNU_SOURCE -Wall -O3")
-set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -fpermissive -fdiagnostics-color=always -Wno-write-strings -DGIT_VERSION=\"${GIT_HASH}\" -std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-optimize-sibling-calls -fpermissive -g -fdiagnostics-color=always -Wno-write-strings -D_GNU_SOURCE -std=c++11")
 
 add_executable(VitaDB
   source/dialogs.cpp
