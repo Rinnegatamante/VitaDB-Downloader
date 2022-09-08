@@ -484,6 +484,83 @@ void DrawBackground() {
 	glDisableClientState(GL_COLOR_ARRAY);
 }
 
+#define READ_FIRST_VAL(x) if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
+#define READ_NEXT_VAL(x) else if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
+#define WRITE_VAL(a) fprintf(f, "%s=%f,%f,%f,%f\n", #a, style.Colors[ImGuiCol_##a].x, style.Colors[ImGuiCol_##a].y, style.Colors[ImGuiCol_##a].z, style.Colors[ImGuiCol_##a].w);
+void set_gui_theme() {
+	ImGui::StyleColorsDark();
+	ImGuiStyle& style = ImGui::GetStyle();
+	ImVec4 col_area = ImVec4(0.047f, 0.169f, 0.059f, 0.44f);
+	ImVec4 col_main = ImVec4(0.2f, 0.627f, 0.169f, 0.86f);
+	FILE *f = fopen("ux0:data/VitaDB/theme.ini", "r");
+	if (f) {
+		float values[4];
+		char buffer[64];
+		while (EOF != fscanf(f, "%[^=]=%f,%f,%f,%f\n", buffer, &values[0], &values[1], &values[2], &values[3])) {
+			READ_FIRST_VAL(ChildWindowBg)
+			READ_NEXT_VAL(FrameBg)
+			READ_NEXT_VAL(FrameBgHovered)
+			READ_NEXT_VAL(FrameBgActive)
+			READ_NEXT_VAL(TitleBg)
+			READ_NEXT_VAL(TitleBgCollapsed)
+			READ_NEXT_VAL(TitleBgActive)
+			READ_NEXT_VAL(MenuBarBg)
+			READ_NEXT_VAL(ScrollbarBg)
+			READ_NEXT_VAL(ScrollbarGrab)
+			READ_NEXT_VAL(ScrollbarGrabHovered)
+			READ_NEXT_VAL(ScrollbarGrabActive)
+			READ_NEXT_VAL(CheckMark)
+			READ_NEXT_VAL(SliderGrab)
+			READ_NEXT_VAL(SliderGrabActive)
+			READ_NEXT_VAL(Button)
+			READ_NEXT_VAL(ButtonHovered)
+			READ_NEXT_VAL(ButtonActive)
+			READ_NEXT_VAL(Header)
+			READ_NEXT_VAL(HeaderHovered)
+			READ_NEXT_VAL(HeaderActive)
+			READ_NEXT_VAL(ResizeGrip)
+			READ_NEXT_VAL(ResizeGripHovered)
+			READ_NEXT_VAL(ResizeGripActive)
+			READ_NEXT_VAL(PlotLinesHovered)
+			READ_NEXT_VAL(PlotHistogramHovered)
+			READ_NEXT_VAL(TextSelectedBg)
+			READ_NEXT_VAL(NavHighlight)
+		}
+		fclose(f);
+	} else { // Save default theme
+		f = fopen("ux0:data/VitaDB/theme.ini", "w");
+		WRITE_VAL(ChildWindowBg)
+		WRITE_VAL(FrameBg)
+		WRITE_VAL(FrameBgHovered)
+		WRITE_VAL(FrameBgActive)
+		WRITE_VAL(TitleBg)
+		WRITE_VAL(TitleBgCollapsed)
+		WRITE_VAL(TitleBgActive)
+		WRITE_VAL(MenuBarBg)
+		WRITE_VAL(ScrollbarBg)
+		WRITE_VAL(ScrollbarGrab)
+		WRITE_VAL(ScrollbarGrabHovered)
+		WRITE_VAL(ScrollbarGrabActive)
+		WRITE_VAL(CheckMark)
+		WRITE_VAL(SliderGrab)
+		WRITE_VAL(SliderGrabActive)
+		WRITE_VAL(Button)
+		WRITE_VAL(ButtonHovered)
+		WRITE_VAL(ButtonActive)
+		WRITE_VAL(Header)
+		WRITE_VAL(HeaderHovered)
+		WRITE_VAL(HeaderActive)
+		WRITE_VAL(ResizeGrip)
+		WRITE_VAL(ResizeGripHovered)
+		WRITE_VAL(ResizeGripActive)
+		WRITE_VAL(PlotLinesHovered)
+		WRITE_VAL(PlotHistogramHovered)
+		WRITE_VAL(TextSelectedBg)
+		WRITE_VAL(NavHighlight)
+		fclose(f);
+	}
+}
+
 int main(int argc, char *argv[]) {
 	SceIoStat st1, st2;
 	// Checking for libshacccg.suprx existence
@@ -532,12 +609,14 @@ int main(int argc, char *argv[]) {
 	AppSelection *to_download = nullptr;
 	vglInitExtended(0, 960, 544, 0x1800000, SCE_GXM_MULTISAMPLE_NONE);
 
+	// Initializing dear ImGui
 	ImGui::CreateContext();
 	SceKernelThreadInfo info;
 	info.size = sizeof(SceKernelThreadInfo);
 	int res = 0;
 	ImGui_ImplVitaGL_Init();
 	ImGui::GetIO().Fonts->AddFontFromFileTTF("app0:/Roboto.ttf", 16.0f);
+	set_gui_theme();
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 2));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 	ImGui::GetIO().MouseDrawCursor = false;
@@ -578,7 +657,7 @@ int main(int argc, char *argv[]) {
 					vglSwapBuffers(GL_TRUE);
 				}
 				// Workaround to prevent message dialog "burn in" on background
-				for (int i = 0; i < 10; i++) {
+				for (int i = 0; i < 15; i++) {
 					glClear(GL_COLOR_BUFFER_BIT);
 					vglSwapBuffers(GL_FALSE);
 				}
@@ -918,7 +997,7 @@ int main(int argc, char *argv[]) {
 					  1,   1
 				};
 				// Workaround to prevent message dialog "burn in" on background
-				for (int i = 0; i < 10; i++) {
+				for (int i = 0; i < 15; i++) {
 					glEnableClientState(GL_VERTEX_ARRAY);
 					glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 					glVertexPointer(2, GL_FLOAT, 0, vtx);
@@ -959,7 +1038,7 @@ int main(int argc, char *argv[]) {
 					  1,   1
 				};
 				// Workaround to prevent message dialog "burn in" on background
-				for (int i = 0; i < 10; i++) {
+				for (int i = 0; i < 15; i++) {
 					glEnableClientState(GL_VERTEX_ARRAY);
 					glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 					glVertexPointer(2, GL_FLOAT, 0, vtx);
