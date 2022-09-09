@@ -1064,23 +1064,23 @@ int main(int argc, char *argv[]) {
 		// Extra controls handling
 		SceCtrlData pad;
 		sceCtrlPeekBufferPositive(0, &pad, 1);
-		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !show_screenshots) {
+		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !show_screenshots && !show_changelog) {
 			sort_idx -= 1;
 			if (sort_idx < 0)
 				sort_idx = (sizeof(sort_modes_str) / sizeof(sort_modes_str[0])) - 1;
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_screenshots) {
+		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_screenshots && !show_changelog) {
 			sort_idx = (sort_idx + 1) % (sizeof(sort_modes_str) / sizeof(sort_modes_str[0]));
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && strlen(hovered->screenshots) > 5) {
+		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && strlen(hovered->screenshots) > 5 && !show_changelog) {
 			show_screenshots = show_screenshots ? 0 : 1;
-		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && hovered) {
+		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && hovered && !show_screenshots) {
 			show_changelog = !show_changelog;
 			if (show_changelog)
 				changelog = GetChangelog("ux0:data/VitaDB/apps.json", hovered->id);
 			else
 				free(changelog);
-		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT)) {
+		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && !show_changelog) {
 			if (show_screenshots)
 				cur_ss_idx--;
 			else {
@@ -1088,17 +1088,17 @@ int main(int argc, char *argv[]) {
 				decrement_stack_idx = 0;
 				decremented_app = nullptr;
 			}
-		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT)) {
+		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT) && !show_changelog) {
 			if (show_screenshots)
 				cur_ss_idx++;
 			else
 				fast_increment = true;
-		} else if (pad.buttons & SCE_CTRL_CIRCLE && !show_screenshots) {
+		} else if (pad.buttons & SCE_CTRL_CIRCLE && !show_screenshots && !show_changelog) {
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !show_screenshots) {
+		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !show_screenshots && !show_changelog) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !show_screenshots) {
+		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !show_screenshots && !show_changelog) {
 			filter_idx = (filter_idx + 1) % (sizeof(filter_modes) / sizeof(*filter_modes));
 			go_to_top = true;
 		}
