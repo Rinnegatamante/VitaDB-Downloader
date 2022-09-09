@@ -58,8 +58,7 @@ char app_name_filter[128] = {0};
 enum {
 	APP_UNTRACKED,
 	APP_OUTDATED,
-	APP_UPDATED,
-	APP_UNKNOWN
+	APP_UPDATED
 };
 
 struct AppSelection {
@@ -107,6 +106,33 @@ char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 	memcpy(dst, ptr, end2 - ptr);
 	dst[end2 - ptr] = 0;
 	return end2 + 1;
+}
+
+char *GetChangelog(const char *file, char *id) {
+	char *res = nullptr;
+	FILE *f = fopen(file, "rb");
+	if (f) {
+		fseek(f, 0, SEEK_END);
+		uint64_t len = ftell(f);
+		fseek(f, 0, SEEK_SET);
+		char *buffer = (char*)malloc(len + 1);
+		fread(buffer, 1, len, f);
+		buffer[len] = 0;
+		char *ptr = buffer;
+		char *end, *end2;
+		char cur_id[8];
+		do {
+			ptr = extractValue(cur_id, ptr, "id", nullptr);
+			if (!strncmp(cur_id, id, 3)) {
+				ptr = extractValue(res, ptr, "changelog", &res);
+				res = unescape(res);
+				break;
+			}
+		} while (ptr);
+		fclose(f);
+		free(buffer);
+	}
+	return res;
 }
 
 bool update_detected = false;
@@ -753,7 +779,9 @@ int main(int argc, char *argv[]) {
 	}
 	
 	//printf("start\n");
+	char *changelog = nullptr;
 	char ver_str[64];
+	bool show_changelog = false;
 	bool calculate_ver_len = true;
 	bool go_to_top = false;
 	bool fast_increment = false;
@@ -996,10 +1024,12 @@ int main(int argc, char *argv[]) {
 				sprintf(size_str, "VPK: %.2f %s", format_size(sz), format_size_str(sz));
 			}
 			ImGui::Text(size_str);
-			ImGui::SetCursorPosY(470);
+			ImGui::SetCursorPosY(454);
 			if (strlen(hovered->screenshots) > 5) {
 				ImGui::TextColored(TextLabel, "Press Start to view screenshots");
 			}
+			ImGui::SetCursorPosY(470);
+			ImGui::TextColored(TextLabel, "Press Select to view changelog");
 		}
 		ImGui::SetCursorPosY(486);
 		ImGui::Text("Current sorting mode: %s", sort_modes_str[sort_idx]);
@@ -1015,6 +1045,14 @@ int main(int argc, char *argv[]) {
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
 			ImGui::Begin("Screenshots Viewer (Left/Right to change current screenshot)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 			ImGui::Image((void*)preview_shot, ImVec2(800 - 19, 453 - 19));
+			ImGui::End();
+		}
+		
+		if (show_changelog) {
+			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
+			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
+			ImGui::Begin("Changelog Lister (Select to close)", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+			ImGui::TextWrapped(changelog ? changelog : "- First Release.");
 			ImGui::End();
 		}
 		
@@ -1036,6 +1074,12 @@ int main(int argc, char *argv[]) {
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && strlen(hovered->screenshots) > 5) {
 			show_screenshots = show_screenshots ? 0 : 1;
+		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && hovered) {
+			show_changelog = !show_changelog;
+			if (show_changelog)
+				changelog = GetChangelog("ux0:data/VitaDB/apps.json", hovered->id);
+			else
+				free(changelog);
 		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT)) {
 			if (show_screenshots)
 				cur_ss_idx--;
