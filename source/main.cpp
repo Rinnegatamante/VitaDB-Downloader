@@ -848,13 +848,16 @@ int main(int argc, char *argv[]) {
 		if (ImGui::Button(app_name_filter, ImVec2(-1.0f, 0.0f))) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 		}
-		if (ImGui::IsItemHovered())
+		if (ImGui::IsItemHovered()) {
 			hovered = nullptr;
+			old_hovered = nullptr;
+		}
 		if (go_to_top) {
 			ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
 			ImGui::SetScrollHere();
 			go_to_top = false;
 			hovered = nullptr;
+			old_hovered = nullptr;
 		}
 		ImGui::PopStyleVar();
 		ImGui::AlignTextToFramePadding();
