@@ -153,7 +153,6 @@ void AppendAppDatabase(const char *file) {
 		char *end, *end2;
 		do {
 			char name[128], version[64], fname[64], cur_hash[40];
-			//printf("extract\n");
 			ptr = extractValue(name, ptr, "name", nullptr);
 			//printf("parsing %s\n", name);
 			if (!ptr)
@@ -202,16 +201,19 @@ void AppendAppDatabase(const char *file) {
 					fseek(f, 0, SEEK_END);
 					int file_size = ftell(f);
 					fseek(f, 0, SEEK_SET);
-					unsigned char *file_buf = (unsigned char *)malloc(file_size);
-					fread(file_buf, 1, file_size, f);
+					int read_size = 0;
+					while (read_size < file_size) {
+						int read_buf_size = (file_size - read_size) > MEM_BUFFER_SIZE ? MEM_BUFFER_SIZE : (file_size - read_size);
+						fread(generic_mem_buffer, 1, read_buf_size, f);
+						read_size += read_buf_size;
+						MD5Update(&ctx, generic_mem_buffer, read_buf_size);
+					}
 					fclose(f);
-					MD5Update(&ctx, file_buf, file_size);
 					unsigned char md5_buf[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 					MD5Final(md5_buf, &ctx);
 					sprintf(cur_hash, "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
 						md5_buf[0], md5_buf[1], md5_buf[2], md5_buf[3], md5_buf[4], md5_buf[5], md5_buf[6], md5_buf[7], md5_buf[8],
 						md5_buf[9], md5_buf[10], md5_buf[11], md5_buf[12], md5_buf[13], md5_buf[14], md5_buf[15]);
-					free(file_buf);
 					//printf("local hash %s\n", cur_hash);
 					if (strncmp(cur_hash, node->hash, 32))
 						node->state = APP_OUTDATED;
