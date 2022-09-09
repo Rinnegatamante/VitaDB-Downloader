@@ -355,7 +355,6 @@ void LoadBackground() {
 	if (f) {
 		fclose(f);
 		video_open("ux0:data/VitaDB/bg.mp4");
-		sceKernelDelayThread(1000 * 1000);
 		has_animated_bg = true;
 	} else {
 		uint8_t *bg_data = stbi_load("ux0:data/VitaDB/bg.png", &w, &h, NULL, 4);
@@ -718,6 +717,7 @@ int main(int argc, char *argv[]) {
 	AppSelection *hovered = nullptr;
 	AppSelection *to_download = nullptr;
 	vglInitExtended(0, 960, 544, 0x1800000, SCE_GXM_MULTISAMPLE_NONE);
+	LoadBackground();
 
 	// Initializing dear ImGui
 	ImGui::CreateContext();
@@ -807,7 +807,6 @@ int main(int argc, char *argv[]) {
 	AppSelection *decrement_stack[4096];
 	AppSelection *decremented_app = nullptr;
 	int decrement_stack_idx = 0;
-	LoadBackground();
 	while (!update_detected) {
 		if (old_sort_idx != sort_idx) {
 			old_sort_idx = sort_idx;
