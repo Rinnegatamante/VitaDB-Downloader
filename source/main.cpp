@@ -922,11 +922,10 @@ int main(int argc, char *argv[]) {
 					}
 				} else if (increment_idx) {
 					increment_idx++;
-					if (increment_idx == 21 || g->next == nullptr) {
-						ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
-						ImGui::SetScrollHere();
+					ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
+					ImGui::SetScrollHere();
+					if (increment_idx == 21 || g->next == nullptr)
 						increment_idx = 0;
-					}
 				} else if (fast_decrement) {
 					if (!decremented_app)
 						decrement_stack[decrement_stack_idx++] = g;
