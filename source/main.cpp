@@ -388,11 +388,14 @@ const char *sort_modes_str[] = {
 	"Largest"
 };
 const char *filter_modes[] = {
-	"All Categories",
+	"All Apps",
 	"Original Games",
 	"Game Ports",
 	"Utilities",
 	"Emulators",
+	"Not Installed Apps",
+	"Outdated Apps",
+	"Installed Apps",
 };
 int sort_idx = 0;
 int old_sort_idx = -1;
@@ -482,8 +485,19 @@ void sort_applist(AppSelection *start) {
 bool filterApps(AppSelection *p) {
 	if (filter_idx) {
 		int filter_cat = filter_idx > 2 ? (filter_idx + 1) : filter_idx;
-		if (p->type[0] - '0' != filter_cat)
-			return true;
+		if (filter_cat <= 5) {
+			if (p->type[0] - '0' != filter_cat)
+				return true;
+		} else {
+			filter_cat -= 6;
+			if (filter_cat < 2) {
+				if (p->state != filter_cat)
+					return true;
+			} else {
+				if (p->state == APP_UNTRACKED)
+					return true;
+			}
+		}
 	}
 	return false;
 }
@@ -843,7 +857,7 @@ int main(int argc, char *argv[]) {
 		}
 		ImGui::PopStyleVar();
 		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Category: ");
+		ImGui::Text("Filter: ");
 		ImGui::SameLine();
 		ImGui::PushItemWidth(190.0f);
 		if (ImGui::BeginCombo("##combo", filter_modes[filter_idx])) {
