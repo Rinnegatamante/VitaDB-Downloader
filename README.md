@@ -14,9 +14,29 @@ In order to run VitaDB Downloader, you need <b>libshacccg.suprx</b>. If you don'
 - Minimalistic GUI based on dear ImGui with focus on robustness over fancyness.
 - Fast boot time (Only the very first boot will take a bit more due to app icons download. Successive boots will be basically instant)
 - Low storage usage (Screenshots are served on demand, the only data that are kept on storage are app icons with a complessive storage usage lower than 10 MBs).
+- Tracking of installed apps, even when not installed through VitaDB Downloader, and of their state (outdated/updated).
 - Background music (You can customize it by changing ux0:data/VitaDB/bg.ogg with your own preferred track).
+- Background image/video (You can customize it by changing ux0:data/VitaDB/bg.mp4 or ux0:data/VitaDB/bg.png).
+- Support for themes (Customization of GUI elements via ux0:data/VitaDB/themes.ini).
+
+## Themes
+You can find some themes usable with this application on [this repository](https://github.com/CatoTheYounger97/vitaDB_themes).
 
 ## Changelog
+
+### v.1.4
+- Added a check after installing an app wether the installation succeded or failed.
+- Added proper cleanup of leftover files when an installation is abruptly aborted or fails.
+- Fixed a bug causing wrong icon to be shown when performing a search and moving to the first app of the list.
+- Fixed a bug causing app info to be shown also when cursor is not on an app.
+- Added requirements popup when attempting to install an app having extra requirements for a proper setup (Eg. Plugin requirements or full data files from original game).
+- Added possibility to customize color scheme for all GUI elements (ux0:data/VitaDB/themes.ini).
+- Added proper tracking of applications state (Not Installed, Outdated, Updated).
+- Speeded up boot time. Now VitaDB Downloader will launch approximately one second faster.
+- Added possibility to check changelog for the selected app by pressing Select button.
+- Renamed "Category: " option to "Filter: ".
+- Added possibility to filter applications by Not Installed/Installed/Outdated criterias.
+- Fixed a bug causing page down (Right arrow) to not properly reach end of the list when a filter or search was active in certain circumstances.
 
 ### v.1.3
 - Made so that fast paging down with right arrow will go as down as the very last entry.
