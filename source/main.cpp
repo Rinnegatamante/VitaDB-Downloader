@@ -1132,6 +1132,7 @@ int main(int argc, char *argv[]) {
 				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 					vglSwapBuffers(GL_TRUE);
 				}
+				sceMsgDialogTerm();
 				glMatrixMode(GL_PROJECTION);
 				glLoadIdentity();
 				glOrthof(0, 960, 544, 0, 0, 1);
@@ -1214,6 +1215,7 @@ int main(int argc, char *argv[]) {
 							vglSwapBuffers(GL_TRUE);
 						}
 						to_download = nullptr;
+						sceMsgDialogTerm();
 						continue;
 					}
 					download_file(to_download->data_link, "Downloading data files");
@@ -1229,6 +1231,7 @@ int main(int argc, char *argv[]) {
 				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 					vglSwapBuffers(GL_TRUE);
 				}
+				sceMsgDialogTerm();
 				to_download = nullptr;
 				continue;
 			}
@@ -1262,6 +1265,7 @@ int main(int argc, char *argv[]) {
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 						vglSwapBuffers(GL_TRUE);
 					}
+					sceMsgDialogTerm();
 					recursive_rmdir("ux0:/data/VitaDB/vpk");
 				} else
 					to_download->state = APP_UPDATED;
