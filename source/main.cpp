@@ -1067,9 +1067,11 @@ int main(int argc, char *argv[]) {
 		}
 		
 		if (show_changelog) {
+			char titlebar[256];
+			sprintf(titlebar, "%s Changelog (Select to close)", hovered->name);
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
-			ImGui::Begin("Changelog Lister (Select to close)", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 			ImGui::TextWrapped(changelog ? changelog : "- First Release.");
 			ImGui::End();
 		}
