@@ -186,6 +186,7 @@ void AppendAppDatabase(const char *file) {
 				fread(cur_hash, 1, 32, f);
 				cur_hash[32] = 0;
 				fclose(f);
+				//printf("local hash %s\n", cur_hash);
 				if (strncmp(cur_hash, node->hash, 32))
 					node->state = APP_OUTDATED;
 				else
@@ -1248,10 +1249,10 @@ int main(int argc, char *argv[]) {
 				sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
 				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/");
 				sceIoRemove(TEMP_DOWNLOAD_NAME);
-				makeHeadBin("ux0:data/VitaDB/vpk");
-				FILE *f = fopen("ux0:data/VitaDB/hash.vdb", "w");
+				FILE *f = fopen("ux0:data/VitaDB/vpk/hash.vdb", "w");
 				fwrite(to_download->hash, 1, 32, f);
 				fclose(f);
+				makeHeadBin("ux0:data/VitaDB/vpk");
 				scePromoterUtilInit();
 				scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
 				int state = 0;
