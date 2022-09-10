@@ -29,14 +29,14 @@ jobs:
           export PATH=$VITASDK/bin:$PATH
           echo $PATH
           git clone https://github.com/Rinnegatamante/vitaGL.git
-          make -C vitaGL NO_DEBUG=1 PHYCONT_ON_DEMAND=1 SHARED_RENDERTARGETS=1 -j$(nproc) clean
-          make -C vitaGL NO_DEBUG=1 PHYCONT_ON_DEMAND=1 SHARED_RENDERTARGETS=1 -j$(nproc) install
+          make -C vitaGL NO_DEBUG=1 PHYCONT_ON_DEMAND=1 -j$(nproc) clean
+          make -C vitaGL NO_DEBUG=1 PHYCONT_ON_DEMAND=1 -j$(nproc) install
 
       - name: Build project
         run: |
           cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
           cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
-          zip ${{github.workspace}}/build/data.zip -r data
+          zip ${{github.workspace}}/build/VitaDB.zip -r data/VitaDB
 
       - uses: svenstaro/upload-release-action@v2
         with:
@@ -48,7 +48,7 @@ jobs:
       - uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ${{github.workspace}}/build/data.zip
+          file: ${{github.workspace}}/build/VitaDB.zip
           overwrite: true
           tag: Nightly
 
