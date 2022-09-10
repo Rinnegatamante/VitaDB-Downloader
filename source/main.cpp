@@ -686,7 +686,7 @@ int main(int argc, char *argv[]) {
 	sceIoMkdir("ux0:data/VitaDB", 0777);
 	
 	// Removing any failed app installation leftover
-	if (sceIoGetstat("ux0:/data/VitaDB/vpk/eboot.bin", &st1) >= 0) {
+	if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0) {
 		recursive_rmdir("ux0:/data/VitaDB/vpk");
 	}
 	
@@ -1264,7 +1264,7 @@ int main(int argc, char *argv[]) {
 					vglSwapBuffers(GL_TRUE);
 				} while (state);
 				scePromoterUtilTerm();
-				if (sceIoGetstat("ux0:/data/VitaDB/vpk/eboot.bin", &st1) >= 0) {
+				if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0) {
 					init_msg_dialog("The installation process failed.");
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 						vglSwapBuffers(GL_TRUE);
