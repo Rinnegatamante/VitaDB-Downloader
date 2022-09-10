@@ -92,7 +92,7 @@ char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 	//printf("ptr is: %X\n", ptr);
 	if (ptr == strlen(label))
 		return nullptr;
-	char *end2 = strstr(ptr, val[0] == 'l' ? "\"," : "\"");
+	char *end2 = strstr(ptr, (val[0] == 'l' || val[0] == 'c') ? "\"," : "\"");
 	if (dst == nullptr) {
 		if (end2 - ptr > 0) {
 			dst = malloc(end2 - ptr + 1);
