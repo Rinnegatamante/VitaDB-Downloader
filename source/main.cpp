@@ -876,8 +876,10 @@ int main(int argc, char *argv[]) {
 			}
 			ImGui::EndCombo();
 		}
-		if (ImGui::IsItemHovered())
+		if (ImGui::IsItemHovered()) {
 			hovered = nullptr;
+			old_hovered = nullptr;
+		}
 		ImGui::PopItemWidth();
 		ImGui::AlignTextToFramePadding();
 		ImGui::SameLine();
@@ -897,8 +899,10 @@ int main(int argc, char *argv[]) {
 			}
 			ImGui::EndCombo();
 		}
-		if (ImGui::IsItemHovered())
+		if (ImGui::IsItemHovered()) {
 			hovered = nullptr;
+			old_hovered = nullptr;
+		}
 		ImGui::PopItemWidth();
 		ImGui::Separator();
 		
