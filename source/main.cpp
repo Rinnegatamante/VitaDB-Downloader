@@ -883,6 +883,7 @@ int main(int argc, char *argv[]) {
 		ImGui::SameLine();
 		ImGui::Spacing();
 		ImGui::SameLine();
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 6.0f);
 		ImGui::Text("Sort Mode: ");
 		ImGui::SameLine();
 		ImGui::PushItemWidth(-1.0f);
