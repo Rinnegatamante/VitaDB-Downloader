@@ -862,6 +862,7 @@ int main(int argc, char *argv[]) {
 		}
 		ImGui::PopStyleVar();
 		ImGui::AlignTextToFramePadding();
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 11.0f);
 		ImGui::Text("Filter: ");
 		ImGui::SameLine();
 		ImGui::PushItemWidth(190.0f);
