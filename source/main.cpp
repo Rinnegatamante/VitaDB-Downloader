@@ -728,7 +728,10 @@ int main(int argc, char *argv[]) {
 	info.size = sizeof(SceKernelThreadInfo);
 	int res = 0;
 	ImGui_ImplVitaGL_Init();
-	ImGui::GetIO().Fonts->AddFontFromFileTTF("app0:/Roboto.ttf", 16.0f);
+	if (sceIoGetstat("ux0:/data/VitaDB/font.ttf", &st1) >= 0)
+		ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/data/VitaDB/font.ttf", 16.0f);
+	else
+		ImGui::GetIO().Fonts->AddFontFromFileTTF("app0:/Roboto.ttf", 16.0f);
 	set_gui_theme();
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 2));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -805,6 +808,7 @@ int main(int argc, char *argv[]) {
 	bool fast_decrement = false;
 	bool is_app_hovered;
 	float ver_len = 0.0f;
+	float text_diff_len = 0.0f;
 	uint32_t oldpad;
 	int filtered_entries;
 	AppSelection *decrement_stack[4096];
@@ -862,7 +866,9 @@ int main(int argc, char *argv[]) {
 		}
 		ImGui::PopStyleVar();
 		ImGui::AlignTextToFramePadding();
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 11.0f);
+		if (text_diff_len == 0.0f)
+			text_diff_len = ImGui::CalcTextSize("Search: ").x - ImGui::CalcTextSize("Filter: ").x;
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + text_diff_len);
 		ImGui::Text("Filter: ");
 		ImGui::SameLine();
 		ImGui::PushItemWidth(190.0f);
