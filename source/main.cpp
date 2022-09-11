@@ -588,6 +588,7 @@ void DrawBackground() {
 ImVec4 TextLabel = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
 ImVec4 TextOutdated = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
 ImVec4 TextUpdated = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+ImVec4 TextNotInstalled = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 
 #define READ_FIRST_VAL(x) if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
 #define READ_NEXT_VAL(x) else if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
@@ -604,72 +605,43 @@ void set_gui_theme() {
 		float values[4];
 		char buffer[64];
 		while (EOF != fscanf(f, "%[^=]=%f,%f,%f,%f\n", buffer, &values[0], &values[1], &values[2], &values[3])) {
-			READ_FIRST_VAL(ChildWindowBg)
-			READ_NEXT_VAL(FrameBg)
+			READ_FIRST_VAL(FrameBg)
 			READ_NEXT_VAL(FrameBgHovered)
-			READ_NEXT_VAL(FrameBgActive)
-			READ_NEXT_VAL(TitleBg)
-			READ_NEXT_VAL(TitleBgCollapsed)
 			READ_NEXT_VAL(TitleBgActive)
 			READ_NEXT_VAL(MenuBarBg)
 			READ_NEXT_VAL(ScrollbarBg)
 			READ_NEXT_VAL(ScrollbarGrab)
-			READ_NEXT_VAL(ScrollbarGrabHovered)
-			READ_NEXT_VAL(ScrollbarGrabActive)
-			READ_NEXT_VAL(CheckMark)
-			READ_NEXT_VAL(SliderGrab)
-			READ_NEXT_VAL(SliderGrabActive)
 			READ_NEXT_VAL(Button)
 			READ_NEXT_VAL(ButtonHovered)
-			READ_NEXT_VAL(ButtonActive)
 			READ_NEXT_VAL(Header)
 			READ_NEXT_VAL(HeaderHovered)
-			READ_NEXT_VAL(HeaderActive)
-			READ_NEXT_VAL(ResizeGrip)
-			READ_NEXT_VAL(ResizeGripHovered)
-			READ_NEXT_VAL(ResizeGripActive)
-			READ_NEXT_VAL(PlotLinesHovered)
-			READ_NEXT_VAL(PlotHistogramHovered)
-			READ_NEXT_VAL(TextSelectedBg)
 			READ_NEXT_VAL(NavHighlight)
+			READ_NEXT_VAL(Text)
 			READ_EXTRA_VAL(TextLabel)
 			READ_EXTRA_VAL(TextOutdated)
 			READ_EXTRA_VAL(TextUpdated)
+			READ_EXTRA_VAL(TextNotInstalled)
 		}
 		fclose(f);
 	} else { // Save default theme
 		f = fopen("ux0:data/VitaDB/theme.ini", "w");
-		WRITE_VAL(ChildWindowBg)
 		WRITE_VAL(FrameBg)
 		WRITE_VAL(FrameBgHovered)
-		WRITE_VAL(FrameBgActive)
-		WRITE_VAL(TitleBg)
-		WRITE_VAL(TitleBgCollapsed)
 		WRITE_VAL(TitleBgActive)
 		WRITE_VAL(MenuBarBg)
 		WRITE_VAL(ScrollbarBg)
 		WRITE_VAL(ScrollbarGrab)
-		WRITE_VAL(ScrollbarGrabHovered)
-		WRITE_VAL(ScrollbarGrabActive)
-		WRITE_VAL(CheckMark)
-		WRITE_VAL(SliderGrab)
-		WRITE_VAL(SliderGrabActive)
 		WRITE_VAL(Button)
 		WRITE_VAL(ButtonHovered)
 		WRITE_VAL(ButtonActive)
 		WRITE_VAL(Header)
 		WRITE_VAL(HeaderHovered)
-		WRITE_VAL(HeaderActive)
-		WRITE_VAL(ResizeGrip)
-		WRITE_VAL(ResizeGripHovered)
-		WRITE_VAL(ResizeGripActive)
-		WRITE_VAL(PlotLinesHovered)
-		WRITE_VAL(PlotHistogramHovered)
-		WRITE_VAL(TextSelectedBg)
 		WRITE_VAL(NavHighlight)
+		WRITE_VAL(Text)
 		WRITE_EXTRA_VAL(TextLabel)
 		WRITE_EXTRA_VAL(TextOutdated)
 		WRITE_EXTRA_VAL(TextUpdated)
+		WRITE_EXTRA_VAL(TextNotInstalled)
 		fclose(f);
 	}
 }
@@ -958,7 +930,7 @@ int main(int argc, char *argv[]) {
 				case APP_UNTRACKED:
 					tag_len = ImGui::CalcTextSize("Not Installed");
 					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
-					ImGui::Text("Not Installed");
+					ImGui::TextColored(TextNotInstalled, "Not Installed");
 					break;
 				case APP_OUTDATED:
 					tag_len = ImGui::CalcTextSize("Outdated");
