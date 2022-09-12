@@ -137,11 +137,19 @@ char *GetChangelog(const char *file, char *id) {
 
 bool update_detected = false;
 void AppendAppDatabase(const char *file) {
+	// Read icons database
+	FILE *f = fopen("ux0:data/VitaDB/icons.db", "r");
+	size_t icons_db_size = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
+	fclose(f);
+	
+	uint32_t missing_icons_num = 0;
+	AppSelection *missing_icons[2048];
+
 	// Burning on screen the parsing text dialog
 	for (int i = 0; i < 3; i++) {
 		DrawTextDialog("Parsing apps list", true, true);
 	}
-	FILE *f = fopen(file, "rb");
+	f = fopen(file, "rb");
 	if (f) {
 		fseek(f, 0, SEEK_END);
 		uint64_t len = ftell(f);
@@ -152,7 +160,7 @@ void AppendAppDatabase(const char *file) {
 		char *ptr = buffer;
 		char *end, *end2;
 		do {
-			char name[128], version[64], fname[64], cur_hash[40];
+			char name[128], version[64], fname[128], cur_hash[40];
 			ptr = extractValue(name, ptr, "name", nullptr);
 			//printf("parsing %s\n", name);
 			if (!ptr)
@@ -161,6 +169,22 @@ void AppendAppDatabase(const char *file) {
 			node->desc = nullptr;
 			node->requirements = nullptr;
 			ptr = extractValue(node->icon, ptr, "icon", nullptr);
+			sprintf(fname, "ux0:data/VitaDB/icons/%s", node->icon);
+			char *icon_fname = (char*)generic_mem_buffer;
+			bool icon_found = false;
+			for (;;) {
+				if (!strncmp(icon_fname, fname, 90)) {
+					icon_found = true;
+					break;
+				}
+				icon_fname += 91;
+				if (icon_fname - (char*)generic_mem_buffer > icons_db_size)
+					break;
+			}
+			if (!icon_found) {
+				missing_icons[missing_icons_num++] = node;
+				printf("%s is missing [%s]\n", node->icon, name);
+			}
 			ptr = extractValue(version, ptr, "version", nullptr);
 			ptr = extractValue(node->author, ptr, "author", nullptr);
 			ptr = extractValue(node->type, ptr, "type", nullptr);
@@ -238,13 +262,24 @@ void AppendAppDatabase(const char *file) {
 		} while (ptr);
 		fclose(f);
 		free(buffer);
+		
+		// Downloading missing icons
+		for (int i = 0; i < missing_icons_num; i++) {
+			sprintf(download_link, "https://rinnegatamante.it/vitadb/icons/%s", missing_icons[i]->icon);
+			download_file(download_link, "Downloading missing icons");
+			sprintf(download_link, "ux0:data/VitaDB/icons/%s", missing_icons[i]->icon);
+			sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
+			FILE *f = fopen("ux0:data/VitaDB/icons.db", "a");
+			fprintf(f, "%s\n", download_link);
+			fclose(f);
+		}
 	}
 	//printf("finished parsing\n");
 }
 
 static char fname[512], ext_fname[512], read_buffer[8192];
 
-void extract_file(char *file, char *dir) {
+void extract_file(char *file, char *dir, bool indexing) {
 	unz_global_info global_info;
 	unz_file_info file_info;
 	unzFile zipfile = unzOpen(file);
@@ -268,7 +303,10 @@ void extract_file(char *file, char *dir) {
 			curr_file_bytes = 0;
 			unzOpenCurrentFile(zipfile);
 			recursive_mkdir(ext_fname);
-			FILE *f = fopen(ext_fname, "wb");
+			FILE *f = fopen("ux0:data/VitaDB/icons.db", "a");
+			fprintf(f, "%s\n", ext_fname);
+			fclose(f);
+			f = fopen(ext_fname, "wb");
 			while (curr_file_bytes < file_info.uncompressed_size) {
 				int rbytes = unzReadCurrentFile(zipfile, read_buffer, 8192);
 				if (rbytes > 0) {
@@ -289,7 +327,6 @@ void extract_file(char *file, char *dir) {
 
 static int preview_width, preview_height, preview_x, preview_y;
 GLuint preview_icon = 0, preview_shot = 0, previous_frame = 0, bg_image = 0;
-bool need_icon = false;
 int show_screenshots = 0; // 0 = off, 1 = download, 2 = show
 void LoadPreview(AppSelection *game) {
 	if (old_hovered == game)
@@ -299,20 +336,16 @@ void LoadPreview(AppSelection *game) {
 	char banner_path[256];
 	sprintf(banner_path, "ux0:data/VitaDB/icons/%s", game->icon);
 	uint8_t *icon_data = stbi_load(banner_path, &preview_width, &preview_height, NULL, 4);
-	if (icon_data) {
-		if (!preview_icon)
-			glGenTextures(1, &preview_icon);
-		glBindTexture(GL_TEXTURE_2D, preview_icon);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, preview_width, preview_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
-		float scale = MIN(PREVIEW_WIDTH / (float)preview_width, PREVIEW_HEIGHT / (float)preview_height);
-		preview_width = scale * (float)preview_width;
-		preview_height = scale * (float)preview_height;
-		preview_x = (PREVIEW_WIDTH - preview_width) / 2;
-		preview_y = (PREVIEW_HEIGHT - preview_height) / 2;
-		free(icon_data);
-	} else {
-		need_icon = true;
-	}
+	if (!preview_icon)
+		glGenTextures(1, &preview_icon);
+	glBindTexture(GL_TEXTURE_2D, preview_icon);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, preview_width, preview_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+	float scale = MIN(PREVIEW_WIDTH / (float)preview_width, PREVIEW_HEIGHT / (float)preview_height);
+	preview_width = scale * (float)preview_width;
+	preview_height = scale * (float)preview_height;
+	preview_x = (PREVIEW_WIDTH - preview_width) / 2;
+	preview_y = (PREVIEW_HEIGHT - preview_height) / 2;
+	free(icon_data);
 }
 
 void LoadScreenshot() {
@@ -724,6 +757,14 @@ int main(int argc, char *argv[]) {
 	SceUID thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
 	sceKernelStartThread(thd, 0, NULL);
 	
+	// Downloading icons
+	if ((sceIoGetstat("ux0:/data/VitaDB/icons.db", &st1) < 0) || (sceIoGetstat("ux0:data/VitaDB/icons", &st2) < 0)) {
+		download_file("https://vitadb.rinnegatamante.it/icons_zip.php", "Downloading apps icons");
+		sceIoMkdir("ux0:data/VitaDB/icons", 0777);
+		extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/icons/", true);
+		sceIoRemove(TEMP_DOWNLOAD_NAME);
+	}
+	
 	// Downloading apps list
 	thd = sceKernelCreateThread("Apps List Downloader", &appListThread, 0x10000100, 0x100000, 0, 0, NULL);
 	sceKernelStartThread(thd, 0, NULL);
@@ -733,49 +774,6 @@ int main(int argc, char *argv[]) {
 	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 	sceAppMgrUmount("app0:");
 	AppendAppDatabase("ux0:data/VitaDB/apps.json");
-	
-	// Downloading icons
-	SceIoStat stat;
-	bool needs_icons_pack = false;
-	if (sceIoGetstat("ux0:data/VitaDB/icons", &stat) < 0) {
-		needs_icons_pack = true;
-	} else {
-		time_t cur_time, last_time;
-		cur_time = time(NULL);
-		FILE *f = fopen("ux0:data/VitaDB/last_boot.txt", "r");
-		if (f) {
-			fscanf(f, "%ld", &last_time);
-			fclose(f);
-			//sceClibPrintf("cur time is %ld and last time is %ld\n", cur_time, last_time);
-			if (cur_time - last_time > 2592000) {
-				init_interactive_msg_dialog("A long time passed since your last visit. Do you want to download all apps icons in one go?");
-				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-					vglSwapBuffers(GL_TRUE);
-				}
-				// Workaround to prevent message dialog "burn in" on background
-				for (int i = 0; i < 15; i++) {
-					glClear(GL_COLOR_BUFFER_BIT);
-					vglSwapBuffers(GL_FALSE);
-				}
-				SceMsgDialogResult msg_res;
-				memset(&msg_res, 0, sizeof(SceMsgDialogResult));
-				sceMsgDialogGetResult(&msg_res);
-				sceMsgDialogTerm();
-				if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
-					needs_icons_pack = true;
-				}
-			}
-		}
-		f = fopen("ux0:data/VitaDB/last_boot.txt", "w");
-		fprintf(f, "%ld", cur_time);
-		fclose(f);
-	}
-	if (needs_icons_pack) {
-		download_file("https://vitadb.rinnegatamante.it/icons_zip.php", "Downloading apps icons");
-		sceIoMkdir("ux0:data/VitaDB/icons", 0777);
-		extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/icons/");
-		sceIoRemove(TEMP_DOWNLOAD_NAME);
-	}
 	
 	//printf("start\n");
 	char *changelog = nullptr;
@@ -1216,7 +1214,7 @@ int main(int argc, char *argv[]) {
 						continue;
 					}
 					download_file(to_download->data_link, "Downloading data files");
-					extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/");
+					extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/", false);
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 				}
 			}
@@ -1235,12 +1233,12 @@ int main(int argc, char *argv[]) {
 			sprintf(download_link, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", to_download->id);
 			download_file(download_link, "Downloading vpk");
 			if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
-				extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/");
+				extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
 				sceIoRemove(TEMP_DOWNLOAD_NAME);
 				sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
 			} else {
 				sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
-				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/");
+				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false);
 				sceIoRemove(TEMP_DOWNLOAD_NAME);
 				FILE *f = fopen("ux0:data/VitaDB/vpk/hash.vdb", "w");
 				fwrite(to_download->hash, 1, 32, f);
@@ -1268,16 +1266,6 @@ int main(int argc, char *argv[]) {
 					to_download->state = APP_UPDATED;
 				to_download = nullptr;
 			}
-		}
-		
-		// Queued icon download
-		if (need_icon) {
-			sprintf(download_link, "https://rinnegatamante.it/vitadb/icons/%s", old_hovered->icon);				
-			download_file(download_link, "Downloading missing icon");
-			sprintf(download_link, "ux0:data/VitaDB/icons/%s", old_hovered->icon);
-			sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
-			old_hovered = nullptr;
-			need_icon = false;
 		}
 		
 		// Ime dialog active
@@ -1327,7 +1315,7 @@ int main(int argc, char *argv[]) {
 	
 	// Installing update
 	download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=877", "Downloading update");
-	extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/");
+	extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
 	sceIoRemove(TEMP_DOWNLOAD_NAME);
 	sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
 }
