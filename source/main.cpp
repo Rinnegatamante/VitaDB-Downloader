@@ -57,6 +57,7 @@ static char download_link[512];
 char app_name_filter[128] = {0};
 SceUID audio_thd = -1;
 void *audio_buffer = nullptr;
+bool shuffle_themes = false;
 
 enum {
 	APP_UNTRACKED,
@@ -93,6 +94,7 @@ struct ThemeSelection {
 	char has_music[2];
 	char has_font[2];
 	int state;
+	bool shuffle;
 	ThemeSelection *next;
 };
 
@@ -781,6 +783,8 @@ ImVec4 TextLabel = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
 ImVec4 TextOutdated = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
 ImVec4 TextUpdated = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
 ImVec4 TextNotInstalled = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+ImVec4 Shuffle = ImVec4(0.2f, 0.2f, 0.0f, 1.0f);
+ImVec4 ShuffleHovered = ImVec4(0.4f, 0.4f, 0.0f, 1.0f);
 
 #define READ_FIRST_VAL(x) if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
 #define READ_NEXT_VAL(x) else if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
@@ -817,6 +821,8 @@ void set_gui_theme() {
 			READ_EXTRA_VAL(TextOutdated)
 			READ_EXTRA_VAL(TextUpdated)
 			READ_EXTRA_VAL(TextNotInstalled)
+			READ_EXTRA_VAL(Shuffle)
+			READ_EXTRA_VAL(ShuffleHovered)
 		}
 		fclose(f);
 	} else { // Save default theme
@@ -841,6 +847,8 @@ void set_gui_theme() {
 		WRITE_EXTRA_VAL(TextOutdated)
 		WRITE_EXTRA_VAL(TextUpdated)
 		WRITE_EXTRA_VAL(TextNotInstalled)
+		WRITE_EXTRA_VAL(Shuffle)
+		WRITE_EXTRA_VAL(ShuffleHovered)
 		fclose(f);
 	}
 }
@@ -865,6 +873,7 @@ void install_theme(ThemeSelection *g) {
 	sceIoRemove("ux0:data/VitaDB/bg.png");
 	sceIoRemove("ux0:data/VitaDB/bg.mp4");
 	sceIoRemove("ux0:data/VitaDB/bg.ogg");
+	sceIoRemove("ux0:data/VitaDB/font.ttf");
 	
 	// Kill old audio playback
 	SceKernelThreadInfo info;
@@ -923,7 +932,93 @@ void install_theme(ThemeSelection *g) {
 		ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/app/VITADBDLD/Roboto.ttf", 16.0f);
 }
 
+void install_theme_from_shuffle(bool boot) {
+	SceIoStat st1;
+	int themes_num = 0;
+	
+	FILE *f = fopen("ux0:data/VitaDB/shuffle.cfg", "r");
+	while (EOF != fscanf(f, "%[^\n]\n", &generic_mem_buffer[20 * 1024 * 1024 + 256 * themes_num])) {
+		themes_num++;
+	}
+	fclose(f);
+	
+	int theme_id = rand() % themes_num;
+	char *name = (char *)&generic_mem_buffer[20 * 1024 * 1024 + 256 * theme_id];
+	printf("name is %s\n", name);
+	
+	if (!boot) {
+		for (int i = 0; i < 3; i++) {
+			DrawTextDialog("Installing random theme", true, false);
+		}
+	}
+	
+	// Deleting old theme files
+	sceIoRemove("ux0:data/VitaDB/bg.png");
+	sceIoRemove("ux0:data/VitaDB/bg.mp4");
+	sceIoRemove("ux0:data/VitaDB/bg.ogg");
+	sceIoRemove("ux0:data/VitaDB/font.ttf");
+
+	// Kill old audio playback
+	if (!boot) {
+		SceKernelThreadInfo info;
+		info.size = sizeof(SceKernelThreadInfo);
+		int res = sceKernelGetThreadInfo(audio_thd, &info);
+		if (res >= 0) {
+			kill_audio_thread = true;
+			while (sceKernelGetThreadInfo(audio_thd, &info) >= 0) {
+				sceKernelDelayThread(1000);
+			}
+		}
+	}
+
+	//Start new background audio playback
+	sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.ogg", name);
+	if (sceIoGetstat(fname, &st1) >= 0) {
+		copy_file(fname, "ux0:data/VitaDB/bg.ogg");
+		if (!boot) {
+			audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
+			sceKernelStartThread(audio_thd, 0, NULL);
+		}
+	}
+
+	// Kill old animated background
+	if (has_animated_bg && !boot)
+		video_close();
+
+	// Load new background image
+	sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.png", name);
+	if (sceIoGetstat(fname, &st1) >= 0)
+		copy_file(fname, "ux0:data/VitaDB/bg.png");
+	else {
+		sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.mp4", name);
+		if (sceIoGetstat(fname, &st1) >= 0)
+			copy_file(fname, "ux0:data/VitaDB/bg.mp4");
+	}
+	if (!boot)
+		LoadBackground();
+
+	// Set new color scheme
+	sprintf(fname, "ux0:data/VitaDB/themes/%s/theme.ini", name);
+	copy_file(fname, "ux0:data/VitaDB/theme.ini");
+	if (!boot)
+		set_gui_theme();
+
+	// Set new font
+	sprintf(fname, "ux0:data/VitaDB/themes/%s/font.ttf", name);
+	if (sceIoGetstat(fname, &st1) >= 0)
+		copy_file(fname, "ux0:data/VitaDB/font.ttf");
+	if (!boot) {
+		ImGui::GetIO().Fonts->Clear();
+		ImGui_ImplVitaGL_InvalidateDeviceObjects();
+		if (sceIoGetstat("ux0:/data/VitaDB/font.ttf", &st1) >= 0)
+			ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/data/VitaDB/font.ttf", 16.0f);
+		else
+			ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/app/VITADBDLD/Roboto.ttf", 16.0f);
+	}
+}
+
 int main(int argc, char *argv[]) {
+	srand(time(NULL));
 	SceIoStat st1, st2;
 	// Checking for libshacccg.suprx existence
 	if (!(sceIoGetstat("ur0:/data/libshacccg.suprx", &st1) >= 0 || sceIoGetstat("ur0:/data/external/libshacccg.suprx", &st2) >= 0))
@@ -940,9 +1035,8 @@ int main(int argc, char *argv[]) {
 	Mix_AllocateChannels(4);
 	
 	// Removing any failed app installation leftover
-	if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0) {
+	if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0)
 		recursive_rmdir("ux0:/data/VitaDB/vpk");
-	}
 	
 	// Initializing sceAppUtil
 	SceAppUtilInitParam appUtilParam;
@@ -974,6 +1068,10 @@ int main(int argc, char *argv[]) {
 	AppSelection *hovered = nullptr;
 	AppSelection *to_download = nullptr;
 	vglInitExtended(0, 960, 544, 0x1800000, SCE_GXM_MULTISAMPLE_NONE);
+
+	// Apply theme shuffling
+	if (sceIoGetstat("ux0:/data/VitaDB/shuffle.cfg", &st1) >= 0)
+		install_theme_from_shuffle(true);
 	LoadBackground();
 
 	// Initializing dear ImGui
@@ -1177,11 +1275,22 @@ int main(int argc, char *argv[]) {
 				}
 				if ((strlen(app_name_filter) == 0) || (strlen(app_name_filter) > 0 && (strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter)))) {
 					float y = ImGui::GetCursorPosY() + 2.0f;
+					bool is_shuffle = false;
+					if (g->shuffle) {
+						is_shuffle = true;
+						ImGui::PushStyleColor(ImGuiCol_Button, Shuffle);
+						ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ShuffleHovered);
+					}
 					if (ImGui::Button(g->name, ImVec2(-1.0f, 0.0f))) {
 						if (g->state == APP_UNTRACKED)
 							to_download = (AppSelection *)g;
+						else if (shuffle_themes)
+							g->shuffle = !g->shuffle;
 						else
 							to_install = g;
+					}
+					if (is_shuffle) {
+						ImGui::PopStyleColor(2);
 					}
 					if (ImGui::IsItemHovered()) {
 						is_app_hovered = true;
@@ -1325,7 +1434,8 @@ int main(int argc, char *argv[]) {
 				ImGui::TextColored(TextLabel, "Credits:");
 				ImGui::TextWrapped(node->credits);
 				ImGui::Separator();
-				ImGui::TextColored(TextLabel, "Background Type:");
+				ImGui::TextColored(TextLabel, "Background Type: ");
+				ImGui::SameLine();
 				switch (node->bg_type[0]) {
 				case '0':
 					ImGui::Text("Static Color");
@@ -1340,11 +1450,13 @@ int main(int argc, char *argv[]) {
 					ImGui::Text("Unknown");
 					break;
 				}
-				ImGui::TextColored(TextLabel, "Background Music:");
+				ImGui::TextColored(TextLabel, "Background Music: ");
+				ImGui::SameLine();
 				ImGui::Text(node->has_music[0] == '1' ? "Yes" : "No");
-				ImGui::TextColored(TextLabel, "Custom Font:");
+				ImGui::TextColored(TextLabel, "Custom Font: ");
+				ImGui::SameLine();
 				ImGui::Text(node->has_font[0] == '1' ? "Yes" : "No");
-				ImGui::SetCursorPosY(470);
+				ImGui::SetCursorPosY(438);
 				ImGui::TextColored(TextLabel, "Press Start to view screenshots");
 			} else {
 				LoadPreview(hovered);
@@ -1417,6 +1529,12 @@ int main(int argc, char *argv[]) {
 				ImGui::TextColored(TextLabel, "Press Select to view changelog");
 			}
 		}
+		if (themes_manager) {
+			ImGui::SetCursorPosY(454);
+			ImGui::TextColored(TextLabel, "Press Select to change themes mode");
+			ImGui::SetCursorPosY(470);
+			ImGui::Text("Current theme mode: %s", shuffle_themes ? "Shuffle" : "Single");
+		}
 		ImGui::SetCursorPosY(486);
 		ImGui::Text("Current sorting mode: %s", sort_modes_str[sort_idx]);
 		ImGui::SetCursorPosY(502);
@@ -1463,8 +1581,25 @@ int main(int argc, char *argv[]) {
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || themes_manager) && !show_changelog) {
 			show_screenshots = show_screenshots ? 0 : 1;
-		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && hovered && !show_screenshots) {
+		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && (hovered || themes_manager) && !show_screenshots) {
 			if (themes_manager) {
+				shuffle_themes = !shuffle_themes;
+				ThemeSelection *g = themes;
+				FILE *f = fopen("ux0:data/VitaDB/shuffle.cfg", "w");
+				bool has_shuffle = false;
+				while (g) {
+					if (g->shuffle) {
+						has_shuffle = true;
+						fprintf(f, "%s\n", g->name);
+						g->shuffle = false;
+					}
+					g = g->next;
+				}
+				fclose(f);
+				if (has_shuffle) {
+					install_theme_from_shuffle(false);
+				} else
+					sceIoRemove("ux0:data/VitaDB/shuffle.cfg");
 			} else {
 				show_changelog = !show_changelog;
 				if (show_changelog)
@@ -1716,6 +1851,7 @@ int main(int argc, char *argv[]) {
 		
 		// Queued theme to install
 		if (to_install) {
+			sceIoRemove("ux0:data/VitaDB/shuffle.cfg");
 			install_theme(to_install);
 			to_install = nullptr;
 		}
