@@ -143,7 +143,8 @@ char *GetChangelog(const char *file, char *id) {
 			ptr = extractValue(cur_id, ptr, "id", nullptr);
 			if (!strncmp(cur_id, id, 3)) {
 				ptr = extractValue(res, ptr, "changelog", &res);
-				res = unescape(res);
+				if (res)
+					res = unescape(res);
 				break;
 			}
 		} while (ptr);
