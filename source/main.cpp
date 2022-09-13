@@ -161,7 +161,9 @@ void AppendAppDatabase(const char *file) {
 	//printf("f is %x\n", f);
 	size_t icons_db_size = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
 	//printf("icons_db_size is %x\n", icons_db_size);
-	generic_mem_buffer[icons_db_size] = 0;
+	char *icons_db = (char *)vglMalloc(icons_db_size + 1);
+	sceClibMemcpy(icons_db, generic_mem_buffer, icons_db_size);
+	icons_db[icons_db_size] = 0;
 	fclose(f);
 	
 	uint32_t missing_icons_num = 0;
@@ -178,6 +180,7 @@ void AppendAppDatabase(const char *file) {
 		fseek(f, 0, SEEK_SET);
 		char *buffer = (char*)malloc(len + 1);
 		fread(buffer, 1, len, f);
+		fclose(f);
 		buffer[len] = 0;
 		char *ptr = buffer;
 		char *end, *end2;
@@ -191,20 +194,7 @@ void AppendAppDatabase(const char *file) {
 			node->desc = nullptr;
 			node->requirements = nullptr;
 			ptr = extractValue(node->icon, ptr, "icon", nullptr);
-			sprintf(fname, "ux0:data/VitaDB/icons/%s", node->icon);
-			char *icon_fname = (char*)&generic_mem_buffer[22];
-			bool icon_found = false;
-			for (;;) {
-				icon_fname[68] = 0;
-				if (!strcmp(icon_fname, node->icon)) {
-					icon_found = true;
-					break;
-				}
-				icon_fname += 91;
-				if (icon_fname - (char*)generic_mem_buffer > icons_db_size)
-					break;
-			}
-			if (!icon_found) {
+			if (!strstr(icons_db, node->icon)) {
 				missing_icons[missing_icons_num++] = node;
 				//printf("%s is missing [%s]\n", node->icon, name);
 			}
@@ -227,12 +217,12 @@ void AppendAppDatabase(const char *file) {
 			ptr = extractValue(node->hash, ptr, "hash", nullptr);
 			//printf("db hash %s\n", node->hash);
 			sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
-			FILE *f  = fopen(fname, "r");
-			if (f) {
+			FILE *f2  = fopen(fname, "r");
+			if (f2) {
 				//printf("found hash file\n");
-				fread(cur_hash, 1, 32, f);
+				fread(cur_hash, 1, 32, f2);
 				cur_hash[32] = 0;
-				fclose(f);
+				fclose(f2);
 				//printf("local hash %s\n", cur_hash);
 				if (strncmp(cur_hash, node->hash, 32))
 					node->state = APP_OUTDATED;
@@ -241,22 +231,22 @@ void AppendAppDatabase(const char *file) {
 			} else {
 				//printf("hash file not found, calculating md5\n");
 				sprintf(fname, "ux0:app/%s/eboot.bin", node->titleid);
-				f = fopen(fname, "r");
-				if (f) {
+				f2 = fopen(fname, "r");
+				if (f2) {
 					//printf("eboot.bin found, starting md5sum\n");
 					MD5Context ctx;
 					MD5Init(&ctx);
-					fseek(f, 0, SEEK_END);
-					int file_size = ftell(f);
-					fseek(f, 0, SEEK_SET);
+					fseek(f2, 0, SEEK_END);
+					int file_size = ftell(f2);
+					fseek(f2, 0, SEEK_SET);
 					int read_size = 0;
 					while (read_size < file_size) {
 						int read_buf_size = (file_size - read_size) > MEM_BUFFER_SIZE ? MEM_BUFFER_SIZE : (file_size - read_size);
-						fread(generic_mem_buffer, 1, read_buf_size, f);
+						fread(generic_mem_buffer, 1, read_buf_size, f2);
 						read_size += read_buf_size;
 						MD5Update(&ctx, generic_mem_buffer, read_buf_size);
 					}
-					fclose(f);
+					fclose(f2);
 					unsigned char md5_buf[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 					MD5Final(md5_buf, &ctx);
 					sprintf(cur_hash, "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
@@ -268,9 +258,9 @@ void AppendAppDatabase(const char *file) {
 					else
 						node->state = APP_UPDATED;
 					sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
-					f = fopen(fname, "w");
-					fwrite(cur_hash, 1, 32, f);
-					fclose(f);
+					f2 = fopen(fname, "w");
+					fwrite(cur_hash, 1, 32, f2);
+					fclose(f2);
 				} else
 					node->state = APP_UNTRACKED;
 			}
@@ -283,7 +273,6 @@ void AppendAppDatabase(const char *file) {
 			node->next = apps;
 			apps = node;
 		} while (ptr);
-		fclose(f);
 		free(buffer);
 		
 		// Downloading missing icons
@@ -292,11 +281,12 @@ void AppendAppDatabase(const char *file) {
 			download_file(download_link, "Downloading missing icons");
 			sprintf(download_link, "ux0:data/VitaDB/icons/%s", missing_icons[i]->icon);
 			sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
-			FILE *f = fopen("ux0:data/VitaDB/icons.db", "a");
+			f = fopen("ux0:data/VitaDB/icons.db", "a");
 			fprintf(f, "%s\n", download_link);
 			fclose(f);
 		}
 	}
+	vglFree(icons_db);
 	//printf("finished parsing\n");
 }
 
@@ -319,7 +309,7 @@ void AppendThemeDatabase(const char *file) {
 		do {
 			char name[128], fname[256];
 			ptr = extractValue(name, ptr, "name", nullptr);
-			printf("parsing %s\n", name);
+			//printf("parsing %s\n", name);
 			if (!ptr)
 				break;
 			ThemeSelection *node = (ThemeSelection*)malloc(sizeof(ThemeSelection));
@@ -333,18 +323,17 @@ void AppendThemeDatabase(const char *file) {
 			else
 				node->state = APP_UNTRACKED;
 			ptr = extractValue(node->author, ptr, "author", nullptr);
-			printf("%s\n", node->author);
+			//printf("%s\n", node->author);
 			ptr = extractValue(node->desc, ptr, "description", &node->desc);
-			printf("%x\n", node->desc);
-			printf("%s\n", node->desc);
+			//printf("%s\n", node->desc);
 			ptr = extractValue(node->credits, ptr, "credits", nullptr);
-			printf("%s\n", node->credits);
+			//printf("%s\n", node->credits);
 			ptr = extractValue(node->bg_type, ptr, "bg_type", nullptr);
-			printf("%s\n", node->bg_type);
+			//printf("%s\n", node->bg_type);
 			ptr = extractValue(node->has_music, ptr, "has_music", nullptr);
-			printf("%s\n", node->has_music);
+			//printf("%s\n", node->has_music);
 			ptr = extractValue(node->has_font, ptr, "has_font", nullptr);
-			printf("%s\n", node->has_font);
+			//printf("%s\n", node->has_font);
 			node->next = themes;
 			themes = node;
 		} while (ptr);
