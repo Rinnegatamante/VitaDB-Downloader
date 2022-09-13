@@ -1510,7 +1510,7 @@ int main(int argc, char *argv[]) {
 				to_download = nullptr;
 			} else {
 				if (to_download->requirements) {
-					uint8_t *scr_data = vglMalloc(960 * 544 * 4);
+					uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
 					glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 					if (!previous_frame)
 						glGenTextures(1, &previous_frame);
@@ -1551,7 +1551,7 @@ int main(int argc, char *argv[]) {
 				}
 				if (strlen(to_download->data_link) > 5) {
 					if (!to_download->requirements) {
-						uint8_t *scr_data = vglMalloc(960 * 544 * 4);
+						uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
 						glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 						if (!previous_frame)
 							glGenTextures(1, &previous_frame);

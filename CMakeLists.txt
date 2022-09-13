@@ -47,13 +47,14 @@ target_link_libraries(VitaDB
   mathneon
   curl
   ssl
-  SDL2
   SDL2_mixer
+  SDL2
   vorbisfile
   vorbis
   ogg
   mpg123
   mikmod
+  modplug
   FLAC
   crypto
   taihen_stub
