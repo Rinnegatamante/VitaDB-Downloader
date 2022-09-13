@@ -158,7 +158,10 @@ bool update_detected = false;
 void AppendAppDatabase(const char *file) {
 	// Read icons database
 	FILE *f = fopen("ux0:data/VitaDB/icons.db", "r");
+	//printf("f is %x\n", f);
 	size_t icons_db_size = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
+	//printf("icons_db_size is %x\n", icons_db_size);
+	generic_mem_buffer[icons_db_size] = 0;
 	fclose(f);
 	
 	uint32_t missing_icons_num = 0;
@@ -189,10 +192,11 @@ void AppendAppDatabase(const char *file) {
 			node->requirements = nullptr;
 			ptr = extractValue(node->icon, ptr, "icon", nullptr);
 			sprintf(fname, "ux0:data/VitaDB/icons/%s", node->icon);
-			char *icon_fname = (char*)generic_mem_buffer;
+			char *icon_fname = (char*)&generic_mem_buffer[22];
 			bool icon_found = false;
 			for (;;) {
-				if (!strncmp(icon_fname, fname, 90)) {
+				icon_fname[68] = 0;
+				if (!strcmp(icon_fname, node->icon)) {
 					icon_found = true;
 					break;
 				}
@@ -202,7 +206,7 @@ void AppendAppDatabase(const char *file) {
 			}
 			if (!icon_found) {
 				missing_icons[missing_icons_num++] = node;
-				printf("%s is missing [%s]\n", node->icon, name);
+				//printf("%s is missing [%s]\n", node->icon, name);
 			}
 			ptr = extractValue(version, ptr, "version", nullptr);
 			ptr = extractValue(node->author, ptr, "author", nullptr);
@@ -785,8 +789,8 @@ ImVec4 TextLabel = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
 ImVec4 TextOutdated = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
 ImVec4 TextUpdated = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
 ImVec4 TextNotInstalled = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-ImVec4 Shuffle = ImVec4(0.2f, 0.2f, 0.0f, 1.0f);
-ImVec4 ShuffleHovered = ImVec4(0.4f, 0.4f, 0.0f, 1.0f);
+ImVec4 Shuffle = ImVec4(0.0f, 0.0f, 1.0f, 0.4f);
+ImVec4 ShuffleHovered = ImVec4(0.0f, 0.0f, 1.0f, 1.0f);
 
 #define READ_FIRST_VAL(x) if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
 #define READ_NEXT_VAL(x) else if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
@@ -946,7 +950,7 @@ void install_theme_from_shuffle(bool boot) {
 	
 	int theme_id = rand() % themes_num;
 	char *name = (char *)&generic_mem_buffer[20 * 1024 * 1024 + 256 * theme_id];
-	printf("name is %s\n", name);
+	//printf("name is %s\n", name);
 	
 	if (!boot) {
 		for (int i = 0; i < 3; i++) {
@@ -1870,7 +1874,7 @@ int main(int argc, char *argv[]) {
 			
 			if (sceIoGetstat("ux0:/data/VitaDB/previews", &st1) < 0) {
 				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/previews.zip", "Downloading themes previews");
-				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/", true);
+				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/", false);
 			}
 			
 			if (themes == nullptr) {
