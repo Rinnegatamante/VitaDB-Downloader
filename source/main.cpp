@@ -298,6 +298,9 @@ void AppendThemeDatabase(const char *file) {
 	}
 	FILE *f = fopen(file, "rb");
 	if (f) {
+		uint32_t missing_previews_num = 0;
+		ThemeSelection *missing_previews[2048];
+		
 		fseek(f, 0, SEEK_END);
 		uint64_t len = ftell(f);
 		fseek(f, 0, SEEK_SET);
@@ -308,11 +311,15 @@ void AppendThemeDatabase(const char *file) {
 		char *end, *end2;
 		do {
 			char name[128], fname[256];
+			SceIoStat st1;
 			ptr = extractValue(name, ptr, "name", nullptr);
 			//printf("parsing %s\n", name);
 			if (!ptr)
 				break;
 			ThemeSelection *node = (ThemeSelection*)malloc(sizeof(ThemeSelection));
+			sprintf(fname, "ux0:data/VitaDB/previews/%s.png", name);
+			if (sceIoGetstat(fname, &st1) < 0)
+				missing_previews[missing_previews_num++] = node;
 			node->desc = nullptr;
 			node->shuffle = false;
 			strcpy(node->name, name);
@@ -339,6 +346,14 @@ void AppendThemeDatabase(const char *file) {
 		} while (ptr);
 		fclose(f);
 		free(buffer);
+		
+		// Downloading missing previews
+		for (int i = 0; i < missing_previews_num; i++) {
+			sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/raw/main/previews/%s.png", missing_previews[i]->name);
+			download_file(download_link, "Downloading missing previews");
+			sprintf(download_link, "ux0:data/VitaDB/previews/%s.png", missing_previews[i]->name);
+			sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
+		}
 	}
 	//printf("finished parsing\n");
 }
@@ -1868,6 +1883,7 @@ int main(int argc, char *argv[]) {
 			
 			if (themes == nullptr) {
 				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/themes.json", "Downloading themes list");
+				sceIoRemove("ux0:data/VitaDB/themes.json");
 				sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/themes.json");
 				AppendThemeDatabase("ux0:data/VitaDB/themes.json");
 			}
