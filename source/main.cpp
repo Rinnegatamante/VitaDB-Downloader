@@ -1578,7 +1578,10 @@ int main(int argc, char *argv[]) {
 			themes_manager = themes_manager ? 0 : 1;
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_screenshots && !show_changelog) {
-			sort_idx = (sort_idx + 1) % (sizeof(sort_modes_str) / sizeof(sort_modes_str[0]));
+			if (themes_manager)
+				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_themes_str) / sizeof(sort_modes_themes_str[0]));
+			else
+				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_str) / sizeof(sort_modes_str[0]));
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || themes_manager) && !show_changelog) {
 			show_screenshots = show_screenshots ? 0 : 1;
@@ -1627,7 +1630,10 @@ int main(int argc, char *argv[]) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !show_screenshots && !show_changelog) {
-			filter_idx = (filter_idx + 1) % (sizeof(filter_modes) / sizeof(*filter_modes));
+			if (themes_manager)
+				filter_idx = (filter_idx + 1) % (sizeof(filter_themes_modes) / sizeof(*filter_themes_modes));
+			else
+				filter_idx = (filter_idx + 1) % (sizeof(filter_modes) / sizeof(*filter_modes));
 			go_to_top = true;
 		}
 		oldpad = pad.buttons;
