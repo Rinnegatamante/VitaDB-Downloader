@@ -41,13 +41,20 @@ target_link_libraries(VitaDB
   m
   z
   stdc++
-  soloud
   vitaGL
   vitashark
   SceShaccCgExt
   mathneon
   curl
   ssl
+  SDL2
+  SDL2_mixer
+  vorbisfile
+  vorbis
+  ogg
+  mpg123
+  mikmod
+  FLAC
   crypto
   taihen_stub
   kubridge_stub
@@ -68,6 +75,9 @@ target_link_libraries(VitaDB
   SceTouch_stub
   SceVshBridge_stub
   ScePromoterUtil_stub
+  SceMotion_stub
+  SceIme_stub
+  SceHid_stub
 )
 
 vita_create_self(eboot.bin VitaDB UNSAFE)

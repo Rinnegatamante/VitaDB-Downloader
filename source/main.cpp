@@ -27,8 +27,8 @@
 #include <bzlib.h>
 #include <stdio.h>
 #include <string>
-#include <soloud.h>
-#include <soloud_wav.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
 #include "unzip.h"
 #include "player.h"
 #include "promoter.h"
@@ -56,9 +56,7 @@ int themes_manager = 0;
 static char download_link[512];
 char app_name_filter[128] = {0};
 SceUID audio_thd = -1;
-SoLoud::Soloud audio_engine;
-SoLoud::Wav bg_mus;
-volatile void *audio_buffer = nullptr;
+void *audio_buffer = nullptr;
 
 enum {
 	APP_UNTRACKED,
@@ -468,6 +466,7 @@ void LoadBackground() {
 		video_open("ux0:data/VitaDB/bg.mp4");
 		has_animated_bg = true;
 	} else {
+		has_animated_bg = false;
 		uint8_t *bg_data = stbi_load("ux0:data/VitaDB/bg.png", &w, &h, NULL, 4);
 		if (bg_data) {
 			glGenTextures(1, &bg_image);
@@ -684,9 +683,12 @@ bool filterThemes(ThemeSelection *p) {
 	return false;
 }
 
+volatile bool kill_audio_thread = false;
 static int musicThread(unsigned int args, void *arg) {
 	// Starting background music
 	FILE *f = fopen("ux0:/data/VitaDB/bg.ogg", "r");
+	int chn;
+	Mix_Music *mus;
 	if (f) {
 		fseek(f, 0, SEEK_END);
 		int size = ftell(f);
@@ -694,15 +696,20 @@ static int musicThread(unsigned int args, void *arg) {
 		audio_buffer = vglMalloc(size);
 		fread(audio_buffer, 1, size, f);
 		fclose(f);
-		bg_mus.loadMem(audio_buffer, size, false, false);
-		bg_mus.setLooping(true);
-		audio_engine.playBackground(bg_mus);
+		SDL_RWops *rw = SDL_RWFromMem(audio_buffer, size);
+		mus = Mix_LoadMUS_RW(rw, 0);
+		Mix_PlayMusic(mus, -1);
 	} else {
 		return sceKernelExitDeleteThread(0);
 	}
-	for (;;) {
-		sceKernelDelayThread(500 * 1000 * 1000);
+	while (!kill_audio_thread) {
+		sceKernelDelayThread(1000);
 	}
+	Mix_HaltMusic();
+	Mix_FreeMusic(mus);
+	vglFree(audio_buffer);
+	kill_audio_thread = false;
+	return sceKernelExitDeleteThread(0);
 }
 
 float *bg_attributes = nullptr;
@@ -864,15 +871,14 @@ void install_theme(ThemeSelection *g) {
 	info.size = sizeof(SceKernelThreadInfo);
 	int res = sceKernelGetThreadInfo(audio_thd, &info);
 	if (res >= 0) {
-		audio_engine.stopAll();
-		audio_engine.deinit();
-		vglFree(audio_buffer);
-		sceKernelDeleteThread(audio_thd);
+		kill_audio_thread = true;
+		while (sceKernelGetThreadInfo(audio_thd, &info) >= 0) {
+			sceKernelDelayThread(1000);
+		}
 	}
 
 	//Start new background audio playback
 	if (g->has_music[0] == '1') {
-		audio_engine.init();
 		sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.ogg", g->name);
 		copy_file(fname, "ux0:data/VitaDB/bg.ogg");
 		audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
@@ -927,6 +933,11 @@ int main(int argc, char *argv[]) {
 	scePowerSetArmClockFrequency(444);
 	scePowerSetBusClockFrequency(222);
 	sceIoMkdir("ux0:data/VitaDB", 0777);
+	
+	// Initializing SDL and SDL mixer
+	SDL_Init(SDL_INIT_AUDIO);
+	Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 512);
+	Mix_AllocateChannels(4);
 	
 	// Removing any failed app installation leftover
 	if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0) {
@@ -985,7 +996,6 @@ int main(int argc, char *argv[]) {
 	sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, 0);
 	
 	// Start background audio playback
-	audio_engine.init();
 	audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
 	sceKernelStartThread(audio_thd, 0, NULL);
 	
