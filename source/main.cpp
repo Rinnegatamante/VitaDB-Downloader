@@ -320,6 +320,7 @@ void AppendThemeDatabase(const char *file) {
 				break;
 			ThemeSelection *node = (ThemeSelection*)malloc(sizeof(ThemeSelection));
 			node->desc = nullptr;
+			node->shuffle = false;
 			strcpy(node->name, name);
 			sprintf(fname, "ux0:data/VitaDB/themes/%s/theme.ini", node->name);
 			FILE *f2 = fopen(fname, "r");
