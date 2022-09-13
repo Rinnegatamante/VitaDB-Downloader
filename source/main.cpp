@@ -44,16 +44,21 @@
 
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
-#define PREVIEW_HEIGHT 128.0f
-#define PREVIEW_WIDTH  128.0f
+#define PREVIEW_PADDING_THEME 60
+#define PREVIEW_HEIGHT (themes_manager ? 159.0f : 128.0f)
+#define PREVIEW_WIDTH  (themes_manager ? 280.0f : 128.0f)
 
 int _newlib_heap_size_user = 200 * 1024 * 1024;
 int filter_idx = 0;
 int cur_ss_idx;
 int old_ss_idx = -1;
-
+int themes_manager = 0;
 static char download_link[512];
 char app_name_filter[128] = {0};
+SceUID audio_thd = -1;
+SoLoud::Soloud audio_engine;
+SoLoud::Wav bg_mus;
+volatile void *audio_buffer = nullptr;
 
 enum {
 	APP_UNTRACKED,
@@ -81,7 +86,20 @@ struct AppSelection {
 	AppSelection *next;
 };
 
+struct ThemeSelection {
+	char name[192];
+	char author[64];
+	char *desc;
+	char credits[128];
+	char bg_type[2];
+	char has_music[2];
+	char has_font[2];
+	int state;
+	ThemeSelection *next;
+};
+
 static AppSelection *old_hovered = NULL;
+ThemeSelection *themes = nullptr;
 AppSelection *apps = nullptr;
 
 char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
@@ -277,6 +295,59 @@ void AppendAppDatabase(const char *file) {
 	//printf("finished parsing\n");
 }
 
+void AppendThemeDatabase(const char *file) {
+	sceIoMkdir("ux0:data/VitaDB/themes", 0777);
+	// Burning on screen the parsing text dialog
+	for (int i = 0; i < 3; i++) {
+		DrawTextDialog("Parsing themes list", true, false);
+	}
+	FILE *f = fopen(file, "rb");
+	if (f) {
+		fseek(f, 0, SEEK_END);
+		uint64_t len = ftell(f);
+		fseek(f, 0, SEEK_SET);
+		char *buffer = (char*)malloc(len + 1);
+		fread(buffer, 1, len, f);
+		buffer[len] = 0;
+		char *ptr = buffer;
+		char *end, *end2;
+		do {
+			char name[128], fname[256];
+			ptr = extractValue(name, ptr, "name", nullptr);
+			printf("parsing %s\n", name);
+			if (!ptr)
+				break;
+			ThemeSelection *node = (ThemeSelection*)malloc(sizeof(ThemeSelection));
+			node->desc = nullptr;
+			strcpy(node->name, name);
+			sprintf(fname, "ux0:data/VitaDB/themes/%s/theme.ini", node->name);
+			FILE *f2 = fopen(fname, "r");
+			if (f2)
+				node->state = APP_UPDATED;
+			else
+				node->state = APP_UNTRACKED;
+			ptr = extractValue(node->author, ptr, "author", nullptr);
+			printf("%s\n", node->author);
+			ptr = extractValue(node->desc, ptr, "description", &node->desc);
+			printf("%x\n", node->desc);
+			printf("%s\n", node->desc);
+			ptr = extractValue(node->credits, ptr, "credits", nullptr);
+			printf("%s\n", node->credits);
+			ptr = extractValue(node->bg_type, ptr, "bg_type", nullptr);
+			printf("%s\n", node->bg_type);
+			ptr = extractValue(node->has_music, ptr, "has_music", nullptr);
+			printf("%s\n", node->has_music);
+			ptr = extractValue(node->has_font, ptr, "has_font", nullptr);
+			printf("%s\n", node->has_font);
+			node->next = themes;
+			themes = node;
+		} while (ptr);
+		fclose(f);
+		free(buffer);
+	}
+	//printf("finished parsing\n");
+}
+
 static char fname[512], ext_fname[512], read_buffer[8192];
 
 void extract_file(char *file, char *dir, bool indexing) {
@@ -334,7 +405,11 @@ void LoadPreview(AppSelection *game) {
 	old_hovered = game;
 	
 	char banner_path[256];
-	sprintf(banner_path, "ux0:data/VitaDB/icons/%s", game->icon);
+	if (themes_manager) {
+		ThemeSelection *g = (ThemeSelection *)game;
+		sprintf(banner_path, "ux0:data/VitaDB/previews/%s.png", g->name);
+	} else
+		sprintf(banner_path, "ux0:data/VitaDB/icons/%s", game->icon);
 	uint8_t *icon_data = stbi_load(banner_path, &preview_width, &preview_height, NULL, 4);
 	if (!preview_icon)
 		glGenTextures(1, &preview_icon);
@@ -412,6 +487,15 @@ void swap_apps(AppSelection *a, AppSelection *b) {
 	sceClibMemcpy(b, &tmp, sizeof(AppSelection) - 4);
 }
 
+void swap_themes(ThemeSelection *a, ThemeSelection *b) {
+	AppSelection tmp;
+	
+	// Swapping everything except next leaf pointer
+	sceClibMemcpy(&tmp, a, sizeof(ThemeSelection) - 4);
+	sceClibMemcpy(a, b, sizeof(ThemeSelection) - 4);
+	sceClibMemcpy(b, &tmp, sizeof(ThemeSelection) - 4);
+}
+
 const char *sort_modes_str[] = {
 	"Most Recent",
 	"Oldest",
@@ -421,6 +505,10 @@ const char *sort_modes_str[] = {
 	"Alphabetical (Z-A)",
 	"Smallest",
 	"Largest"
+};
+const char *sort_modes_themes_str[] = {
+	"Alphabetical (A-Z)",
+	"Alphabetical (Z-A)"
 };
 const char *filter_modes[] = {
 	"All Apps",
@@ -432,8 +520,51 @@ const char *filter_modes[] = {
 	"Outdated Apps",
 	"Installed Apps",
 };
+const char *filter_themes_modes[] = {
+	"All Themes",
+	"Downloaded Themes",
+	"Not Downloaded Themes"
+};
 int sort_idx = 0;
 int old_sort_idx = -1;
+
+void sort_themelist(ThemeSelection *start) {
+	// Checking for empty list
+	if (start == NULL) 
+		return; 
+	
+	int swapped; 
+	ThemeSelection *ptr1; 
+	ThemeSelection *lptr = NULL; 
+  
+	do { 
+		swapped = 0; 
+		ptr1 = start; 
+		
+		int64_t d1, d2;
+		char * dummy;
+		while (ptr1->next != lptr && ptr1->next) {
+			switch (sort_idx) {
+			case 0: // A-Z
+				if (strcasecmp(ptr1->name, ptr1->next->name) > 0) {
+					swap_themes(ptr1, ptr1->next); 
+					swapped = 1; 
+				}
+				break;
+			case 1: // Z-A
+				if (strcasecmp(ptr1->name, ptr1->next->name) < 0) {
+					swap_themes(ptr1, ptr1->next); 
+					swapped = 1; 
+				}
+				break;
+			default:
+				break;
+			}
+			ptr1 = ptr1->next; 
+		} 
+		lptr = ptr1; 
+	} while (swapped); 
+}
 
 void sort_applist(AppSelection *start) { 
 	// Checking for empty list
@@ -537,12 +668,33 @@ bool filterApps(AppSelection *p) {
 	return false;
 }
 
+bool filterThemes(ThemeSelection *p) {
+	switch (filter_idx) {
+	case 1:
+		if (p->state != APP_UPDATED)
+			return true;
+		break;
+	case 2:
+		if (p->state != APP_UNTRACKED)
+			return true;
+		break;
+	default:
+		break;
+	}
+	return false;
+}
+
 static int musicThread(unsigned int args, void *arg) {
 	// Starting background music
-	SoLoud::Soloud audio_engine;
-	SoLoud::Wav bg_mus;
-	audio_engine.init();
-	if (bg_mus.load("ux0:/data/VitaDB/bg.ogg") >= 0) {
+	FILE *f = fopen("ux0:/data/VitaDB/bg.ogg", "r");
+	if (f) {
+		fseek(f, 0, SEEK_END);
+		int size = ftell(f);
+		fseek(f, 0, SEEK_SET);
+		audio_buffer = vglMalloc(size);
+		fread(audio_buffer, 1, size, f);
+		fclose(f);
+		bg_mus.loadMem(audio_buffer, size, false, false);
 		bg_mus.setLooping(true);
 		audio_engine.playBackground(bg_mus);
 	} else {
@@ -686,6 +838,85 @@ void set_gui_theme() {
 	}
 }
 
+void copy_file(const char *src, const char *dst) {
+	FILE *f = fopen(src, "r");
+	FILE *f2 = fopen(dst, "w");
+	size_t size = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
+	fwrite(generic_mem_buffer, 1, size, f2);
+	fclose(f);
+	fclose(f2);
+}
+
+void install_theme(ThemeSelection *g) {
+	char fname[256];
+	// Burning on screen the parsing text dialog
+	for (int i = 0; i < 3; i++) {
+		DrawTextDialog("Installing theme", true, false);
+	}
+	
+	// Deleting old theme files
+	sceIoRemove("ux0:data/VitaDB/bg.png");
+	sceIoRemove("ux0:data/VitaDB/bg.mp4");
+	sceIoRemove("ux0:data/VitaDB/bg.ogg");
+	
+	// Kill old audio playback
+	SceKernelThreadInfo info;
+	info.size = sizeof(SceKernelThreadInfo);
+	int res = sceKernelGetThreadInfo(audio_thd, &info);
+	if (res >= 0) {
+		audio_engine.stopAll();
+		audio_engine.deinit();
+		vglFree(audio_buffer);
+		sceKernelDeleteThread(audio_thd);
+	}
+
+	//Start new background audio playback
+	if (g->has_music[0] == '1') {
+		audio_engine.init();
+		sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.ogg", g->name);
+		copy_file(fname, "ux0:data/VitaDB/bg.ogg");
+		audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
+		sceKernelStartThread(audio_thd, 0, NULL);
+	}
+	
+	// Kill old animated background
+	if (has_animated_bg)
+		video_close();
+	
+	// Load new background image
+	switch (g->bg_type[0]) {
+	case '1':
+		sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.png", g->name);
+		copy_file(fname, "ux0:data/VitaDB/bg.png");
+		break;
+	case '2':
+		sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.mp4", g->name);
+		copy_file(fname, "ux0:data/VitaDB/bg.mp4");
+		break;
+	default:
+		break;
+	}
+	LoadBackground();
+	
+	// Set new color scheme
+	sprintf(fname, "ux0:data/VitaDB/themes/%s/theme.ini", g->name);
+	copy_file(fname, "ux0:data/VitaDB/theme.ini");
+	set_gui_theme();
+	
+	// Set new font
+	if (g->has_font[0] == '1') {
+		sprintf(fname, "ux0:data/VitaDB/themes/%s/font.ttf", g->name);
+		copy_file(fname, "ux0:data/VitaDB/font.ttf");
+	}
+	ImGui::GetIO().Fonts->Clear();
+	ImGui_ImplVitaGL_InvalidateDeviceObjects();
+	SceIoStat st1;
+	if (sceIoGetstat("ux0:/data/VitaDB/font.ttf", &st1) >= 0)
+		ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/data/VitaDB/font.ttf", 16.0f);
+	else
+		ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/app/VITADBDLD/Roboto.ttf", 16.0f);
+}
+
 int main(int argc, char *argv[]) {
 	SceIoStat st1, st2;
 	// Checking for libshacccg.suprx existence
@@ -754,8 +985,9 @@ int main(int argc, char *argv[]) {
 	sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, 0);
 	
 	// Start background audio playback
-	SceUID thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
-	sceKernelStartThread(thd, 0, NULL);
+	audio_engine.init();
+	audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
+	sceKernelStartThread(audio_thd, 0, NULL);
 	
 	// Downloading icons
 	if ((sceIoGetstat("ux0:/data/VitaDB/icons.db", &st1) < 0) || (sceIoGetstat("ux0:data/VitaDB/icons", &st2) < 0)) {
@@ -766,7 +998,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	// Downloading apps list
-	thd = sceKernelCreateThread("Apps List Downloader", &appListThread, 0x10000100, 0x100000, 0, 0, NULL);
+	SceUID thd = sceKernelCreateThread("Apps List Downloader", &appListThread, 0x10000100, 0x100000, 0, 0, NULL);
 	sceKernelStartThread(thd, 0, NULL);
 	do {
 		DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading apps list", 1, true);
@@ -790,11 +1022,15 @@ int main(int argc, char *argv[]) {
 	int filtered_entries;
 	AppSelection *decrement_stack[4096];
 	AppSelection *decremented_app = nullptr;
+	ThemeSelection *to_install = nullptr;
 	int decrement_stack_idx = 0;
 	while (!update_detected) {
 		if (old_sort_idx != sort_idx) {
 			old_sort_idx = sort_idx;
-			sort_applist(apps);
+			if (themes_manager)
+				sort_themelist(themes);
+			else
+				sort_applist(apps);
 		}
 		
 		if (bg_image || has_animated_bg)
@@ -804,7 +1040,10 @@ int main(int argc, char *argv[]) {
 		
 		if (ImGui::BeginMainMenuBar()) {
 			char title[256];
-			sprintf(title, "VitaDB Downloader - Currently listing %d results with '%s' filter", filtered_entries, filter_modes[filter_idx]);
+			if (themes_manager)
+				sprintf(title, "VitaDB Downloader - Currently listing %d themes with '%s' filter", filtered_entries, filter_themes_modes[filter_idx]);
+			else
+				sprintf(title, "VitaDB Downloader - Currently listing %d results with '%s' filter", filtered_entries, filter_modes[filter_idx]);
 			ImGui::Text(title);
 			if (calculate_ver_len) {
 				calculate_ver_len = false;
@@ -849,15 +1088,28 @@ int main(int argc, char *argv[]) {
 		ImGui::Text("Filter: ");
 		ImGui::SameLine();
 		ImGui::PushItemWidth(190.0f);
-		if (ImGui::BeginCombo("##combo", filter_modes[filter_idx])) {
-			for (int n = 0; n < sizeof(filter_modes) / sizeof(*filter_modes); n++) {
-				bool is_selected = filter_idx == n;
-				if (ImGui::Selectable(filter_modes[n], is_selected))
-					filter_idx = n;
-				if (is_selected)
-					ImGui::SetItemDefaultFocus();
+		if (themes_manager) {
+			if (ImGui::BeginCombo("##combo", filter_themes_modes[filter_idx])) {
+				for (int n = 0; n < sizeof(filter_themes_modes) / sizeof(*filter_themes_modes); n++) {
+					bool is_selected = filter_idx == n;
+					if (ImGui::Selectable(filter_themes_modes[n], is_selected))
+						filter_idx = n;
+					if (is_selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
 			}
-			ImGui::EndCombo();
+		} else {
+			if (ImGui::BeginCombo("##combo", filter_modes[filter_idx])) {
+				for (int n = 0; n < sizeof(filter_modes) / sizeof(*filter_modes); n++) {
+					bool is_selected = filter_idx == n;
+					if (ImGui::Selectable(filter_modes[n], is_selected))
+						filter_idx = n;
+					if (is_selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
 		}
 		if (ImGui::IsItemHovered()) {
 			hovered = nullptr;
@@ -872,15 +1124,28 @@ int main(int argc, char *argv[]) {
 		ImGui::Text("Sort Mode: ");
 		ImGui::SameLine();
 		ImGui::PushItemWidth(-1.0f);
-		if (ImGui::BeginCombo("##combo2", sort_modes_str[sort_idx])) {
-			for (int n = 0; n < sizeof(sort_modes_str) / sizeof(*sort_modes_str); n++) {
-				bool is_selected = sort_idx == n;
-				if (ImGui::Selectable(sort_modes_str[n], is_selected))
-					sort_idx = n;
-				if (is_selected)
-					ImGui::SetItemDefaultFocus();
+		if (themes_manager) {
+			if (ImGui::BeginCombo("##combo2", sort_modes_themes_str[sort_idx])) {
+				for (int n = 0; n < sizeof(sort_modes_themes_str) / sizeof(*sort_modes_themes_str); n++) {
+					bool is_selected = sort_idx == n;
+					if (ImGui::Selectable(sort_modes_themes_str[n], is_selected))
+						sort_idx = n;
+					if (is_selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
 			}
-			ImGui::EndCombo();
+		} else {
+			if (ImGui::BeginCombo("##combo2", sort_modes_str[sort_idx])) {
+				for (int n = 0; n < sizeof(sort_modes_str) / sizeof(*sort_modes_str); n++) {
+					bool is_selected = sort_idx == n;
+					if (ImGui::Selectable(sort_modes_str[n], is_selected))
+						sort_idx = n;
+					if (is_selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
 		}
 		if (ImGui::IsItemHovered()) {
 			hovered = nullptr;
@@ -889,73 +1154,142 @@ int main(int argc, char *argv[]) {
 		ImGui::PopItemWidth();
 		ImGui::Separator();
 		
-		AppSelection *g = apps;
-		filtered_entries = 0;
-		int increment_idx = 0;
-		is_app_hovered = false;
-		ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
-		while (g) {
-			if (filterApps(g)) {
-				g = g->next;
-				continue;
-			}
-			if ((strlen(app_name_filter) == 0) || (strlen(app_name_filter) > 0 && (strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter)))) {
-				float y = ImGui::GetCursorPosY() + 2.0f;
-				if (ImGui::Button(g->name, ImVec2(-1.0f, 0.0f))) {
-					to_download = g;
+		if (themes_manager) {
+			ThemeSelection *g = themes;
+			filtered_entries = 0;
+			int increment_idx = 0;
+			is_app_hovered = false;
+			ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
+			while (g) {
+				if (filterThemes(g)) {
+					g = g->next;
+					continue;
 				}
-				if (ImGui::IsItemHovered()) {
-					is_app_hovered = true;
-					hovered = g;
-					if (fast_increment)
-						increment_idx = 1;
-					else if (fast_decrement) {
-						if (decrement_stack_idx == 0)
-							fast_decrement = false;
+				if ((strlen(app_name_filter) == 0) || (strlen(app_name_filter) > 0 && (strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter)))) {
+					float y = ImGui::GetCursorPosY() + 2.0f;
+					if (ImGui::Button(g->name, ImVec2(-1.0f, 0.0f))) {
+						if (g->state == APP_UNTRACKED)
+							to_download = (AppSelection *)g;
 						else
-							decremented_app = decrement_stack[decrement_stack_idx >= 20 ? (decrement_stack_idx - 20) : 0];
+							to_install = g;
 					}
-				} else if (increment_idx) {
-					increment_idx++;
-					ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
-					ImGui::SetScrollHere();
-					if (increment_idx == 21 || g->next == nullptr)
-						increment_idx = 0;
-				} else if (fast_decrement) {
-					if (!decremented_app)
-						decrement_stack[decrement_stack_idx++] = g;
-					else if (decremented_app == g) {
+					if (ImGui::IsItemHovered()) {
+						is_app_hovered = true;
+						hovered = (AppSelection *)g;
+						if (fast_increment)
+							increment_idx = 1;
+						else if (fast_decrement) {
+							if (decrement_stack_idx == 0)
+								fast_decrement = false;
+							else
+								decremented_app = decrement_stack[decrement_stack_idx >= 20 ? (decrement_stack_idx - 20) : 0];
+						}
+					} else if (increment_idx) {
+						increment_idx++;
 						ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
 						ImGui::SetScrollHere();
-						fast_decrement = false;
-					}	
+						if (increment_idx == 21 || g->next == nullptr)
+							increment_idx = 0;
+					} else if (fast_decrement) {
+						if (!decremented_app)
+							decrement_stack[decrement_stack_idx++] = (AppSelection *)g;
+						else if (decremented_app == (AppSelection *)g) {
+							ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
+							ImGui::SetScrollHere();
+							fast_decrement = false;
+						}	
+					}
+					ImVec2 tag_len;
+					switch (g->state) {
+					case APP_UNTRACKED:
+						tag_len = ImGui::CalcTextSize("Not Downloaded");
+						ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
+						ImGui::TextColored(TextNotInstalled, "Not Downloaded");
+						break;
+					case APP_UPDATED:
+						tag_len = ImGui::CalcTextSize("Downloaded");
+						ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
+						ImGui::TextColored(TextUpdated, "Downloaded");
+						break;
+					default:
+						tag_len = ImGui::CalcTextSize("Unknown");
+						ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
+						ImGui::Text("Unknown");
+						break;
+					}
+					filtered_entries++;
 				}
-				ImVec2 tag_len;
-				switch (g->state) {
-				case APP_UNTRACKED:
-					tag_len = ImGui::CalcTextSize("Not Installed");
-					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
-					ImGui::TextColored(TextNotInstalled, "Not Installed");
-					break;
-				case APP_OUTDATED:
-					tag_len = ImGui::CalcTextSize("Outdated");
-					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
-					ImGui::TextColored(TextOutdated, "Outdated");
-					break;
-				case APP_UPDATED:
-					tag_len = ImGui::CalcTextSize("Updated");
-					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
-					ImGui::TextColored(TextUpdated, "Updated");
-					break;
-				default:
-					tag_len = ImGui::CalcTextSize("Unknown");
-					ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
-					ImGui::Text("Unknown");
-					break;
-				}
-				filtered_entries++;
+				g = g->next;
 			}
-			g = g->next;
+		} else {
+			AppSelection *g = apps;
+			filtered_entries = 0;
+			int increment_idx = 0;
+			is_app_hovered = false;
+			ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
+			while (g) {
+				if (filterApps(g)) {
+					g = g->next;
+					continue;
+				}
+				if ((strlen(app_name_filter) == 0) || (strlen(app_name_filter) > 0 && (strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter)))) {
+					float y = ImGui::GetCursorPosY() + 2.0f;
+					if (ImGui::Button(g->name, ImVec2(-1.0f, 0.0f))) {
+						to_download = g;
+					}
+					if (ImGui::IsItemHovered()) {
+						is_app_hovered = true;
+						hovered = g;
+						if (fast_increment)
+							increment_idx = 1;
+						else if (fast_decrement) {
+							if (decrement_stack_idx == 0)
+								fast_decrement = false;
+							else
+								decremented_app = decrement_stack[decrement_stack_idx >= 20 ? (decrement_stack_idx - 20) : 0];
+						}
+					} else if (increment_idx) {
+						increment_idx++;
+						ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
+						ImGui::SetScrollHere();
+						if (increment_idx == 21 || g->next == nullptr)
+							increment_idx = 0;
+					} else if (fast_decrement) {
+						if (!decremented_app)
+							decrement_stack[decrement_stack_idx++] = g;
+						else if (decremented_app == g) {
+							ImGui::GetCurrentContext()->NavId = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
+							ImGui::SetScrollHere();
+							fast_decrement = false;
+						}	
+					}
+					ImVec2 tag_len;
+					switch (g->state) {
+					case APP_UNTRACKED:
+						tag_len = ImGui::CalcTextSize("Not Installed");
+						ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
+						ImGui::TextColored(TextNotInstalled, "Not Installed");
+						break;
+					case APP_OUTDATED:
+						tag_len = ImGui::CalcTextSize("Outdated");
+						ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
+						ImGui::TextColored(TextOutdated, "Outdated");
+						break;
+					case APP_UPDATED:
+						tag_len = ImGui::CalcTextSize("Updated");
+						ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
+						ImGui::TextColored(TextUpdated, "Updated");
+						break;
+					default:
+						tag_len = ImGui::CalcTextSize("Unknown");
+						ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
+						ImGui::Text("Unknown");
+						break;
+					}
+					filtered_entries++;
+				}
+				g = g->next;
+			}
 		}
 		ImGui::PopStyleVar();
 		if (decrement_stack_idx == filtered_entries || !is_app_hovered)
@@ -969,74 +1303,109 @@ int main(int argc, char *argv[]) {
 		ImGui::SetNextWindowSize(ImVec2(407, 523), ImGuiSetCond_Always);
 		ImGui::Begin("Info Window", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
 		if (hovered) {
-			LoadPreview(hovered);
-			ImGui::SetCursorPos(ImVec2(preview_x + PREVIEW_PADDING, preview_y + PREVIEW_PADDING));
-			ImGui::Image((void*)preview_icon, ImVec2(preview_width, preview_height));
-			ImGui::TextColored(TextLabel, "Description:");
-			ImGui::TextWrapped(hovered->desc);
-			ImGui::SetCursorPosY(6);
-			ImGui::SetCursorPosX(140);
-			ImGui::TextColored(TextLabel, "Last Update:");
-			ImGui::SetCursorPosY(22);
-			ImGui::SetCursorPosX(140);
-			ImGui::Text(hovered->date);
-			ImGui::SetCursorPosY(6);
-			ImGui::SetCursorPosX(330);
-			ImGui::TextColored(TextLabel, "Downloads:");
-			ImGui::SetCursorPosY(22);
-			ImGui::SetCursorPosX(330);
-			ImGui::Text(hovered->downloads);
-			ImGui::SetCursorPosY(38);
-			ImGui::SetCursorPosX(140);
-			ImGui::TextColored(TextLabel, "Category:");
-			ImGui::SetCursorPosY(54);
-			ImGui::SetCursorPosX(140);
-			switch (hovered->type[0]) {
-			case '1':
-				ImGui::Text("Original Game");
-				break;
-			case '2':
-				ImGui::Text("Game Port");
-				break;
-			case '4':
-				ImGui::Text("Utility");
-				break;		
-			case '5':
-				ImGui::Text("Emulator");
-				break;
-			default:
-				ImGui::Text("Unknown");
-				break;
-			}
-			ImGui::SetCursorPosY(70);
-			ImGui::SetCursorPosX(140);
-			ImGui::TextColored(TextLabel, "Author:");
-			ImGui::SetCursorPosY(86);
-			ImGui::SetCursorPosX(140);
-			ImGui::Text(hovered->author);
-			ImGui::SetCursorPosY(100);
-			ImGui::SetCursorPosX(140);
-			ImGui::TextColored(TextLabel, "Size:");
-			ImGui::SetCursorPosY(116);
-			ImGui::SetCursorPosX(140);
-			char size_str[64];
-			char *dummy;
-			uint64_t sz;
-			if (strlen(hovered->data_link) > 5) {
-				sz = strtoull(hovered->size, &dummy, 10);
-				uint64_t sz2 = strtoull(hovered->data_size, &dummy, 10);
-				sprintf(size_str, "VPK: %.2f %s, Data: %.2f %s", format_size(sz), format_size_str(sz), format_size(sz2), format_size_str(sz2));
-			} else {
-				sz = strtoull(hovered->size, &dummy, 10);
-				sprintf(size_str, "VPK: %.2f %s", format_size(sz), format_size_str(sz));
-			}
-			ImGui::Text(size_str);
-			ImGui::SetCursorPosY(454);
-			if (strlen(hovered->screenshots) > 5) {
+			if (themes_manager) {
+				LoadPreview(hovered);
+				ImGui::SetCursorPos(ImVec2(preview_x + PREVIEW_PADDING_THEME, preview_y + PREVIEW_PADDING));
+				ImGui::Image((void*)preview_icon, ImVec2(preview_width, preview_height));
+				ThemeSelection *node = (ThemeSelection *)hovered;
+				ImGui::TextColored(TextLabel, "Author:");
+				ImGui::TextWrapped(node->author);
+				ImGui::TextColored(TextLabel, "Description:");
+				ImGui::TextWrapped(node->desc);
+				ImGui::TextColored(TextLabel, "Credits:");
+				ImGui::TextWrapped(node->credits);
+				ImGui::Separator();
+				ImGui::TextColored(TextLabel, "Background Type:");
+				switch (node->bg_type[0]) {
+				case '0':
+					ImGui::Text("Static Color");
+					break;
+				case '1':
+					ImGui::Text("Static Image");
+					break;
+				case '2':
+					ImGui::Text("Animated Image");
+					break;
+				default:
+					ImGui::Text("Unknown");
+					break;
+				}
+				ImGui::TextColored(TextLabel, "Background Music:");
+				ImGui::Text(node->has_music[0] == '1' ? "Yes" : "No");
+				ImGui::TextColored(TextLabel, "Custom Font:");
+				ImGui::Text(node->has_font[0] == '1' ? "Yes" : "No");
+				ImGui::SetCursorPosY(470);
 				ImGui::TextColored(TextLabel, "Press Start to view screenshots");
+			} else {
+				LoadPreview(hovered);
+				ImGui::SetCursorPos(ImVec2(preview_x + PREVIEW_PADDING, preview_y + PREVIEW_PADDING));
+				ImGui::Image((void*)preview_icon, ImVec2(preview_width, preview_height));
+				ImGui::TextColored(TextLabel, "Description:");
+				ImGui::TextWrapped(hovered->desc);
+				ImGui::SetCursorPosY(6);
+				ImGui::SetCursorPosX(140);
+				ImGui::TextColored(TextLabel, "Last Update:");
+				ImGui::SetCursorPosY(22);
+				ImGui::SetCursorPosX(140);
+				ImGui::Text(hovered->date);
+				ImGui::SetCursorPosY(6);
+				ImGui::SetCursorPosX(330);
+				ImGui::TextColored(TextLabel, "Downloads:");
+				ImGui::SetCursorPosY(22);
+				ImGui::SetCursorPosX(330);
+				ImGui::Text(hovered->downloads);
+				ImGui::SetCursorPosY(38);
+				ImGui::SetCursorPosX(140);
+				ImGui::TextColored(TextLabel, "Category:");
+				ImGui::SetCursorPosY(54);
+				ImGui::SetCursorPosX(140);
+				switch (hovered->type[0]) {
+				case '1':
+					ImGui::Text("Original Game");
+					break;
+				case '2':
+					ImGui::Text("Game Port");
+					break;
+				case '4':
+					ImGui::Text("Utility");
+					break;		
+				case '5':
+					ImGui::Text("Emulator");
+					break;
+				default:
+					ImGui::Text("Unknown");
+					break;
+				}
+				ImGui::SetCursorPosY(70);
+				ImGui::SetCursorPosX(140);
+				ImGui::TextColored(TextLabel, "Author:");
+				ImGui::SetCursorPosY(86);
+				ImGui::SetCursorPosX(140);
+				ImGui::Text(hovered->author);
+				ImGui::SetCursorPosY(100);
+				ImGui::SetCursorPosX(140);
+				ImGui::TextColored(TextLabel, "Size:");
+				ImGui::SetCursorPosY(116);
+				ImGui::SetCursorPosX(140);
+				char size_str[64];
+				char *dummy;
+				uint64_t sz;
+				if (strlen(hovered->data_link) > 5) {
+					sz = strtoull(hovered->size, &dummy, 10);
+					uint64_t sz2 = strtoull(hovered->data_size, &dummy, 10);
+					sprintf(size_str, "VPK: %.2f %s, Data: %.2f %s", format_size(sz), format_size_str(sz), format_size(sz2), format_size_str(sz2));
+				} else {
+					sz = strtoull(hovered->size, &dummy, 10);
+					sprintf(size_str, "VPK: %.2f %s", format_size(sz), format_size_str(sz));
+				}
+				ImGui::Text(size_str);
+				ImGui::SetCursorPosY(454);
+				if (strlen(hovered->screenshots) > 5) {
+					ImGui::TextColored(TextLabel, "Press Start to view screenshots");
+				}
+				ImGui::SetCursorPosY(470);
+				ImGui::TextColored(TextLabel, "Press Select to view changelog");
 			}
-			ImGui::SetCursorPosY(470);
-			ImGui::TextColored(TextLabel, "Press Select to view changelog");
 		}
 		ImGui::SetCursorPosY(486);
 		ImGui::Text("Current sorting mode: %s", sort_modes_str[sort_idx]);
@@ -1074,21 +1443,25 @@ int main(int argc, char *argv[]) {
 		SceCtrlData pad;
 		sceCtrlPeekBufferPositive(0, &pad, 1);
 		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !show_screenshots && !show_changelog) {
-			sort_idx -= 1;
-			if (sort_idx < 0)
-				sort_idx = (sizeof(sort_modes_str) / sizeof(sort_modes_str[0])) - 1;
+			old_sort_idx = -1;
+			sort_idx = 0;
+			filter_idx = 0;
+			themes_manager = themes_manager ? 0 : 1;
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_screenshots && !show_changelog) {
 			sort_idx = (sort_idx + 1) % (sizeof(sort_modes_str) / sizeof(sort_modes_str[0]));
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && strlen(hovered->screenshots) > 5 && !show_changelog) {
+		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || themes_manager) && !show_changelog) {
 			show_screenshots = show_screenshots ? 0 : 1;
 		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && hovered && !show_screenshots) {
-			show_changelog = !show_changelog;
-			if (show_changelog)
-				changelog = GetChangelog("ux0:data/VitaDB/apps.json", hovered->id);
-			else
-				free(changelog);
+			if (themes_manager) {
+			} else {
+				show_changelog = !show_changelog;
+				if (show_changelog)
+					changelog = GetChangelog("ux0:data/VitaDB/apps.json", hovered->id);
+				else
+					free(changelog);
+			}
 		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && !show_changelog) {
 			if (show_screenshots)
 				cur_ss_idx--;
@@ -1115,48 +1488,18 @@ int main(int argc, char *argv[]) {
 		
 		// Queued app download
 		if (to_download) {
-			if (to_download->requirements) {
-				uint8_t *scr_data = vglMalloc(960 * 544 * 4);
-				glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
-				if (!previous_frame)
-					glGenTextures(1, &previous_frame);
-				glBindTexture(GL_TEXTURE_2D, previous_frame);
-				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
-				vglFree(scr_data);
-				init_msg_dialog("This homebrew has extra requirements in order to work properly:\n%s", to_download->requirements);
-				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-					vglSwapBuffers(GL_TRUE);
-				}
-				sceMsgDialogTerm();
-				glMatrixMode(GL_PROJECTION);
-				glLoadIdentity();
-				glOrthof(0, 960, 544, 0, 0, 1);
-				glMatrixMode(GL_MODELVIEW);
-				glLoadIdentity();
-				float vtx[4 * 2] = {
-					  0, 544,
-					960, 544,
-					  0,   0,
-					960,   0
-				};
-				float txcoord[4 * 2] = {
-					  0,   0,
-					  1,   0,
-					  0,   1,
-					  1,   1
-				};
-				// Workaround to prevent message dialog "burn in" on background
-				for (int i = 0; i < 15; i++) {
-					glEnableClientState(GL_VERTEX_ARRAY);
-					glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-					glVertexPointer(2, GL_FLOAT, 0, vtx);
-					glTexCoordPointer(2, GL_FLOAT, 0, txcoord);
-					glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-					vglSwapBuffers(GL_FALSE);
-				}
-			}
-			if (strlen(to_download->data_link) > 5) {
-				if (!to_download->requirements) {
+			if (themes_manager) {
+				ThemeSelection *node = (ThemeSelection *)to_download;
+				sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/blob/main/themes/%s/theme.zip?raw=true", node->name);
+				download_file(download_link, "Downloading theme");
+				sprintf(download_link, "ux0:data/VitaDB/themes/%s/", node->name);
+				sceIoMkdir(download_link, 0777);
+				extract_file(TEMP_DOWNLOAD_NAME, download_link, false);
+				sceIoRemove(TEMP_DOWNLOAD_NAME);
+				node->state = APP_UPDATED;
+				to_download = nullptr;
+			} else {
+				if (to_download->requirements) {
 					uint8_t *scr_data = vglMalloc(960 * 544 * 4);
 					glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 					if (!previous_frame)
@@ -1164,107 +1507,149 @@ int main(int argc, char *argv[]) {
 					glBindTexture(GL_TEXTURE_2D, previous_frame);
 					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 					vglFree(scr_data);
-				}
-				init_interactive_msg_dialog("This homebrew also has data files. Do you wish to install them as well?");
-				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-					vglSwapBuffers(GL_TRUE);
-				}
-				glMatrixMode(GL_PROJECTION);
-				glLoadIdentity();
-				glOrthof(0, 960, 544, 0, 0, 1);
-				glMatrixMode(GL_MODELVIEW);
-				glLoadIdentity();
-				float vtx[4 * 2] = {
-					  0, 544,
-					960, 544,
-					  0,   0,
-					960,   0
-				};
-				float txcoord[4 * 2] = {
-					  0,   0,
-					  1,   0,
-					  0,   1,
-					  1,   1
-				};
-				// Workaround to prevent message dialog "burn in" on background
-				for (int i = 0; i < 15; i++) {
-					glEnableClientState(GL_VERTEX_ARRAY);
-					glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-					glVertexPointer(2, GL_FLOAT, 0, vtx);
-					glTexCoordPointer(2, GL_FLOAT, 0, txcoord);
-					glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-					vglSwapBuffers(GL_FALSE);
-				}
-				SceMsgDialogResult msg_res;
-				memset(&msg_res, 0, sizeof(SceMsgDialogResult));
-				sceMsgDialogGetResult(&msg_res);
-				sceMsgDialogTerm();
-				if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
-					// Check if enough storage is left for the install
-					char *dummy;
-					uint64_t sz = strtoull(to_download->size, &dummy, 10);
-					uint64_t sz2 = strtoull(to_download->data_size, &dummy, 10);
-					if (free_space < (sz + sz2) * 2) {
-						init_msg_dialog("Not enough free storage to install this application. Installation aborted.");
-						while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-							vglSwapBuffers(GL_TRUE);
-						}
-						to_download = nullptr;
-						sceMsgDialogTerm();
-						continue;
-					}
-					download_file(to_download->data_link, "Downloading data files");
-					extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/", false);
-					sceIoRemove(TEMP_DOWNLOAD_NAME);
-				}
-			}
-			// Check if enough storage is left for the install
-			char *dummy;
-			uint64_t sz = strtoull(to_download->size, &dummy, 10);
-			if (free_space < sz * 2) {
-				init_msg_dialog("Not enough free storage to install this application. Installation aborted.");
-				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-					vglSwapBuffers(GL_TRUE);
-				}
-				sceMsgDialogTerm();
-				to_download = nullptr;
-				continue;
-			}
-			sprintf(download_link, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", to_download->id);
-			download_file(download_link, "Downloading vpk");
-			if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
-				extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
-				sceIoRemove(TEMP_DOWNLOAD_NAME);
-				sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
-			} else {
-				sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
-				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false);
-				sceIoRemove(TEMP_DOWNLOAD_NAME);
-				FILE *f = fopen("ux0:data/VitaDB/vpk/hash.vdb", "w");
-				fwrite(to_download->hash, 1, 32, f);
-				fclose(f);
-				makeHeadBin("ux0:data/VitaDB/vpk");
-				scePromoterUtilInit();
-				scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
-				int state = 0;
-				do {
-					int ret = scePromoterUtilityGetState(&state);
-					if (ret < 0)
-						break;
-					DrawTextDialog("Installing the app", true, false);
-					vglSwapBuffers(GL_TRUE);
-				} while (state);
-				scePromoterUtilTerm();
-				if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0) {
-					init_msg_dialog("The installation process failed.");
+					init_msg_dialog("This homebrew has extra requirements in order to work properly:\n%s", to_download->requirements);
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 						vglSwapBuffers(GL_TRUE);
 					}
 					sceMsgDialogTerm();
-					recursive_rmdir("ux0:/data/VitaDB/vpk");
-				} else
-					to_download->state = APP_UPDATED;
-				to_download = nullptr;
+					glMatrixMode(GL_PROJECTION);
+					glLoadIdentity();
+					glOrthof(0, 960, 544, 0, 0, 1);
+					glMatrixMode(GL_MODELVIEW);
+					glLoadIdentity();
+					float vtx[4 * 2] = {
+						0, 544,
+						960, 544,
+						0,   0,
+						960,   0
+					};
+					float txcoord[4 * 2] = {
+						0,   0,
+						1,   0,
+						0,   1,
+						1,   1
+					};
+					// Workaround to prevent message dialog "burn in" on background
+					for (int i = 0; i < 15; i++) {
+						glEnableClientState(GL_VERTEX_ARRAY);
+						glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+						glVertexPointer(2, GL_FLOAT, 0, vtx);
+						glTexCoordPointer(2, GL_FLOAT, 0, txcoord);
+						glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+						vglSwapBuffers(GL_FALSE);
+					}
+				}
+				if (strlen(to_download->data_link) > 5) {
+					if (!to_download->requirements) {
+						uint8_t *scr_data = vglMalloc(960 * 544 * 4);
+						glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
+						if (!previous_frame)
+							glGenTextures(1, &previous_frame);
+						glBindTexture(GL_TEXTURE_2D, previous_frame);
+						glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
+						vglFree(scr_data);
+					}
+					init_interactive_msg_dialog("This homebrew also has data files. Do you wish to install them as well?");
+					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+						vglSwapBuffers(GL_TRUE);
+					}
+					glMatrixMode(GL_PROJECTION);
+					glLoadIdentity();
+					glOrthof(0, 960, 544, 0, 0, 1);
+					glMatrixMode(GL_MODELVIEW);
+					glLoadIdentity();
+					float vtx[4 * 2] = {
+						0, 544,
+						960, 544,
+						0,   0,
+						960,   0
+					};
+					float txcoord[4 * 2] = {
+						0,   0,
+						1,   0,
+						0,   1,
+						1,   1
+					};
+					// Workaround to prevent message dialog "burn in" on background
+					for (int i = 0; i < 15; i++) {
+						glEnableClientState(GL_VERTEX_ARRAY);
+						glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+						glVertexPointer(2, GL_FLOAT, 0, vtx);
+						glTexCoordPointer(2, GL_FLOAT, 0, txcoord);
+						glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+						vglSwapBuffers(GL_FALSE);
+					}
+					SceMsgDialogResult msg_res;
+					memset(&msg_res, 0, sizeof(SceMsgDialogResult));
+					sceMsgDialogGetResult(&msg_res);
+					sceMsgDialogTerm();
+					if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
+						// Check if enough storage is left for the install
+						char *dummy;
+						uint64_t sz = strtoull(to_download->size, &dummy, 10);
+						uint64_t sz2 = strtoull(to_download->data_size, &dummy, 10);
+						if (free_space < (sz + sz2) * 2) {
+							init_msg_dialog("Not enough free storage to install this application. Installation aborted.");
+							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+								vglSwapBuffers(GL_TRUE);
+							}
+							to_download = nullptr;
+							sceMsgDialogTerm();
+							continue;
+						}
+						download_file(to_download->data_link, "Downloading data files");
+						extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/", false);
+						sceIoRemove(TEMP_DOWNLOAD_NAME);
+					}
+				}
+				// Check if enough storage is left for the install
+				char *dummy;
+				uint64_t sz = strtoull(to_download->size, &dummy, 10);
+				if (free_space < sz * 2) {
+					init_msg_dialog("Not enough free storage to install this application. Installation aborted.");
+					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+						vglSwapBuffers(GL_TRUE);
+					}
+					sceMsgDialogTerm();
+					to_download = nullptr;
+					continue;
+				}
+				sprintf(download_link, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", to_download->id);
+				download_file(download_link, "Downloading vpk");
+				if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
+					extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
+					sceIoRemove(TEMP_DOWNLOAD_NAME);
+					sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
+				} else {
+					sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
+					extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false);
+					sceIoRemove(TEMP_DOWNLOAD_NAME);
+					FILE *f = fopen("ux0:data/VitaDB/vpk/hash.vdb", "w");
+					fwrite(to_download->hash, 1, 32, f);
+					fclose(f);
+					makeHeadBin("ux0:data/VitaDB/vpk");
+					scePromoterUtilInit();
+					scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
+					int state = 0;
+					do {
+						int ret = scePromoterUtilityGetState(&state);
+						if (ret < 0)
+							break;
+						DrawTextDialog("Installing the app", true, false);
+						vglSwapBuffers(GL_TRUE);
+					} while (state);
+					scePromoterUtilTerm();
+					if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0) {
+						init_msg_dialog("The installation process failed.");
+						while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+							vglSwapBuffers(GL_TRUE);
+						}
+						sceMsgDialogTerm();
+						recursive_rmdir("ux0:/data/VitaDB/vpk");
+					} else
+						to_download->state = APP_UPDATED;
+					to_download = nullptr;
+				}
 			}
 		}
 		
@@ -1291,25 +1676,54 @@ int main(int argc, char *argv[]) {
 			sceIoRemove("ux0:data/VitaDB/ss3.png");
 			old_ss_idx = -1;
 			cur_ss_idx = 0;
-			char *s = hovered->screenshots;
 			int shot_idx = 0;
-			for (;;) {
-				char *end = strstr(s, ";");
-				if (end) {
-					end[0] = 0;
-				}
-				sprintf(download_link, "https://vitadb.rinnegatamante.it/%s", s);				
+			if (themes_manager) {
+				ThemeSelection *node = (ThemeSelection *)hovered;
+				sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/raw/main/themes/%s/preview.png", node->name);				
 				download_file(download_link, "Downloading screenshot");
-				sprintf(download_link, "ux0:data/VitaDB/ss%d.png", shot_idx++);
-				sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
-				if (end) {
-					end[0] = ';';
-					s = end + 1;
-				} else {
-					break;
+				sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/ss0.png");
+			} else {
+				char *s = hovered->screenshots;
+				for (;;) {
+					char *end = strstr(s, ";");
+					if (end) {
+						end[0] = 0;
+					}
+					sprintf(download_link, "https://vitadb.rinnegatamante.it/%s", s);				
+					download_file(download_link, "Downloading screenshot");
+					sprintf(download_link, "ux0:data/VitaDB/ss%d.png", shot_idx++);
+					sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
+					if (end) {
+						end[0] = ';';
+						s = end + 1;
+					} else {
+						break;
+					}
 				}
 			}
 			show_screenshots = 2;
+		}
+		
+		// Queued theme to install
+		if (to_install) {
+			install_theme(to_install);
+			to_install = nullptr;
+		}
+		
+		// Queued themes database download
+		if (themes_manager == 1) {
+			themes_manager = 2;
+			
+			if (sceIoGetstat("ux0:/data/VitaDB/previews", &st1) < 0) {
+				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/previews.zip", "Downloading themes previews");
+				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/", true);
+			}
+			
+			if (themes == nullptr) {
+				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/themes.json", "Downloading themes list");
+				sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/themes.json");
+				AppendThemeDatabase("ux0:data/VitaDB/themes.json");
+			}
 		}
 	}
 	
