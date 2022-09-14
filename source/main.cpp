@@ -1544,9 +1544,12 @@ int main(int argc, char *argv[]) {
 			ImGui::TextColored(TextLabel, "Press Select to change themes mode");
 			ImGui::SetCursorPosY(470);
 			ImGui::Text("Current theme mode: %s", shuffle_themes ? "Shuffle" : "Single");
+			ImGui::SetCursorPosY(486);
+			ImGui::Text("Current sorting mode: %s", sort_modes_themes_str[sort_idx]);
+		} else {
+			ImGui::SetCursorPosY(486);
+			ImGui::Text("Current sorting mode: %s", sort_modes_str[sort_idx]);
 		}
-		ImGui::SetCursorPosY(486);
-		ImGui::Text("Current sorting mode: %s", sort_modes_str[sort_idx]);
 		ImGui::SetCursorPosY(502);
 		uint64_t total_space = get_total_storage();
 		uint64_t free_space = get_free_storage();
