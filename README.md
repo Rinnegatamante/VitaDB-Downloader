@@ -17,12 +17,33 @@ In order to run VitaDB Downloader, you need <b>libshacccg.suprx</b>. If you don'
 - Tracking of installed apps, even when not installed through VitaDB Downloader, and of their state (outdated/updated).
 - Background music (You can customize it by changing ux0:data/VitaDB/bg.ogg with your own preferred track).
 - Background image/video (You can customize it by changing ux0:data/VitaDB/bg.mp4 or ux0:data/VitaDB/bg.png).
-- Support for themes (Customization of GUI elements via ux0:data/VitaDB/themes.ini).
+- Support for themes (Customization of GUI elements via ux0:data/VitaDB/themes.ini) with built-in downloader and manager.
 
 ## Themes
 You can find some themes usable with this application on [this repository](https://github.com/CatoTheYounger97/vitaDB_themes).
+Those themes can also be accessed in the app itself by pressing L. While in Themes Manager mode, you can download themes by pressing X and install themes in two different ways (that can be interchanged by pressing Select):
+- Single = A downloaded theme will be installed as active one by pressing X
+- Shuffle = Pressing X will mark a theme, you can mark how many themes you want. Once you've finished, press again Select to install a set of themes for shuffling. This means that every time the app is launched, a random theme will be selected from the set and used as active one.
 
 ## Changelog
+
+### v.1.5
+- Fixed a bug causing potential crashes if you had a few specific apps installed with a very big eboot.bin file.
+- Fixed a bug causing more than a popup to not always show in certain circmustances.
+- Fixed a bug causing the first icon of an app being shown after a sort mode change, a search or a filter change to be wrong.
+- Fixed a bug causing cached hash files to be incorrectly generated when installing an app (Resulting in slower boot times).
+- Fixed a bug that prevented changelog parser to properly escape " char.
+- Made cleanup check for leftover unfinished app installs more robust.
+- Added app name and version on changelog viewer titlebar.
+- Properly aligned Filter text to Search text.
+- Added some padding between Filter and Sort mode.
+- Added possibility to customize font.
+- Added possibility to properly customize any leftover uncustomizable element of the GUI.
+- Moved missing icons download from everytime you hit an app lacking the icon to boot time (for all of them).
+- Made so that Sort mode can be cycled only with R.
+- Added themes downloader and manager with single theme and shuffling themes support (Reachable with L).
+- Moved from SoLoud to SDL2 Mixer as audio backend. (Way faster booting time for the background audio playback).
+- Fixed a bug causing a crash when opening the changelog viewer in certain circumstances.
 
 ### v.1.4
 - Added a check after installing an app wether the installation succeded or failed.
