@@ -101,6 +101,7 @@ struct ThemeSelection {
 static AppSelection *old_hovered = NULL;
 ThemeSelection *themes = nullptr;
 AppSelection *apps = nullptr;
+AppSelection *to_download = nullptr;
 
 char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 	char label[32];
@@ -203,8 +204,10 @@ void AppendAppDatabase(const char *file) {
 			ptr = extractValue(node->type, ptr, "type", nullptr);
 			ptr = extractValue(node->id, ptr, "id", nullptr);
 			if (!strncmp(node->id, "877", 3)) { // VitaDB Downloader, check if newer than running version
-				if (strncmp(&version[2], VERSION, 3))
+				if (strncmp(&version[2], VERSION, 3)) {
 					update_detected = true;
+					to_download = node;
+				}
 			}
 			ptr = extractValue(node->date, ptr, "date", nullptr);
 			ptr = extractValue(node->titleid, ptr, "titleid", nullptr);
@@ -1076,7 +1079,6 @@ int main(int argc, char *argv[]) {
 	
 	// Initializing vitaGL
 	AppSelection *hovered = nullptr;
-	AppSelection *to_download = nullptr;
 	vglInitExtended(0, 960, 544, 0x1800000, SCE_GXM_MULTISAMPLE_NONE);
 
 	// Apply theme shuffling
@@ -1783,6 +1785,9 @@ int main(int argc, char *argv[]) {
 				if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
 					extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
+					FILE *f = fopen("ux0:app/VITADBDLD/hash.vdb", "w");
+					fwrite(to_download->hash, 1, 32, f);
+					fclose(f);
 					sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
 				} else {
 					sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
@@ -1897,5 +1902,8 @@ int main(int argc, char *argv[]) {
 	download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=877", "Downloading update");
 	extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
 	sceIoRemove(TEMP_DOWNLOAD_NAME);
+	FILE *f = fopen("ux0:app/VITADBDLD/hash.vdb", "w");
+	fwrite(to_download->hash, 1, 32, f);
+	fclose(f);
 	sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
 }
