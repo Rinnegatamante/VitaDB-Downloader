@@ -798,6 +798,8 @@ ImVec4 TextUpdated = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
 ImVec4 TextNotInstalled = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 ImVec4 Shuffle = ImVec4(0.0f, 0.0f, 1.0f, 0.4f);
 ImVec4 ShuffleHovered = ImVec4(0.0f, 0.0f, 1.0f, 1.0f);
+ImVec4 TextShadow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+uint32_t TextShadowU32 = 0x00000000;
 
 #define READ_FIRST_VAL(x) if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
 #define READ_NEXT_VAL(x) else if (strcmp(#x, buffer) == 0) style.Colors[ImGuiCol_##x] = ImVec4(values[0], values[1], values[2], values[3]);
@@ -836,6 +838,7 @@ void set_gui_theme() {
 			READ_EXTRA_VAL(TextNotInstalled)
 			READ_EXTRA_VAL(Shuffle)
 			READ_EXTRA_VAL(ShuffleHovered)
+			READ_EXTRA_VAL(TextShadow)
 		}
 		fclose(f);
 	} else { // Save default theme
@@ -862,8 +865,15 @@ void set_gui_theme() {
 		WRITE_EXTRA_VAL(TextNotInstalled)
 		WRITE_EXTRA_VAL(Shuffle)
 		WRITE_EXTRA_VAL(ShuffleHovered)
+		WRITE_EXTRA_VAL(TextShadow)
 		fclose(f);
 	}
+	
+	TextShadowU32 = (uint32_t)(TextShadow.x * 255.0f) | (uint32_t)(TextShadow.y * 255.0f) << 8 | (uint32_t)(TextShadow.z * 255.0f) << 16 | (uint32_t)(TextShadow.w * 255.0f) << 24;
+	if (TextShadowU32)
+		ImGui::PushFontShadow(TextShadowU32);
+	else
+		ImGui::PopFontShadow();
 }
 
 void copy_file(const char *src, const char *dst) {
