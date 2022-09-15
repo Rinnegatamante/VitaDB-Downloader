@@ -29,10 +29,15 @@ jobs:
         run: |
           export VITASDK=/usr/local/vitasdk
           export PATH=$VITASDK/bin:$PATH
-          echo $PATH
           git clone https://github.com/Rinnegatamante/vitaGL.git
-          make -C vitaGL NO_DEBUG=1 PHYCONT_ON_DEMAND=1 -j$(nproc) clean
           make -C vitaGL NO_DEBUG=1 PHYCONT_ON_DEMAND=1 -j$(nproc) install
+          
+      - name: Recompile dear ImGui
+        run: |
+          export VITASDK=/usr/local/vitasdk
+          export PATH=$VITASDK/bin:$PATH
+          git clone https://github.com/Rinnegatamante/imgui-vita.git
+          make -C imgui-vita -j$(nproc) install
 
       - name: Build project
         run: |
