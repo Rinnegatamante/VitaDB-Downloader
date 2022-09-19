@@ -282,7 +282,9 @@ void AppendAppDatabase(const char *file) {
 		for (int i = 0; i < missing_icons_num; i++) {
 			sprintf(download_link, "https://rinnegatamante.it/vitadb/icons/%s", missing_icons[i]->icon);
 			download_file(download_link, "Downloading missing icons");
-			sprintf(download_link, "ux0:data/VitaDB/icons/%s", missing_icons[i]->icon);
+			sprintf(download_link, "ux0:data/VitaDB/icons/%c%c", missing_icons[i]->icon[0], missing_icons[i]->icon[1]);
+			sceIoMkdir(download_link, 0777);
+			sprintf(download_link, "ux0:data/VitaDB/icons/%c%c/%s", missing_icons[i]->icon[0], missing_icons[i]->icon[1], missing_icons[i]->icon);
 			sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
 			f = fopen("ux0:data/VitaDB/icons.db", "a");
 			fprintf(f, "%s\n", download_link);
@@ -381,7 +383,12 @@ void extract_file(char *file, char *dir, bool indexing) {
 	unzGoToFirstFile(zipfile);
 	for (int zip_idx = 0; zip_idx < num_files; ++zip_idx) {
 		unzGetCurrentFileInfo(zipfile, &file_info, fname, 512, NULL, 0, NULL, 0);
-		sprintf(ext_fname, "%s%s", dir, fname); 
+		if (indexing) {
+			sprintf(ext_fname, "%s%c%c", dir, fname[0], fname[1]);
+			sceIoMkdir(ext_fname, 0777);
+			sprintf(ext_fname, "%s%c%c/%s", dir, fname[0], fname[1], fname);
+		} else
+			sprintf(ext_fname, "%s/%s", dir, fname);
 		const size_t filename_length = strlen(ext_fname);
 		if (ext_fname[filename_length - 1] != '/') {
 			curr_file_bytes = 0;
@@ -422,7 +429,7 @@ void LoadPreview(AppSelection *game) {
 		ThemeSelection *g = (ThemeSelection *)game;
 		sprintf(banner_path, "ux0:data/VitaDB/previews/%s.png", g->name);
 	} else
-		sprintf(banner_path, "ux0:data/VitaDB/icons/%s", game->icon);
+		sprintf(banner_path, "ux0:data/VitaDB/icons/%c%c/%s", game->icon[0], game->icon[1], game->icon);
 	uint8_t *icon_data = stbi_load(banner_path, &preview_width, &preview_height, NULL, 4);
 	if (!preview_icon)
 		glGenTextures(1, &preview_icon);
@@ -1121,6 +1128,17 @@ int main(int argc, char *argv[]) {
 	
 	// Downloading icons
 	if ((sceIoGetstat("ux0:/data/VitaDB/icons.db", &st1) < 0) || (sceIoGetstat("ux0:data/VitaDB/icons", &st2) < 0)) {
+		download_file("https://vitadb.rinnegatamante.it/icons_zip.php", "Downloading apps icons");
+		sceIoMkdir("ux0:data/VitaDB/icons", 0777);
+		extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/icons/", true);
+		sceIoRemove(TEMP_DOWNLOAD_NAME);
+	} else if (sceIoGetstat("ux0:/data/VitaDB/icons/0b", &st1) < 0) {
+		// Checking if old icons system is being used and upgrade it
+		for (int i = 0; i < 3; i++) {
+			DrawTextDialog("Upgrading icons system, please wait...", true, false);
+		}
+		sceIoRemove("ux0:data/VitaDB/icons.db");
+		recursive_rmdir("ux0:data/VitaDB/icons");
 		download_file("https://vitadb.rinnegatamante.it/icons_zip.php", "Downloading apps icons");
 		sceIoMkdir("ux0:data/VitaDB/icons", 0777);
 		extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/icons/", true);
