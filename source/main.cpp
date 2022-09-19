@@ -366,6 +366,7 @@ void AppendThemeDatabase(const char *file) {
 static char fname[512], ext_fname[512], read_buffer[8192];
 
 void extract_file(char *file, char *dir, bool indexing) {
+	FILE *f;
 	unz_global_info global_info;
 	unz_file_info file_info;
 	unzFile zipfile = unzOpen(file);
@@ -381,6 +382,7 @@ void extract_file(char *file, char *dir, bool indexing) {
 		if ((zip_idx + 1) < num_files) unzGoToNextFile(zipfile);
 	}
 	unzGoToFirstFile(zipfile);
+	FILE *f2 = fopen("ux0:data/VitaDB/icons.db", "w");
 	for (int zip_idx = 0; zip_idx < num_files; ++zip_idx) {
 		unzGetCurrentFileInfo(zipfile, &file_info, fname, 512, NULL, 0, NULL, 0);
 		if (indexing) {
@@ -394,10 +396,9 @@ void extract_file(char *file, char *dir, bool indexing) {
 			curr_file_bytes = 0;
 			unzOpenCurrentFile(zipfile);
 			recursive_mkdir(ext_fname);
-			FILE *f = fopen("ux0:data/VitaDB/icons.db", "a");
-			fprintf(f, "%s\n", ext_fname);
-			fclose(f);
-			f = fopen(ext_fname, "wb");
+			if (indexing)
+				fprintf(f2, "%s\n", ext_fname);
+			FILE *f = fopen(ext_fname, "wb");
 			while (curr_file_bytes < file_info.uncompressed_size) {
 				int rbytes = unzReadCurrentFile(zipfile, read_buffer, 8192);
 				if (rbytes > 0) {
@@ -412,6 +413,7 @@ void extract_file(char *file, char *dir, bool indexing) {
 		}
 		if ((zip_idx + 1) < num_files) unzGoToNextFile(zipfile);
 	}
+	fclose(f2);
 	unzClose(zipfile);
 	ImGui::GetIO().MouseDrawCursor = false;
 }
@@ -1137,7 +1139,6 @@ int main(int argc, char *argv[]) {
 		for (int i = 0; i < 3; i++) {
 			DrawTextDialog("Upgrading icons system, please wait...", true, false);
 		}
-		sceIoRemove("ux0:data/VitaDB/icons.db");
 		recursive_rmdir("ux0:data/VitaDB/icons");
 		download_file("https://vitadb.rinnegatamante.it/icons_zip.php", "Downloading apps icons");
 		sceIoMkdir("ux0:data/VitaDB/icons", 0777);
