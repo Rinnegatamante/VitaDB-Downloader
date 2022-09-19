@@ -28,6 +28,7 @@ extern volatile uint64_t downloaded_bytes;
 extern volatile uint8_t downloader_pass;
 
 int appListThread(unsigned int args, void *arg);
+int appPspListThread(unsigned int args, void *arg);
 int downloadThread(unsigned int args, void *arg);
 
 void download_file(char *url, char *text);

@@ -103,6 +103,28 @@ int appListThread(unsigned int args, void *arg) {
 	return 0;
 }
 
+int appPspListThread(unsigned int args, void *arg) {
+	curl_handle = curl_easy_init();
+	downloader_pass = 1;
+	downloaded_bytes = 0;
+
+	SceIoStat stat;
+	sceIoGetstat("ux0:data/VitaDB/psp_apps.json", &stat);
+	total_bytes = stat.st_size;
+
+	startDownload("https://vitadb.rinnegatamante.it/list_psp_hbs_json.php");
+
+	if (downloaded_bytes > 12 * 1024) {
+		fh = fopen("ux0:data/VitaDB/psp_apps.json", "wb");
+		fwrite(generic_mem_buffer, 1, downloaded_bytes, fh);
+		fclose(fh);
+	}
+	downloaded_bytes = total_bytes;
+	curl_easy_cleanup(curl_handle);
+	sceKernelExitDeleteThread(0);
+	return 0;
+}
+
 int downloadThread(unsigned int args, void *arg) {
 	curl_handle = curl_easy_init();
 	//printf("downloading %s\n", generic_url);

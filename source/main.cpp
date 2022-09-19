@@ -45,8 +45,8 @@
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
 #define PREVIEW_PADDING_THEME 60
-#define PREVIEW_HEIGHT (themes_manager ? 159.0f : 128.0f)
-#define PREVIEW_WIDTH  (themes_manager ? 280.0f : 128.0f)
+#define PREVIEW_HEIGHT (themes_manager ? 159.0f : (mode_idx == MODE_VITA_HBS ? 128.0f : 80.0f))
+#define PREVIEW_WIDTH  (themes_manager ? 280.0f : (mode_idx == MODE_VITA_HBS ? 128.0f : 144.0f))
 
 int _newlib_heap_size_user = 200 * 1024 * 1024;
 int filter_idx = 0;
@@ -98,9 +98,23 @@ struct ThemeSelection {
 	ThemeSelection *next;
 };
 
+const char *modes[] = {
+	"Vita Homebrews",
+	"PSP Homebrews",
+	"Themes"
+};
+enum{
+	MODE_VITA_HBS,
+	MODE_PSP_HBS,
+	MODE_THEMES,
+	MODES_NUM
+};
+int mode_idx = 0;
+
 static AppSelection *old_hovered = NULL;
 ThemeSelection *themes = nullptr;
 AppSelection *apps = nullptr;
+AppSelection *psp_apps = nullptr;
 AppSelection *to_download = nullptr;
 
 char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
@@ -156,7 +170,7 @@ char *GetChangelog(const char *file, char *id) {
 }
 
 bool update_detected = false;
-void AppendAppDatabase(const char *file) {
+void AppendAppDatabase(const char *file, bool is_psp) {
 	// Read icons database
 	FILE *f = fopen("ux0:data/VitaDB/icons.db", "r");
 	//printf("f is %x\n", f);
@@ -172,7 +186,7 @@ void AppendAppDatabase(const char *file) {
 
 	// Burning on screen the parsing text dialog
 	for (int i = 0; i < 3; i++) {
-		DrawTextDialog("Parsing apps list", true, true);
+		DrawTextDialog("Parsing apps list", true, !is_psp);
 	}
 	f = fopen(file, "rb");
 	if (f) {
@@ -219,7 +233,10 @@ void AppendAppDatabase(const char *file) {
 			ptr = extractValue(node->data_size, ptr, "data_size", nullptr);
 			ptr = extractValue(node->hash, ptr, "hash", nullptr);
 			//printf("db hash %s\n", node->hash);
-			sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
+			if (is_psp)
+				sprintf(fname, "ux0:pspemu/PSP/GAME/%s/hash.vdb", node->id);
+			else
+				sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
 			FILE *f2  = fopen(fname, "r");
 			if (f2) {
 				//printf("found hash file\n");
@@ -273,8 +290,13 @@ void AppendAppDatabase(const char *file) {
 				node->requirements = unescape(node->requirements);
 			ptr = extractValue(node->data_link, ptr, "data", nullptr);
 			sprintf(node->name, "%s %s", name, version);
-			node->next = apps;
-			apps = node;
+			if (is_psp) {
+				node->next = psp_apps;
+				psp_apps = node;
+			} else {
+				node->next = apps;
+				apps = node;
+			}
 		} while (ptr);
 		free(buffer);
 		
@@ -382,7 +404,9 @@ void extract_file(char *file, char *dir, bool indexing) {
 		if ((zip_idx + 1) < num_files) unzGoToNextFile(zipfile);
 	}
 	unzGoToFirstFile(zipfile);
-	FILE *f2 = fopen("ux0:data/VitaDB/icons.db", "w");
+	FILE *f2;
+	if (indexing)
+		f2 = fopen("ux0:data/VitaDB/icons.db", "w");
 	for (int zip_idx = 0; zip_idx < num_files; ++zip_idx) {
 		unzGetCurrentFileInfo(zipfile, &file_info, fname, 512, NULL, 0, NULL, 0);
 		if (indexing) {
@@ -413,7 +437,8 @@ void extract_file(char *file, char *dir, bool indexing) {
 		}
 		if ((zip_idx + 1) < num_files) unzGoToNextFile(zipfile);
 	}
-	fclose(f2);
+	if (indexing)
+		fclose(f2);
 	unzClose(zipfile);
 	ImGui::GetIO().MouseDrawCursor = false;
 }
@@ -1060,6 +1085,9 @@ int main(int argc, char *argv[]) {
 	scePowerSetArmClockFrequency(444);
 	scePowerSetBusClockFrequency(222);
 	sceIoMkdir("ux0:data/VitaDB", 0777);
+	sceIoMkdir("ux0:pspemu", 0777);
+	sceIoMkdir("ux0:pspemu/PSP", 0777);
+	sceIoMkdir("ux0:pspemu/PSP/GAME", 0777);
 	
 	// Initializing SDL and SDL mixer
 	SDL_Init(SDL_INIT_AUDIO);
@@ -1154,18 +1182,18 @@ int main(int argc, char *argv[]) {
 		res = sceKernelGetThreadInfo(thd, &info);
 	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 	sceAppMgrUmount("app0:");
-	AppendAppDatabase("ux0:data/VitaDB/apps.json");
+	AppendAppDatabase("ux0:data/VitaDB/apps.json", false);
 	
 	//printf("start\n");
 	char *changelog = nullptr;
-	char ver_str[64];
+	char right_str[64];
 	bool show_changelog = false;
-	bool calculate_ver_len = true;
+	bool calculate_right_len = true;
 	bool go_to_top = false;
 	bool fast_increment = false;
 	bool fast_decrement = false;
 	bool is_app_hovered;
-	float ver_len = 0.0f;
+	float right_len = 0.0f;
 	float text_diff_len = 0.0f;
 	uint32_t oldpad;
 	int filtered_entries;
@@ -1179,7 +1207,7 @@ int main(int argc, char *argv[]) {
 			if (themes_manager)
 				sort_themelist(themes);
 			else
-				sort_applist(apps);
+				sort_applist(mode_idx == MODE_VITA_HBS ? apps : psp_apps);
 		}
 		
 		if (bg_image || has_animated_bg)
@@ -1190,18 +1218,18 @@ int main(int argc, char *argv[]) {
 		if (ImGui::BeginMainMenuBar()) {
 			char title[256];
 			if (themes_manager)
-				sprintf(title, "VitaDB Downloader - Currently listing %d themes with '%s' filter", filtered_entries, filter_themes_modes[filter_idx]);
+				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d themes with '%s' filter", VERSION, filtered_entries, filter_themes_modes[filter_idx]);
 			else
-				sprintf(title, "VitaDB Downloader - Currently listing %d results with '%s' filter", filtered_entries, filter_modes[filter_idx]);
+				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d results with '%s' filter", VERSION, filtered_entries, filter_modes[filter_idx]);
 			ImGui::Text(title);
-			if (calculate_ver_len) {
-				calculate_ver_len = false;
-				sprintf(ver_str, "v.%s", VERSION);
-				ImVec2 ver_sizes = ImGui::CalcTextSize(ver_str);
-				ver_len = ver_sizes.x;
+			if (calculate_right_len) {
+				calculate_right_len = false;
+				sprintf(right_str, "%s", modes[mode_idx]);
+				ImVec2 right_sizes = ImGui::CalcTextSize(right_str);
+				right_len = right_sizes.x;
 			}
-			ImGui::SetCursorPosX(950 - ver_len);
-			ImGui::Text(ver_str); 
+			ImGui::SetCursorPosX(950 - right_len);
+			ImGui::TextColored(TextLabel, right_str); 
 			ImGui::EndMainMenuBar();
 		}
 		
@@ -1382,7 +1410,7 @@ int main(int argc, char *argv[]) {
 				g = g->next;
 			}
 		} else {
-			AppSelection *g = apps;
+			AppSelection *g = mode_idx == MODE_VITA_HBS ? apps : psp_apps;
 			filtered_entries = 0;
 			int increment_idx = 0;
 			is_app_hovered = false;
@@ -1503,13 +1531,34 @@ int main(int argc, char *argv[]) {
 				LoadPreview(hovered);
 				ImGui::SetCursorPos(ImVec2(preview_x + PREVIEW_PADDING, preview_y + PREVIEW_PADDING));
 				ImGui::Image((void*)preview_icon, ImVec2(preview_width, preview_height));
+				if (mode_idx == MODE_VITA_HBS) {
+					ImGui::SetCursorPosY(100);
+					ImGui::SetCursorPosX(140);
+				}
+				ImGui::TextColored(TextLabel, "Size:");
+				if (mode_idx == MODE_VITA_HBS) {
+					ImGui::SetCursorPosY(116);
+					ImGui::SetCursorPosX(140);
+				}
+				char size_str[64];
+				char *dummy;
+				uint64_t sz;
+				if (strlen(hovered->data_link) > 5) {
+					sz = strtoull(hovered->size, &dummy, 10);
+					uint64_t sz2 = strtoull(hovered->data_size, &dummy, 10);
+					sprintf(size_str, "%s: %.2f %s, Data: %.2f %s", mode_idx == MODE_VITA_HBS ? "VPK" : "App", format_size(sz), format_size_str(sz), format_size(sz2), format_size_str(sz2));
+				} else {
+					sz = strtoull(hovered->size, &dummy, 10);
+					sprintf(size_str, "%s: %.2f %s", mode_idx == MODE_VITA_HBS ? "VPK" : "App", format_size(sz), format_size_str(sz));
+				}
+				ImGui::Text(size_str);
 				ImGui::TextColored(TextLabel, "Description:");
 				ImGui::TextWrapped(hovered->desc);
 				ImGui::SetCursorPosY(6);
-				ImGui::SetCursorPosX(140);
+				ImGui::SetCursorPosX(mode_idx == MODE_VITA_HBS ? 140 : 156);
 				ImGui::TextColored(TextLabel, "Last Update:");
 				ImGui::SetCursorPosY(22);
-				ImGui::SetCursorPosX(140);
+				ImGui::SetCursorPosX(mode_idx == MODE_VITA_HBS ? 140 : 156);
 				ImGui::Text(hovered->date);
 				ImGui::SetCursorPosY(6);
 				ImGui::SetCursorPosX(330);
@@ -1518,10 +1567,10 @@ int main(int argc, char *argv[]) {
 				ImGui::SetCursorPosX(330);
 				ImGui::Text(hovered->downloads);
 				ImGui::SetCursorPosY(38);
-				ImGui::SetCursorPosX(140);
+				ImGui::SetCursorPosX(mode_idx == MODE_VITA_HBS ? 140 : 156);
 				ImGui::TextColored(TextLabel, "Category:");
 				ImGui::SetCursorPosY(54);
-				ImGui::SetCursorPosX(140);
+				ImGui::SetCursorPosX(mode_idx == MODE_VITA_HBS ? 140 : 156);
 				switch (hovered->type[0]) {
 				case '1':
 					ImGui::Text("Original Game");
@@ -1540,28 +1589,11 @@ int main(int argc, char *argv[]) {
 					break;
 				}
 				ImGui::SetCursorPosY(70);
-				ImGui::SetCursorPosX(140);
+				ImGui::SetCursorPosX(mode_idx == MODE_VITA_HBS ? 140 : 156);
 				ImGui::TextColored(TextLabel, "Author:");
 				ImGui::SetCursorPosY(86);
-				ImGui::SetCursorPosX(140);
+				ImGui::SetCursorPosX(mode_idx == MODE_VITA_HBS ? 140 : 156);
 				ImGui::Text(hovered->author);
-				ImGui::SetCursorPosY(100);
-				ImGui::SetCursorPosX(140);
-				ImGui::TextColored(TextLabel, "Size:");
-				ImGui::SetCursorPosY(116);
-				ImGui::SetCursorPosX(140);
-				char size_str[64];
-				char *dummy;
-				uint64_t sz;
-				if (strlen(hovered->data_link) > 5) {
-					sz = strtoull(hovered->size, &dummy, 10);
-					uint64_t sz2 = strtoull(hovered->data_size, &dummy, 10);
-					sprintf(size_str, "VPK: %.2f %s, Data: %.2f %s", format_size(sz), format_size_str(sz), format_size(sz2), format_size_str(sz2));
-				} else {
-					sz = strtoull(hovered->size, &dummy, 10);
-					sprintf(size_str, "VPK: %.2f %s", format_size(sz), format_size_str(sz));
-				}
-				ImGui::Text(size_str);
 				ImGui::SetCursorPosY(454);
 				if (strlen(hovered->screenshots) > 5) {
 					ImGui::TextColored(TextLabel, "Press Start to view screenshots");
@@ -1615,10 +1647,12 @@ int main(int argc, char *argv[]) {
 		SceCtrlData pad;
 		sceCtrlPeekBufferPositive(0, &pad, 1);
 		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !show_screenshots && !show_changelog) {
+			calculate_right_len = true;
 			old_sort_idx = -1;
 			sort_idx = 0;
 			filter_idx = 0;
-			themes_manager = themes_manager ? 0 : 1;
+			mode_idx = (mode_idx + 1) % MODES_NUM;
+			themes_manager = mode_idx == MODE_THEMES ? 1 : 0;
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_screenshots && !show_changelog) {
 			if (themes_manager)
@@ -1793,7 +1827,7 @@ int main(int argc, char *argv[]) {
 							continue;
 						}
 						download_file(to_download->data_link, "Downloading data files");
-						extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/", false);
+						extract_file(TEMP_DOWNLOAD_NAME, mode_idx == MODE_VITA_HBS ? "ux0:data/" : "ux0:pspemu/", false);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 					}
 				}
@@ -1810,7 +1844,7 @@ int main(int argc, char *argv[]) {
 					continue;
 				}
 				sprintf(download_link, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", to_download->id);
-				download_file(download_link, "Downloading vpk");
+				download_file(download_link, mode_idx == MODE_VITA_HBS ? "Downloading vpk" : "Downloading app");
 				if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
 					extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -1819,31 +1853,45 @@ int main(int argc, char *argv[]) {
 					fclose(f);
 					sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
 				} else {
-					sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
-					extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false);
-					sceIoRemove(TEMP_DOWNLOAD_NAME);
-					FILE *f = fopen("ux0:data/VitaDB/vpk/hash.vdb", "w");
+					FILE *f;
+					char tmp_path[256];
+					if (mode_idx == MODE_VITA_HBS) {
+						sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
+						extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false);
+						sceIoRemove(TEMP_DOWNLOAD_NAME);
+						f = fopen("ux0:data/VitaDB/vpk/hash.vdb", "w");
+					} else {
+						sprintf(tmp_path, "ux0:pspemu/PSP/GAME/%s/", to_download->id);
+						sceIoMkdir(tmp_path, 0777);
+						extract_file(TEMP_DOWNLOAD_NAME, tmp_path, false);
+						sceIoRemove(TEMP_DOWNLOAD_NAME);
+						sprintf(tmp_path, "ux0:pspemu/PSP/GAME/%s/hash.vdb", to_download->id);
+						f = fopen(tmp_path, "w");
+					}
 					fwrite(to_download->hash, 1, 32, f);
 					fclose(f);
-					makeHeadBin("ux0:data/VitaDB/vpk");
-					scePromoterUtilInit();
-					scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
-					int state = 0;
-					do {
-						int ret = scePromoterUtilityGetState(&state);
-						if (ret < 0)
-							break;
-						DrawTextDialog("Installing the app", true, false);
-						vglSwapBuffers(GL_TRUE);
-					} while (state);
-					scePromoterUtilTerm();
-					if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0) {
-						init_msg_dialog("The installation process failed.");
-						while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+					if (mode_idx == MODE_VITA_HBS) {
+						makeHeadBin("ux0:data/VitaDB/vpk");
+						scePromoterUtilInit();
+						scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
+						int state = 0;
+						do {
+							int ret = scePromoterUtilityGetState(&state);
+							if (ret < 0)
+								break;
+							DrawTextDialog("Installing the app", true, false);
 							vglSwapBuffers(GL_TRUE);
-						}
-						sceMsgDialogTerm();
-						recursive_rmdir("ux0:/data/VitaDB/vpk");
+						} while (state);
+						scePromoterUtilTerm();
+						if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0) {
+							init_msg_dialog("The installation process failed.");
+							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+								vglSwapBuffers(GL_TRUE);
+							}
+							sceMsgDialogTerm();
+							recursive_rmdir("ux0:/data/VitaDB/vpk");
+						} else
+							to_download->state = APP_UPDATED;
 					} else
 						to_download->state = APP_UPDATED;
 					to_download = nullptr;
@@ -1924,6 +1972,17 @@ int main(int argc, char *argv[]) {
 				sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/themes.json");
 				AppendThemeDatabase("ux0:data/VitaDB/themes.json");
 			}
+		}
+		
+		// PSP database update required
+		if (mode_idx == MODE_PSP_HBS && !psp_apps) {
+			SceUID thd = sceKernelCreateThread("Apps List Downloader", &appPspListThread, 0x10000100, 0x100000, 0, 0, NULL);
+			sceKernelStartThread(thd, 0, NULL);
+			do {
+				DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading PSP apps list", 1, true);
+				res = sceKernelGetThreadInfo(thd, &info);
+			} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
+			AppendAppDatabase("ux0:data/VitaDB/psp_apps.json", true);
 		}
 	}
 	
