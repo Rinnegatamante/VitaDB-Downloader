@@ -45,14 +45,13 @@
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
 #define PREVIEW_PADDING_THEME 60
-#define PREVIEW_HEIGHT (themes_manager ? 159.0f : (mode_idx == MODE_VITA_HBS ? 128.0f : 80.0f))
-#define PREVIEW_WIDTH  (themes_manager ? 280.0f : (mode_idx == MODE_VITA_HBS ? 128.0f : 144.0f))
+#define PREVIEW_HEIGHT (mode_idx == MODE_THEMES ? 159.0f : (mode_idx == MODE_VITA_HBS ? 128.0f : 80.0f))
+#define PREVIEW_WIDTH  (mode_idx == MODE_THEMES ? 280.0f : (mode_idx == MODE_VITA_HBS ? 128.0f : 144.0f))
 
 int _newlib_heap_size_user = 200 * 1024 * 1024;
 int filter_idx = 0;
 int cur_ss_idx;
 int old_ss_idx = -1;
-int themes_manager = 0;
 static char download_link[512];
 char app_name_filter[128] = {0};
 SceUID audio_thd = -1;
@@ -452,7 +451,7 @@ void LoadPreview(AppSelection *game) {
 	old_hovered = game;
 	
 	char banner_path[256];
-	if (themes_manager) {
+	if (mode_idx == MODE_THEMES) {
 		ThemeSelection *g = (ThemeSelection *)game;
 		sprintf(banner_path, "ux0:data/VitaDB/previews/%s.png", g->name);
 	} else
@@ -1204,7 +1203,7 @@ int main(int argc, char *argv[]) {
 	while (!update_detected) {
 		if (old_sort_idx != sort_idx) {
 			old_sort_idx = sort_idx;
-			if (themes_manager)
+			if (mode_idx == MODE_THEMES)
 				sort_themelist(themes);
 			else
 				sort_applist(mode_idx == MODE_VITA_HBS ? apps : psp_apps);
@@ -1217,7 +1216,7 @@ int main(int argc, char *argv[]) {
 		
 		if (ImGui::BeginMainMenuBar()) {
 			char title[256];
-			if (themes_manager)
+			if (mode_idx == MODE_THEMES)
 				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d themes with '%s' filter", VERSION, filtered_entries, filter_themes_modes[filter_idx]);
 			else
 				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d results with '%s' filter", VERSION, filtered_entries, filter_modes[filter_idx]);
@@ -1265,7 +1264,7 @@ int main(int argc, char *argv[]) {
 		ImGui::Text("Filter: ");
 		ImGui::SameLine();
 		ImGui::PushItemWidth(190.0f);
-		if (themes_manager) {
+		if (mode_idx == MODE_THEMES) {
 			if (ImGui::BeginCombo("##combo", filter_themes_modes[filter_idx])) {
 				for (int n = 0; n < sizeof(filter_themes_modes) / sizeof(*filter_themes_modes); n++) {
 					bool is_selected = filter_idx == n;
@@ -1301,7 +1300,7 @@ int main(int argc, char *argv[]) {
 		ImGui::Text("Sort Mode: ");
 		ImGui::SameLine();
 		ImGui::PushItemWidth(-1.0f);
-		if (themes_manager) {
+		if (mode_idx == MODE_THEMES) {
 			if (ImGui::BeginCombo("##combo2", sort_modes_themes_str[sort_idx])) {
 				for (int n = 0; n < sizeof(sort_modes_themes_str) / sizeof(*sort_modes_themes_str); n++) {
 					bool is_selected = sort_idx == n;
@@ -1331,7 +1330,7 @@ int main(int argc, char *argv[]) {
 		ImGui::PopItemWidth();
 		ImGui::Separator();
 		
-		if (themes_manager) {
+		if (mode_idx == MODE_THEMES) {
 			ThemeSelection *g = themes;
 			filtered_entries = 0;
 			int increment_idx = 0;
@@ -1491,7 +1490,7 @@ int main(int argc, char *argv[]) {
 		ImGui::SetNextWindowSize(ImVec2(407, 523), ImGuiSetCond_Always);
 		ImGui::Begin("Info Window", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
 		if (hovered) {
-			if (themes_manager) {
+			if (mode_idx == MODE_THEMES) {
 				LoadPreview(hovered);
 				ImGui::SetCursorPos(ImVec2(preview_x + PREVIEW_PADDING_THEME, preview_y + PREVIEW_PADDING));
 				ImGui::Image((void*)preview_icon, ImVec2(preview_width, preview_height));
@@ -1602,7 +1601,7 @@ int main(int argc, char *argv[]) {
 				ImGui::TextColored(TextLabel, "Press Select to view changelog");
 			}
 		}
-		if (themes_manager) {
+		if (mode_idx == MODE_THEMES) {
 			ImGui::SetCursorPosY(454);
 			ImGui::TextColored(TextLabel, "Press Select to change themes mode");
 			ImGui::SetCursorPosY(470);
@@ -1652,18 +1651,17 @@ int main(int argc, char *argv[]) {
 			sort_idx = 0;
 			filter_idx = 0;
 			mode_idx = (mode_idx + 1) % MODES_NUM;
-			themes_manager = mode_idx == MODE_THEMES ? 1 : 0;
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_screenshots && !show_changelog) {
-			if (themes_manager)
+			if (mode_idx == MODE_THEMES)
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_themes_str) / sizeof(sort_modes_themes_str[0]));
 			else
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_str) / sizeof(sort_modes_str[0]));
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || themes_manager) && !show_changelog) {
+		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES) && !show_changelog) {
 			show_screenshots = show_screenshots ? 0 : 1;
-		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && (hovered || themes_manager) && !show_screenshots) {
-			if (themes_manager) {
+		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && (hovered || mode_idx == MODE_THEMES) && !show_screenshots) {
+			if (mode_idx == MODE_THEMES) {
 				shuffle_themes = !shuffle_themes;
 				ThemeSelection *g = themes;
 				FILE *f = fopen("ux0:data/VitaDB/shuffle.cfg", "w");
@@ -1707,7 +1705,7 @@ int main(int argc, char *argv[]) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !show_screenshots && !show_changelog) {
-			if (themes_manager)
+			if (mode_idx == MODE_THEMES)
 				filter_idx = (filter_idx + 1) % (sizeof(filter_themes_modes) / sizeof(*filter_themes_modes));
 			else
 				filter_idx = (filter_idx + 1) % (sizeof(filter_modes) / sizeof(*filter_modes));
@@ -1717,7 +1715,7 @@ int main(int argc, char *argv[]) {
 		
 		// Queued app download
 		if (to_download) {
-			if (themes_manager) {
+			if (mode_idx == MODE_THEMES) {
 				ThemeSelection *node = (ThemeSelection *)to_download;
 				sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/blob/main/themes/%s/theme.zip?raw=true", node->name);
 				download_file(download_link, "Downloading theme");
@@ -1923,7 +1921,7 @@ int main(int argc, char *argv[]) {
 			old_ss_idx = -1;
 			cur_ss_idx = 0;
 			int shot_idx = 0;
-			if (themes_manager) {
+			if (mode_idx == MODE_THEMES) {
 				ThemeSelection *node = (ThemeSelection *)hovered;
 				sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/raw/main/themes/%s/preview.png", node->name);				
 				download_file(download_link, "Downloading screenshot");
@@ -1958,20 +1956,16 @@ int main(int argc, char *argv[]) {
 		}
 		
 		// Queued themes database download
-		if (themes_manager == 1) {
-			themes_manager = 2;
-			
+		if (mode_idx == MODE_THEMES && !themes) {
 			if (sceIoGetstat("ux0:/data/VitaDB/previews", &st1) < 0) {
 				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/previews.zip", "Downloading themes previews");
 				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/", false);
 			}
 			
-			if (themes == nullptr) {
-				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/themes.json", "Downloading themes list");
-				sceIoRemove("ux0:data/VitaDB/themes.json");
-				sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/themes.json");
-				AppendThemeDatabase("ux0:data/VitaDB/themes.json");
-			}
+			download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/themes.json", "Downloading themes list");
+			sceIoRemove("ux0:data/VitaDB/themes.json");
+			sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/themes.json");
+			AppendThemeDatabase("ux0:data/VitaDB/themes.json");
 		}
 		
 		// PSP database update required
