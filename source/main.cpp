@@ -78,6 +78,7 @@ struct AppSelection {
 	char size[16];
 	char data_size[16];
 	char hash[34];
+	char aux_hash[34];
 	char *requirements;
 	char data_link[128];
 	int state;
@@ -168,6 +169,93 @@ char *GetChangelog(const char *file, char *id) {
 	return res;
 }
 
+char *aux_main_files[] = {
+	"Media/sharedassets0.assets.resS", // Unity
+	"games/game.win", // GameMaker Studio
+	"index.lua", // LuaPlayer Plus Vita
+	"game.apk", // YoYo Loader
+	"game_data/game.pck" // Godot
+};
+
+enum {
+	VITA_EXECUTABLE,
+	PSP_EXECUTABLE,
+	AUXILIARY_FILE
+};
+
+bool checksum_match(char *hash_fname, char *fname, AppSelection *node, uint8_t type) {
+	char cur_hash[40], aux_fname[256];
+	FILE *f2 = fopen(hash_fname, "r");
+	if (f2) {
+		fread(cur_hash, 1, 32, f2);
+		cur_hash[32] = 0;
+		fclose(f2);
+		if (strncmp(cur_hash, type != AUXILIARY_FILE ? node->hash : node->aux_hash, 32))
+			node->state = APP_OUTDATED;
+		else
+			node->state = APP_UPDATED;
+		return true;
+	} else {
+		if (type != AUXILIARY_FILE)
+			f2 = fopen(fname, "r");
+		else {
+			for (int i = 0; i < sizeof(aux_main_files) / sizeof(*aux_main_files); i++) {
+				sprintf(aux_fname, "ux0:app/%s/%s", node->titleid, aux_main_files[i]);
+				//printf("attempting with %s\n", aux_fname);
+				f2 = fopen(aux_fname, "r");
+				if (f2)
+					break;
+			}
+		}
+		if (f2) {
+			MD5Context ctx;
+			MD5Init(&ctx);
+			fseek(f2, 0, SEEK_END);
+			int file_size = ftell(f2);
+			fseek(f2, 0, SEEK_SET);
+			int read_size = 0;
+			while (read_size < file_size) {
+				int read_buf_size = (file_size - read_size) > MEM_BUFFER_SIZE ? MEM_BUFFER_SIZE : (file_size - read_size);
+				fread(generic_mem_buffer, 1, read_buf_size, f2);
+				read_size += read_buf_size;
+				MD5Update(&ctx, generic_mem_buffer, read_buf_size);
+			}
+			fclose(f2);
+			//printf("closing file to hash\n");
+			unsigned char md5_buf[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+			MD5Final(md5_buf, &ctx);
+			sprintf(cur_hash, "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
+				md5_buf[0], md5_buf[1], md5_buf[2], md5_buf[3], md5_buf[4], md5_buf[5], md5_buf[6], md5_buf[7], md5_buf[8],
+				md5_buf[9], md5_buf[10], md5_buf[11], md5_buf[12], md5_buf[13], md5_buf[14], md5_buf[15]);
+			//printf("local hash %s\n", cur_hash);
+			if (strncmp(cur_hash, type != AUXILIARY_FILE ? node->hash : node->aux_hash, 32))
+				node->state = APP_OUTDATED;
+			else
+				node->state = APP_UPDATED;
+			switch (type) {
+			case VITA_EXECUTABLE:
+				sprintf(aux_fname, "ux0:app/%s/hash.vdb", node->titleid);
+				break;
+			case PSP_EXECUTABLE:
+				sprintf(aux_fname, "ux0:pspemu/PSP/GAME/%s/hash.vdb", node->id);
+				break;
+			case AUXILIARY_FILE:
+				sprintf(aux_fname, "ux0:app/%s/aux_hash.vdb", node->titleid);
+				break;
+			default:
+				printf("Fatal Error!!!!\n");
+				break;
+			}
+			f2 = fopen(aux_fname, "w");
+			fwrite(cur_hash, 1, 32, f2);
+			fclose(f2);
+			return true;
+		} else
+			node->state = APP_UNTRACKED;
+		return false;
+	}
+}
+
 bool update_detected = false;
 void AppendAppDatabase(const char *file, bool is_psp) {
 	// Read icons database
@@ -199,7 +287,7 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 		char *ptr = buffer;
 		char *end, *end2;
 		do {
-			char name[128], version[64], fname[128], cur_hash[40];
+			char name[128], version[64], fname[128], fname2[128];
 			ptr = extractValue(name, ptr, "name", nullptr);
 			//printf("parsing %s\n", name);
 			if (!ptr)
@@ -231,57 +319,24 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 			ptr = extractValue(node->size, ptr, "size", nullptr);
 			ptr = extractValue(node->data_size, ptr, "data_size", nullptr);
 			ptr = extractValue(node->hash, ptr, "hash", nullptr);
-			//printf("db hash %s\n", node->hash);
-			if (is_psp)
+			printf("db hash %s\n", node->hash);
+			if (is_psp) {
 				sprintf(fname, "ux0:pspemu/PSP/GAME/%s/hash.vdb", node->id);
-			else
-				sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
-			FILE *f2  = fopen(fname, "r");
-			if (f2) {
-				//printf("found hash file\n");
-				fread(cur_hash, 1, 32, f2);
-				cur_hash[32] = 0;
-				fclose(f2);
-				//printf("local hash %s\n", cur_hash);
-				if (strncmp(cur_hash, node->hash, 32))
-					node->state = APP_OUTDATED;
-				else
-					node->state = APP_UPDATED;
+				sprintf(fname2, "ux0:pspemu/PSP/GAME/%s/EBOOT.PBP", node->id);
 			} else {
-				//printf("hash file not found, calculating md5\n");
-				sprintf(fname, "ux0:app/%s/eboot.bin", node->titleid);
-				f2 = fopen(fname, "r");
-				if (f2) {
-					//printf("eboot.bin found, starting md5sum\n");
-					MD5Context ctx;
-					MD5Init(&ctx);
-					fseek(f2, 0, SEEK_END);
-					int file_size = ftell(f2);
-					fseek(f2, 0, SEEK_SET);
-					int read_size = 0;
-					while (read_size < file_size) {
-						int read_buf_size = (file_size - read_size) > MEM_BUFFER_SIZE ? MEM_BUFFER_SIZE : (file_size - read_size);
-						fread(generic_mem_buffer, 1, read_buf_size, f2);
-						read_size += read_buf_size;
-						MD5Update(&ctx, generic_mem_buffer, read_buf_size);
+				ptr = extractValue(node->aux_hash, ptr, "hash2", nullptr);
+				printf("aux db hash %s\n", node->aux_hash);
+				sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
+				sprintf(fname2, "ux0:app/%s/eboot.bin", node->titleid);
+			}
+			if (checksum_match(fname, fname2, node, is_psp ? PSP_EXECUTABLE : VITA_EXECUTABLE)) {
+				if (!is_psp && strlen(node->aux_hash) > 0) {
+					sprintf(fname, "ux0:app/%s/aux_hash.vdb", node->titleid);
+					for (int i = 0; i < sizeof(aux_main_files) / sizeof(*aux_main_files); i++) {
+						if (checksum_match(fname, NULL, node, AUXILIARY_FILE))
+							break;
 					}
-					fclose(f2);
-					unsigned char md5_buf[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-					MD5Final(md5_buf, &ctx);
-					sprintf(cur_hash, "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
-						md5_buf[0], md5_buf[1], md5_buf[2], md5_buf[3], md5_buf[4], md5_buf[5], md5_buf[6], md5_buf[7], md5_buf[8],
-						md5_buf[9], md5_buf[10], md5_buf[11], md5_buf[12], md5_buf[13], md5_buf[14], md5_buf[15]);
-					//printf("local hash %s\n", cur_hash);
-					if (strncmp(cur_hash, node->hash, 32))
-						node->state = APP_OUTDATED;
-					else
-						node->state = APP_UPDATED;
-					sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
-					f2 = fopen(fname, "w");
-					fwrite(cur_hash, 1, 32, f2);
-					fclose(f2);
-				} else
-					node->state = APP_UNTRACKED;
+				}
 			}
 			//printf("hash part done\n");
 			ptr = extractValue(node->requirements, ptr, "requirements", &node->requirements);
@@ -1857,6 +1912,11 @@ int main(int argc, char *argv[]) {
 						sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
 						extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
+						if (strlen(to_download->aux_hash) > 0) {
+							f = fopen("ux0:data/VitaDB/vpk/aux_hash.vdb", "w");
+							fwrite(to_download->aux_hash, 1, 32, f);
+							fclose(f);
+						}
 						f = fopen("ux0:data/VitaDB/vpk/hash.vdb", "w");
 					} else {
 						sprintf(tmp_path, "ux0:pspemu/PSP/GAME/%s/", to_download->id);

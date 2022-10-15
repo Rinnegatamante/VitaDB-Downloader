@@ -91,6 +91,6 @@ Those themes can also be accessed in the app itself by pressing L. While in Them
 
 ## Credits
 - noname120 for the code related to head.bin generation.
-- CatoTheYounger for testing the homebrew.
+- CatoTheYounger and Brandonheat8 for testing the homebrew.
 - Once13One for the Livearea assets.
 - [phloam](https://www.youtube.com/channel/UCO-COkqKBV1KeBifq0HMK0g) for the audio track used as base for the background music feature.
