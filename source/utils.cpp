@@ -23,6 +23,9 @@
 #include <stdio.h>
 #include <string>
 #include <vitasdk.h>
+#include <vitaGL.h>
+#include <imgui_vita.h>
+#include <imgui_internal.h>
 
 static const char *sizes[] = {
 	"B",
@@ -138,4 +141,24 @@ char *unescape(char *src) {
 	res[i] = 0;
 	free(src);
 	return res;
+}
+
+#define CIRCLE_SEGMENTS_NUM 40
+namespace ImGui {
+void ImageRound(ImTextureID user_texture_id, const ImVec2 &size) {
+	ImGuiWindow *window = ImGui::GetCurrentWindow();
+	ImRect bb(window->DC.CursorPos, ImVec2(window->DC.CursorPos.x + size.x, window->DC.CursorPos.y + size.y));
+	ImGui::ItemSize(bb);
+	if (!ImGui::ItemAdd(bb, 0))
+		return;
+	
+	window->DrawList->PushTextureID(user_texture_id);
+
+	int vert_start_idx = window->DrawList->VtxBuffer.Size;
+	window->DrawList->AddCircleFilled(ImVec2(bb.Min.x + size.x / 2.f, bb.Min.y + size.y / 2.f), size.x / 2.f, 0xFFFFFFFF, CIRCLE_SEGMENTS_NUM);
+	int vert_end_idx = window->DrawList->VtxBuffer.Size;
+	ImGui::ShadeVertsLinearUV(window->DrawList->VtxBuffer.Data + vert_start_idx, window->DrawList->VtxBuffer.Data + vert_end_idx, bb.Min, bb.Max, ImVec2(0, 0), ImVec2(1, 1), true);
+
+	window->DrawList->PopTextureID();
+}
 }

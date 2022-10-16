@@ -30,4 +30,8 @@ uint64_t get_total_storage();
 
 char *unescape(char *src);
 
+namespace ImGui {
+void ImageRound(ImTextureID user_texture_id, const ImVec2 &size);
+}
+
 #endif

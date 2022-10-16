@@ -319,13 +319,13 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 			ptr = extractValue(node->size, ptr, "size", nullptr);
 			ptr = extractValue(node->data_size, ptr, "data_size", nullptr);
 			ptr = extractValue(node->hash, ptr, "hash", nullptr);
-			printf("db hash %s\n", node->hash);
+			//printf("db hash %s\n", node->hash);
 			if (is_psp) {
 				sprintf(fname, "ux0:pspemu/PSP/GAME/%s/hash.vdb", node->id);
 				sprintf(fname2, "ux0:pspemu/PSP/GAME/%s/EBOOT.PBP", node->id);
 			} else {
 				ptr = extractValue(node->aux_hash, ptr, "hash2", nullptr);
-				printf("aux db hash %s\n", node->aux_hash);
+				//printf("aux db hash %s\n", node->aux_hash);
 				sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
 				sprintf(fname2, "ux0:app/%s/eboot.bin", node->titleid);
 			}
@@ -1591,11 +1591,12 @@ int main(int argc, char *argv[]) {
 			} else {
 				LoadPreview(hovered);
 				ImGui::SetCursorPos(ImVec2(preview_x + PREVIEW_PADDING, preview_y + PREVIEW_PADDING));
-				ImGui::Image((void*)preview_icon, ImVec2(preview_width, preview_height));
 				if (mode_idx == MODE_VITA_HBS) {
+					ImGui::ImageRound((void*)preview_icon, ImVec2(preview_width, preview_height));
 					ImGui::SetCursorPosY(100);
 					ImGui::SetCursorPosX(140);
-				}
+				} else
+					ImGui::Image((void*)preview_icon, ImVec2(preview_width, preview_height));
 				ImGui::TextColored(TextLabel, "Size:");
 				if (mode_idx == MODE_VITA_HBS) {
 					ImGui::SetCursorPosY(116);
