@@ -36,7 +36,7 @@ static FILE *fh;
 char *bytes_string;
 
 static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *stream) {
-	if (total_bytes > MEM_BUFFER_SIZE) {
+	if (total_bytes > MEM_BUFFER_SIZE || fh) {
 		if (!fh)
 			fh = fopen(TEMP_DOWNLOAD_NAME, "wb");
 		fwrite(ptr, 1, nmemb, fh);
@@ -55,6 +55,10 @@ static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata
 	return nitems;
 }
 
+static size_t header_dummy_cb(char *buffer, size_t size, size_t nitems, void *userdata) {
+	return nitems;
+}
+
 static void startDownload(const char *url) {
 	curl_easy_reset(curl_handle);
 	curl_easy_setopt(curl_handle, CURLOPT_URL, url);
@@ -68,7 +72,7 @@ static void startDownload(const char *url) {
 	curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
 	curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_cb);
 	curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, bytes_string); // Dummy
-	curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, header_cb);
+	curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, downloaded_bytes ? header_dummy_cb : header_cb);
 	curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, bytes_string); // Dummy
 	curl_easy_setopt(curl_handle, CURLOPT_RESUME_FROM, downloaded_bytes);
 	curl_easy_setopt(curl_handle, CURLOPT_BUFFERSIZE, 524288);
@@ -146,6 +150,9 @@ int downloadThread(unsigned int args, void *arg) {
 	downloaded_bytes = 0;
 	total_bytes = 180; /* 20 KB */
 	startDownload(final_url);
+	while (downloaded_bytes < total_bytes) {
+		startDownload(final_url);
+	}
 	if (downloaded_bytes > 180 && total_bytes <= MEM_BUFFER_SIZE) {
 		fh = fopen(TEMP_DOWNLOAD_NAME, "wb");
 		fwrite(generic_mem_buffer, 1, downloaded_bytes, fh);
