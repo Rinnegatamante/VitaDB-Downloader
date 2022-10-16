@@ -1178,6 +1178,13 @@ int main(int argc, char *argv[]) {
 		sceNetInit(&initparam);
 	}
 	
+	// Checking for network connection
+	sceNetCtlInit();
+	sceNetCtlInetGetState(&ret);
+	if (ret != SCE_NETCTL_STATE_CONNECTED)
+		early_fatal_error("Error: You need an Internet connection to run this application.");
+	sceNetCtlTerm();
+	
 	// Initializing vitaGL
 	AppSelection *hovered = nullptr;
 	vglInitExtended(0, 960, 544, 0x1800000, SCE_GXM_MULTISAMPLE_NONE);

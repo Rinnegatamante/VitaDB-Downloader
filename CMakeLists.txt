@@ -70,6 +70,7 @@ target_link_libraries(VitaDB
   SceKernelDmacMgr_stub
   SceGxm_stub
   SceNet_stub
+  SceNetCtl_stub
   SceShaccCg_stub
   SceSysmodule_stub
   ScePower_stub
