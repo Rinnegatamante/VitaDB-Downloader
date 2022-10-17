@@ -89,6 +89,7 @@ int appListThread(unsigned int args, void *arg) {
 	curl_handle = curl_easy_init();
 	downloader_pass = 1;
 	downloaded_bytes = 0;
+	fh = NULL;
 
 	SceIoStat stat;
 	sceIoGetstat("ux0:data/VitaDB/apps.json", &stat);
@@ -111,6 +112,7 @@ int appPspListThread(unsigned int args, void *arg) {
 	curl_handle = curl_easy_init();
 	downloader_pass = 1;
 	downloaded_bytes = 0;
+	fh = NULL;
 
 	SceIoStat stat;
 	sceIoGetstat("ux0:data/VitaDB/psp_apps.json", &stat);

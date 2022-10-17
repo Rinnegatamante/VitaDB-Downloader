@@ -143,7 +143,7 @@ char *unescape(char *src) {
 	return res;
 }
 
-#define CIRCLE_SEGMENTS_NUM 40
+#define CIRCLE_SEGMENTS_NUM 30
 namespace ImGui {
 void ImageRound(ImTextureID user_texture_id, const ImVec2 &size) {
 	ImGuiWindow *window = ImGui::GetCurrentWindow();

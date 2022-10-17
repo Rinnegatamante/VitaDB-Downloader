@@ -40,7 +40,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#define VERSION "1.5"
+#define VERSION "1.6"
 
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
@@ -1199,7 +1199,7 @@ int main(int argc, char *argv[]) {
 	SceKernelThreadInfo info;
 	info.size = sizeof(SceKernelThreadInfo);
 	int res = 0;
-	ImGui_ImplVitaGL_Init();
+	ImGui_ImplVitaGL_Init_Extended();
 	if (sceIoGetstat("ux0:/data/VitaDB/font.ttf", &st1) >= 0)
 		ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/data/VitaDB/font.ttf", 16.0f);
 	else

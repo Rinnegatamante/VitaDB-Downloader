@@ -27,6 +27,19 @@ Those themes can also be accessed in the app itself by pressing L. While in Them
 
 ## Changelog
 
+### v.1.6
+- Fixed a bug causing VitaDB Downloader to be reported always as Outdated.
+- Added shadowing support for texts for themes (TextShadow).
+- Enhanced icons loading time. Now scrolling through apps will be considerably faster.
+- Fixed a bug causing potential filesystem issues due to how icons were stored internally on storage.
+- Fixed a bug that caused app bootup to take more time the more apps got downloaded from the app itself.
+- Added support for PSP homebrews download and installation (L will now cycle through Vita Homebrews, PSP Homebrews, Themes).
+- Moved version value to top left of the screen.
+- Added info about current mode (Vita Homebrews, PSP Homebrews, Themes) on the top right of the screen.
+- Improved version checking for installed homebrews made in Unity, Game Maker Studio, Godot or Lua. Now they will be correctly detected as Outdated if they are so.
+- Made so that Vita homebrews icons are rendered as rounded.
+- Made so that, if connection is lost during a download, the download will get resumed at the point where it stopped instead of failing the download.
+
 ### v.1.5
 - Fixed a bug causing potential crashes if you had a few specific apps installed with a very big eboot.bin file.
 - Fixed a bug causing more than a popup to not always show in certain circmustances.
