@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <string>
 #include <vitasdk.h>
+#include <vitaGL.h>
 #include "dialogs.h"
 #include "network.h"
 
@@ -150,7 +151,7 @@ int downloadThread(unsigned int args, void *arg) {
 	//printf("starting download of %s\n", final_url);
 	downloader_pass = 1;
 	downloaded_bytes = 0;
-	total_bytes = 180; /* 20 KB */
+	total_bytes = 180;
 	startDownload(final_url);
 	while (downloaded_bytes < total_bytes) {
 		startDownload(final_url);
@@ -176,4 +177,27 @@ void download_file(char *url, char *text) {
 		DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, text, 1, true);
 		res = sceKernelGetThreadInfo(thd, &info);
 	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
+}
+
+void early_download_file(char *url, char *text) {
+	SceKernelThreadInfo info;
+	info.size = sizeof(SceKernelThreadInfo);
+	int res = 0;
+	SceUID thd = sceKernelCreateThread("Generic Downloader", &downloadThread, 0x10000100, 0x100000, 0, 0, NULL);
+	sprintf(generic_url, url);
+	sceKernelStartThread(thd, 0, NULL);
+	init_progressbar_dialog(text);
+	do {
+		sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
+		sceMsgDialogProgressBarSetValue(SCE_MSG_DIALOG_PROGRESSBAR_TARGET_BAR_DEFAULT, (downloaded_bytes / total_bytes) * 100);
+		vglSwapBuffers(GL_TRUE);
+		res = sceKernelGetThreadInfo(thd, &info);
+	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
+	sceMsgDialogClose();
+	int status = sceMsgDialogGetStatus();
+	do {
+		vglSwapBuffers(GL_TRUE);
+		status = sceMsgDialogGetStatus();
+	} while (status != SCE_COMMON_DIALOG_STATUS_FINISHED);
+	sceMsgDialogTerm();
 }

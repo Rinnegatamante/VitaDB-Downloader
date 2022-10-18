@@ -26,6 +26,7 @@
 #include <vitaGL.h>
 #include <imgui_vita.h>
 #include <imgui_internal.h>
+#include "network.h"
 
 static const char *sizes[] = {
 	"B",
@@ -46,6 +47,15 @@ const char *format_size_str(uint64_t len) {
 		len = len / 1024;
 	}
 	return sizes[ret];
+}
+
+void copy_file(const char *src, const char *dst) {
+	FILE *fs = fopen(src, "r");
+	FILE *fd = fopen(dst, "w");
+	size_t fsize = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, fs);
+	fwrite(generic_mem_buffer, 1, fsize, fd);
+	fclose(fs);
+	fclose(fd);
 }
 
 void recursive_rmdir(const char *path) {

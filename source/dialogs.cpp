@@ -48,9 +48,26 @@ void early_fatal_error(const char *msg) {
 	sceKernelExitProcess(0);
 }
 
+void early_warning(const char *msg) {
+	vglInit(0);
+	SceMsgDialogUserMessageParam msg_param;
+	sceClibMemset(&msg_param, 0, sizeof(SceMsgDialogUserMessageParam));
+	msg_param.buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_OK;
+	msg_param.msg = (const SceChar8*)msg;
+	SceMsgDialogParam param;
+	sceMsgDialogParamInit(&param);
+	param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
+	param.userMsgParam = &msg_param;
+	sceMsgDialogInit(&param);
+	while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+		vglSwapBuffers(GL_TRUE);
+	}
+	sceMsgDialogTerm();
+}
+
 int init_interactive_msg_dialog(const char *msg) {
 	SceMsgDialogUserMessageParam msg_param;
-	memset(&msg_param, 0, sizeof(msg_param));
+	sceClibMemset(&msg_param, 0, sizeof(msg_param));
 	msg_param.buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_YESNO;
 	msg_param.msg = (SceChar8 *)msg;
 
@@ -72,7 +89,7 @@ int init_msg_dialog(const char *fmt, ...) {
 	va_end(list);
   
 	SceMsgDialogUserMessageParam msg_param;
-	memset(&msg_param, 0, sizeof(msg_param));
+	sceClibMemset(&msg_param, 0, sizeof(msg_param));
 	msg_param.buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_OK;
 	msg_param.msg = (SceChar8 *)msg;
 
@@ -82,6 +99,50 @@ int init_msg_dialog(const char *fmt, ...) {
 	param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
 	param.userMsgParam = &msg_param;
 
+	return sceMsgDialogInit(&param);
+}
+
+int init_warning(const char *fmt, ...) {
+	va_list list;
+	char msg[1024];
+
+	va_start(list, fmt);
+	vsnprintf(msg, sizeof(msg), fmt, list);
+	va_end(list);
+  
+	SceMsgDialogUserMessageParam msg_param;
+	sceClibMemset(&msg_param, 0, sizeof(msg_param));
+	msg_param.buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_NONE;
+	msg_param.msg = (SceChar8 *)msg;
+
+	SceMsgDialogParam param;
+	sceMsgDialogParamInit(&param);
+	_sceCommonDialogSetMagicNumber(&param.commonParam);
+	param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
+	param.userMsgParam = &msg_param;
+
+	return sceMsgDialogInit(&param);
+}
+
+int init_progressbar_dialog(const char *fmt, ...) {
+	vglInit(0);
+	va_list list;
+	char msg[1024];
+
+	va_start(list, fmt);
+	vsnprintf(msg, sizeof(msg), fmt, list);
+	va_end(list);
+
+	SceMsgDialogProgressBarParam msg_param;
+	sceClibMemset(&msg_param, 0, sizeof(msg_param));
+	msg_param.barType = SCE_MSG_DIALOG_PROGRESSBAR_TYPE_PERCENTAGE;
+	msg_param.msg = (const SceChar8*)msg;
+	
+	SceMsgDialogParam param;
+	sceMsgDialogParamInit(&param);
+	param.mode = SCE_MSG_DIALOG_MODE_PROGRESS_BAR;
+	param.progBarParam = &msg_param;
+	
 	return sceMsgDialogInit(&param);
 }
 
