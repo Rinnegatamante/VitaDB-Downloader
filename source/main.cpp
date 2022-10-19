@@ -1212,11 +1212,14 @@ int main(int argc, char *argv[]) {
 	sceNetCtlTerm();
 	
 	// Checking for libshacccg.suprx existence
+	bool use_ur0_config = false;
 	char user_plugin_str[96];
 	strcpy(user_plugin_str, "*SHARKF00D\nux0:data/vitadb.suprx\n*NPXS10031\nux0:data/vitadb.suprx\n");
 	FILE *fp = fopen("ux0:tai/config.txt", "r");
-	if (!fp)
+	if (!fp) {
 		fp = fopen("ur0:tai/config.txt", "r");
+		use_ur0_config = true;
+	}
 	int cfg_size = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, fp);
 	fclose(fp);
 	if (!strncmp(generic_mem_buffer, user_plugin_str, strlen(user_plugin_str))) {
@@ -1248,11 +1251,8 @@ int main(int argc, char *argv[]) {
 			scePromoterUtilTerm();
 			sceAppMgrLaunchAppByName(0x60000, "SHARKF00D", "");
 			sceKernelExitProcess(0);
-			sceClibPrintf("wtf this can't happen 2\n");
 		} else { // Step 3: Cleanup
-			fp = fopen("ux0:tai/config.txt", "w");
-			if (!fp)
-				fp = fopen("ur0:tai/config.txt", "w");
+			fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "w");
 			fwrite(&generic_mem_buffer[strlen(user_plugin_str)], 1, cfg_size - strlen(user_plugin_str), fp);
 			fclose(fp);
 			sceIoRemove("ux0:data/vitadb.skprx");
@@ -1271,14 +1271,7 @@ int main(int argc, char *argv[]) {
 		}
 	} else if (!(sceIoGetstat("ur0:/data/libshacccg.suprx", &st1) >= 0 || sceIoGetstat("ur0:/data/external/libshacccg.suprx", &st2) >= 0)) { // Step 1: Download PSM Runtime and install it
 		early_warning("Runtime shader compiler (libshacccg.suprx) is not installed. VitaDB Downloader will proceed with its extraction.");
-		fp = fopen("ux0:tai/config.txt", "r");
-		if (!fp)
-			fp = fopen("ur0:tai/config.txt", "r");
-		int cfg_size = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, fp);
-		fclose(fp);
-		fp = fopen("ux0:tai/config.txt", "w");
-		if (!fp)
-			fp = fopen("ur0:tai/config.txt", "w");
+		fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "w");
 		fwrite(user_plugin_str, 1, strlen(user_plugin_str), fp);
 		fwrite(generic_mem_buffer, 1, cfg_size, fp);
 		fclose(fp);
