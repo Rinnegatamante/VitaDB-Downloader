@@ -15,35 +15,36 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+ 
+#ifndef _ADRENALINE_H_
+#define _ADRENALINE_H_
 
-#ifndef _UTILS_H
-#define _UTILS_H
+#define ADRENALINE_CFG_MAGIC_1 0x31483943
+#define ADRENALINE_CFG_MAGIC_2 0x334F4E33
 
-enum{
-	MODE_VITA_HBS,
-	MODE_PSP_HBS,
-	MODE_THEMES,
-	MODES_NUM
+enum MemoryStickLocations {
+	MEMORY_STICK_LOCATION_UX0,
+	MEMORY_STICK_LOCATION_UR0,
+	MEMORY_STICK_LOCATION_IMC0,
+	MEMORY_STICK_LOCATION_XMC0,
+	MEMORY_STICK_LOCATION_UMA0,
 };
 
-extern char pspemu_dev[8];
-extern int mode_idx;
-
-float format_size(float len);
-const char *format_size_str(uint64_t len);
-
-void copy_file(const char *src, const char *dst);
-void recursive_rmdir(const char *path);
-void recursive_mkdir(char *dir);
-void populate_pspemu_path();
-
-uint64_t get_free_storage();
-uint64_t get_total_storage();
-
-char *unescape(char *src);
-
-namespace ImGui {
-void ImageRound(ImTextureID user_texture_id, const ImVec2 &size);
-}
+typedef struct {
+	int magic[2];
+	int graphics_filtering;
+	int no_smooth_graphics;
+	int flux_mode;
+	int screen_size;
+	int ms_location;
+	int use_ds3_ds4;
+	int screen_mode;
+	int skip_logo;
+	float psp_screen_scale_x;
+	float psp_screen_scale_y;
+	float ps1_screen_scale_x;
+	float ps1_screen_scale_y;
+	int usbdevice;
+} AdrenalineConfig;
 
 #endif

@@ -104,12 +104,6 @@ const char *modes[] = {
 	"PSP Homebrews",
 	"Themes"
 };
-enum{
-	MODE_VITA_HBS,
-	MODE_PSP_HBS,
-	MODE_THEMES,
-	MODES_NUM
-};
 int mode_idx = 0;
 
 static AppSelection *old_hovered = NULL;
@@ -238,7 +232,7 @@ bool checksum_match(char *hash_fname, char *fname, AppSelection *node, uint8_t t
 				sprintf(aux_fname, "ux0:app/%s/hash.vdb", node->titleid);
 				break;
 			case PSP_EXECUTABLE:
-				sprintf(aux_fname, "ux0:pspemu/PSP/GAME/%s/hash.vdb", node->id);
+				sprintf(aux_fname, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, node->id);
 				break;
 			case AUXILIARY_FILE:
 				sprintf(aux_fname, "ux0:app/%s/aux_hash.vdb", node->titleid);
@@ -322,8 +316,8 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 			ptr = extractValue(node->hash, ptr, "hash", nullptr);
 			//printf("db hash %s\n", node->hash);
 			if (is_psp) {
-				sprintf(fname, "ux0:pspemu/PSP/GAME/%s/hash.vdb", node->id);
-				sprintf(fname2, "ux0:pspemu/PSP/GAME/%s/EBOOT.PBP", node->id);
+				sprintf(fname, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, node->id);
+				sprintf(fname2, "%spspemu/PSP/GAME/%s/EBOOT.PBP", pspemu_dev, node->id);
 			} else {
 				ptr = extractValue(node->aux_hash, ptr, "hash2", nullptr);
 				//printf("aux db hash %s\n", node->aux_hash);
@@ -1362,7 +1356,8 @@ int main(int argc, char *argv[]) {
 	sceAppMgrUmount("app0:");
 	AppendAppDatabase("ux0:data/VitaDB/apps.json", false);
 	
-	//printf("start\n");
+	// Initializing remaining stuffs
+	populate_pspemu_path();
 	char *changelog = nullptr;
 	char right_str[64];
 	bool show_changelog = false;
@@ -2005,7 +2000,13 @@ int main(int argc, char *argv[]) {
 							continue;
 						}
 						download_file(to_download->data_link, "Downloading data files");
-						extract_file(TEMP_DOWNLOAD_NAME, mode_idx == MODE_VITA_HBS ? "ux0:data/" : "ux0:pspemu/", false);
+						if (mode_idx == MODE_VITA_HBS)
+							extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/", false);
+						else {
+							char tmp[16];
+							sprintf(tmp, "%spspemu/", pspemu_dev);
+							extract_file(TEMP_DOWNLOAD_NAME, tmp, false);
+						}
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 					}
 				}
@@ -2044,11 +2045,11 @@ int main(int argc, char *argv[]) {
 						}
 						f = fopen("ux0:data/VitaDB/vpk/hash.vdb", "w");
 					} else {
-						sprintf(tmp_path, "ux0:pspemu/PSP/GAME/%s/", to_download->id);
+						sprintf(tmp_path, "%spspemu/PSP/GAME/%s/", pspemu_dev, to_download->id);
 						sceIoMkdir(tmp_path, 0777);
 						extract_file(TEMP_DOWNLOAD_NAME, tmp_path, false);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
-						sprintf(tmp_path, "ux0:pspemu/PSP/GAME/%s/hash.vdb", to_download->id);
+						sprintf(tmp_path, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, to_download->id);
 						f = fopen(tmp_path, "w");
 					}
 					fwrite(to_download->hash, 1, 32, f);

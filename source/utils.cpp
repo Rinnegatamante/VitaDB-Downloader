@@ -26,7 +26,11 @@
 #include <vitaGL.h>
 #include <imgui_vita.h>
 #include <imgui_internal.h>
+#include "adrenaline.h"
 #include "network.h"
+#include "utils.h"
+
+char pspemu_dev[8];
 
 static const char *sizes[] = {
 	"B",
@@ -88,14 +92,44 @@ void recursive_mkdir(char *dir) {
 	}
 }
 
+void populate_pspemu_path() {
+	FILE *f = fopen("ux0:app/PSPEMUCFW/adrenaline.bin", "r");
+	if (f) {
+		AdrenalineConfig cfg;
+		fread(&cfg, 1, sizeof(AdrenalineConfig), f);
+		fclose(f);
+		if (cfg.magic[0] == ADRENALINE_CFG_MAGIC_1 && cfg.magic[1] == ADRENALINE_CFG_MAGIC_2) {
+			switch (cfg.ms_location) {
+			case MEMORY_STICK_LOCATION_UR0:
+				strcpy(pspemu_dev, "ur0:");
+				break;
+			case MEMORY_STICK_LOCATION_IMC0:
+				strcpy(pspemu_dev, "imc0:");
+				break;
+			case MEMORY_STICK_LOCATION_XMC0:
+				strcpy(pspemu_dev, "xmc0:");
+				break;
+			case MEMORY_STICK_LOCATION_UMA0:	
+				strcpy(pspemu_dev, "uma0:");
+				break;
+			default:
+				strcpy(pspemu_dev, "ux0:");
+				break;
+			}
+			return;
+		}
+	} 
+	strcpy(pspemu_dev, "ux0:");
+}
+
 uint64_t get_free_storage() {
 	uint64_t free_storage, dummy;
 	SceIoDevInfo info;
-	int res = sceIoDevctl("ux0:", 0x3001, NULL, 0, &info, sizeof(SceIoDevInfo));
+	int res = sceIoDevctl(mode_idx == MODE_PSP_HBS ? pspemu_dev : "ux0:", 0x3001, NULL, 0, &info, sizeof(SceIoDevInfo));
 	if (res >= 0)
 		free_storage = info.free_size;
 	else
-		sceAppMgrGetDevInfo("ux0:", &dummy, &free_storage);
+		sceAppMgrGetDevInfo(mode_idx == MODE_PSP_HBS ? pspemu_dev : "ux0:", &dummy, &free_storage);
 	
 	return free_storage;
 }
