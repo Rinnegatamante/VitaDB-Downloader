@@ -69,7 +69,7 @@ struct AppSelection {
 	char name[192];
 	char icon[128];
 	char author[128];
-	char type[2];
+	char type[4];
 	char id[8];
 	char date[12];
 	char titleid[10];
@@ -316,6 +316,10 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 			ptr = extractValue(node->hash, ptr, "hash", nullptr);
 			//printf("db hash %s\n", node->hash);
 			if (is_psp) {
+				int type_num;
+				sscanf(node->type, "%d", &type_num);
+				type_num -= 10;
+				sprintf(node->type, "%d", type_num);
 				sprintf(fname, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, node->id);
 				sprintf(fname2, "%spspemu/PSP/GAME/%s/EBOOT.PBP", pspemu_dev, node->id);
 			} else {
