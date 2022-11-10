@@ -35,7 +35,7 @@ add_executable(VitaDB
   source/md5.c
 )
 
-add_dependencies(VitaDB vitadb.skprx vitadb.suprx)
+add_dependencies(VitaDB vitadb.skprx vitadb.suprx vdb_daemon.suprx)
 
 target_link_libraries(VitaDB
   -Wl,--whole-archive pthread -Wl,--no-whole-archive
@@ -92,6 +92,10 @@ add_executable(vitadb_user
   user/main.c
 )
 
+add_executable(vitadb_daemon
+  daemon/main.c
+)
+
 target_link_libraries(vitadb_kernel
   k
   SceSysmemForDriver_stub
@@ -119,11 +123,32 @@ target_link_libraries(vitadb_user
   SceAppMgr_stub
 )
 
+target_link_libraries(vitadb_daemon
+  taihen_stub
+  SceLibKernel_stub_weak
+  k
+  gcc
+  taipool
+  SceKernelThreadMgr_stub
+  SceKernelModulemgr_stub
+  SceLibKernel_stub_weak
+  SceSysmodule_stub
+  SceNet_stub_weak
+  SceNetCtl_stub_weak
+  SceHttp_stub_weak
+  SceSsl_stub_weak
+  SceIofilemgr_stub
+  SceLibc_stub_weak
+  SceAppMgr_stub
+)
+
 set_target_properties(vitadb_kernel PROPERTIES LINK_FLAGS "-nostdlib")
 set_target_properties(vitadb_user PROPERTIES LINK_FLAGS "-nostdlib")
+set_target_properties(vitadb_daemon PROPERTIES LINK_FLAGS "-nostdlib")
 vita_create_self(eboot.bin VitaDB UNSAFE)
 vita_create_self(vitadb.skprx vitadb_kernel UNSAFE CONFIG ${CMAKE_SOURCE_DIR}/kernel/exports.yml)
 vita_create_self(vitadb.suprx vitadb_user UNSAFE CONFIG ${CMAKE_SOURCE_DIR}/user/exports.yml)
+vita_create_self(vdb_daemon.suprx vitadb_daemon UNSAFE CONFIG ${CMAKE_SOURCE_DIR}/daemon/exports.yml)
 vita_create_vpk(VitaDB.vpk ${VITA_TITLEID} eboot.bin
   VERSION ${VITA_VERSION}
   NAME ${VITA_APP_NAME}
@@ -133,5 +158,6 @@ vita_create_vpk(VitaDB.vpk ${VITA_TITLEID} eboot.bin
        ${CMAKE_SOURCE_DIR}/livearea/template.xml sce_sys/livearea/contents/template.xml
        ${CMAKE_BINARY_DIR}/vitadb.skprx vitadb.skprx
        ${CMAKE_BINARY_DIR}/vitadb.suprx vitadb.suprx
+	   ${CMAKE_BINARY_DIR}/vdb_daemon.suprx vdb_daemon.suprx
        ${CMAKE_SOURCE_DIR}/Roboto.ttf Roboto.ttf
 )

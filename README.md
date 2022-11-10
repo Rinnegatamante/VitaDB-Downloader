@@ -8,16 +8,18 @@ In order to run VitaDB Downloader, you need <b>libshacccg.suprx</b>. If you don'
 - Searching by author/homebrew name.
 - Filtering apps by category.
 - Viewing of all available screenshots for apps.
-- Sorting apps by different criteria (Most Recent, Oldest, Most Downloaded, Least Downloaded, Alphabetical)
+- Sorting apps by different criteria (Most Recent, Oldest, Most Downloaded, Least Downloaded, Alphabetical, etc...)
 - Showing of several metadata for apps.
 - Download and installation of vpk+data files or vpk only at user discretion. (No more need to redownload data files everytime you want to update an homebrew for which data files are unchanged)
-- Minimalistic GUI based on dear ImGui with focus on robustness over fancyness.
+- GUI based on dear ImGui, providing a very robust user experience without sacrificing on fancyness and with high customizability.
 - Fast boot time (Only the very first boot will take a bit more due to app icons download. Successive boots will be basically instant)
 - Low storage usage (Screenshots are served on demand, the only data that are kept on storage are app icons with a complessive storage usage lower than 10 MBs).
-- Tracking of installed apps, even when not installed through VitaDB Downloader, and of their state (outdated/updated).
+- Tracking of installed apps and of their state (outdated/updated) even when not installed through VitaDB Downloader.
 - Background music (You can customize it by changing ux0:data/VitaDB/bg.ogg with your own preferred track).
 - Background image/video (You can customize it by changing ux0:data/VitaDB/bg.mp4 or ux0:data/VitaDB/bg.png).
 - Support for themes (Customization of GUI elements via ux0:data/VitaDB/themes.ini) with built-in downloader and manager.
+- Support for PSP homebrews.
+- Daemon support for homebrews update check in background during normal console usage.
 
 ## Themes
 You can find some themes usable with this application on [this repository](https://github.com/CatoTheYounger97/vitaDB_themes).
@@ -26,6 +28,12 @@ Those themes can also be accessed in the app itself by pressing L. While in Them
 - Shuffle = Pressing X will mark a theme, you can mark how many themes you want. Once you've finished, press again Select to install a set of themes for shuffling. This means that every time the app is launched, a random theme will be selected from the set and used as active one.
 
 ## Changelog
+
+### v.1.7
+- Added an optional auto-updater daemon for installed Vita homebrews. It will check for any homebrew update every hour and at console boot even with VitaDB Downloader closed and send a notification to quickly perform the update.
+- Added an auto-downloader and extractor of libshacccg.suprx if this is missing.
+- Added proper support for PSP homebrews over different locations based on Adrenaline settings.
+- Fixed a bug causing all PSP homebrews to be categorized as Original Games.
 
 ### v.1.6
 - Fixed a bug causing VitaDB Downloader to be reported always as Outdated.
@@ -104,6 +112,8 @@ Those themes can also be accessed in the app itself by pressing L. While in Them
 
 ## Credits
 - noname120 for the code related to head.bin generation.
+- PrincessOfSleeping for the original code related to notification sendings.
+- gl33ntwine for helping reversing a small part of Friends app to understand how to intercept notification boots.
 - CatoTheYounger and Brandonheat8 for testing the homebrew.
 - Once13One for the Livearea assets.
 - [phloam](https://www.youtube.com/channel/UCO-COkqKBV1KeBifq0HMK0g) for the audio track used as base for the background music feature.

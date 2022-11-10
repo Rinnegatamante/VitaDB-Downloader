@@ -55,6 +55,7 @@ int cur_ss_idx;
 int old_ss_idx = -1;
 static char download_link[512];
 char app_name_filter[128] = {0};
+char boot_params[1024] = {};
 SceUID audio_thd = -1;
 void *audio_buffer = nullptr;
 bool shuffle_themes = false;
@@ -299,7 +300,7 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 			ptr = extractValue(node->author, ptr, "author", nullptr);
 			ptr = extractValue(node->type, ptr, "type", nullptr);
 			ptr = extractValue(node->id, ptr, "id", nullptr);
-			if (!strncmp(node->id, "877", 3)) { // VitaDB Downloader, check if newer than running version
+			if (!strncmp(node->id, "877", 3) && strlen(boot_params) == 0) { // VitaDB Downloader, check if newer than running version
 				if (strncmp(&version[2], VERSION, 3)) {
 					update_detected = true;
 					to_download = node;
@@ -347,6 +348,10 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 				node->next = psp_apps;
 				psp_apps = node;
 			} else {
+				if (node->state == APP_OUTDATED) {
+					if (strlen(boot_params) > 0 && !strcmp(boot_params, node->id))
+						to_download = node;
+				}
 				node->next = apps;
 				apps = node;
 			}
@@ -354,16 +359,18 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 		free(buffer);
 		
 		// Downloading missing icons
-		for (int i = 0; i < missing_icons_num; i++) {
-			sprintf(download_link, "https://rinnegatamante.it/vitadb/icons/%s", missing_icons[i]->icon);
-			download_file(download_link, "Downloading missing icons");
-			sprintf(download_link, "ux0:data/VitaDB/icons/%c%c", missing_icons[i]->icon[0], missing_icons[i]->icon[1]);
-			sceIoMkdir(download_link, 0777);
-			sprintf(download_link, "ux0:data/VitaDB/icons/%c%c/%s", missing_icons[i]->icon[0], missing_icons[i]->icon[1], missing_icons[i]->icon);
-			sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
-			f = fopen("ux0:data/VitaDB/icons.db", "a");
-			fprintf(f, "%s\n", download_link);
-			fclose(f);
+		if (!update_detected) {
+			for (int i = 0; i < missing_icons_num; i++) {
+				sprintf(download_link, "https://rinnegatamante.it/vitadb/icons/%s", missing_icons[i]->icon);
+				download_file(download_link, "Downloading missing icons");
+				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c", missing_icons[i]->icon[0], missing_icons[i]->icon[1]);
+				sceIoMkdir(download_link, 0777);
+				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c/%s", missing_icons[i]->icon[0], missing_icons[i]->icon[1], missing_icons[i]->icon);
+				sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
+				f = fopen("ux0:data/VitaDB/icons.db", "a");
+				fprintf(f, "%s\n", download_link);
+				fclose(f);
+			}
 		}
 	}
 	vglFree(icons_db);
@@ -1172,6 +1179,11 @@ void install_theme_from_shuffle(bool boot) {
 }
 
 int main(int argc, char *argv[]) {
+	// Check if an on demand update has been requested
+	sceAppMgrGetAppParam(boot_params);
+	if (strlen(boot_params) > 0)
+		update_detected = true;
+		
 	srand(time(NULL));
 	SceIoStat st1, st2;
 	
@@ -1196,6 +1208,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	// Initializing sceCommonDialog
+	sceAppUtilInit(&(SceAppUtilInitParam){}, &(SceAppUtilBootParam){});
 	SceCommonDialogConfigParam cmnDlgCfgParam;
 	sceCommonDialogConfigParamInit(&cmnDlgCfgParam);
 	sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG, (int *)&cmnDlgCfgParam.language);
@@ -1332,6 +1345,62 @@ int main(int argc, char *argv[]) {
 	audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
 	sceKernelStartThread(audio_thd, 0, NULL);
 	
+	// Daemon popup
+	SceCtrlData pad;
+	sceCtrlPeekBufferPositive(0, &pad, 1);
+	if ((pad.buttons & SCE_CTRL_LTRIGGER) || sceIoGetstat("ux0:data/VitaDB/daemon.cfg", &st1) < 0) {
+		FILE *fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "r");
+		size_t len = fread(&generic_mem_buffer[20 * 1024 * 1024], 1, MEM_BUFFER_SIZE, fp);
+		fclose(fp);
+		if (!strstr(&generic_mem_buffer[20 * 1024 * 1024], "ux0:data/VitaDB/vdb_daemon.suprx")) {
+			init_interactive_msg_dialog("VitaDB Downloader features a functionality that allows the homebrew to check automatically, every hour and at every console bootup, if an update for an installed homebrew is available. A plugin is required to enable this feature, do you want to install it?");
+			while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+				vglSwapBuffers(GL_TRUE);
+			}
+			glColor4f(0, 0, 0, 1);
+			glMatrixMode(GL_PROJECTION);
+			glLoadIdentity();
+			glOrthof(0, 960, 544, 0, 0, 1);
+			glMatrixMode(GL_MODELVIEW);
+			glLoadIdentity();
+			float vtx[4 * 2] = {
+				0, 544,
+				960, 544,
+				0,   0,
+				960,   0
+			};
+			float txcoord[4 * 2] = {
+				0,   0,
+				1,   0,
+				0,   1,
+				1,   1
+			};
+			// Workaround to prevent message dialog "burn in" on background
+			for (int i = 0; i < 15; i++) {
+				glEnableClientState(GL_VERTEX_ARRAY);
+				glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+				glVertexPointer(2, GL_FLOAT, 0, vtx);
+				glTexCoordPointer(2, GL_FLOAT, 0, txcoord);
+				glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+				vglSwapBuffers(GL_FALSE);
+			}
+			SceMsgDialogResult msg_res;
+			memset(&msg_res, 0, sizeof(SceMsgDialogResult));
+			sceMsgDialogGetResult(&msg_res);
+			sceMsgDialogTerm();
+			if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
+				copy_file("app0:vdb_daemon.suprx", "ux0:data/VitaDB/vdb_daemon.suprx");
+				fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "w");
+				strcpy(user_plugin_str, "*main\nux0:data/VitaDB/vdb_daemon.suprx\n");
+				fwrite(user_plugin_str, 1, strlen(user_plugin_str), fp);
+				fwrite(&generic_mem_buffer[20 * 1024 * 1024], 1, len, fp);
+				fclose(fp);
+			}
+		}
+		fp = fopen("ux0:data/VitaDB/daemon.cfg", "w");
+		fclose(fp);
+	}
+	
 	// Downloading icons
 	if ((sceIoGetstat("ux0:/data/VitaDB/icons.db", &st1) < 0) || (sceIoGetstat("ux0:data/VitaDB/icons", &st2) < 0)) {
 		download_file("https://vitadb.rinnegatamante.it/icons_zip.php", "Downloading apps icons");
@@ -1351,14 +1420,18 @@ int main(int argc, char *argv[]) {
 	}
 	
 	// Downloading apps list
-	SceUID thd = sceKernelCreateThread("Apps List Downloader", &appListThread, 0x10000100, 0x100000, 0, 0, NULL);
-	sceKernelStartThread(thd, 0, NULL);
-	do {
-		DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading apps list", 1, true);
-		res = sceKernelGetThreadInfo(thd, &info);
-	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 	sceAppMgrUmount("app0:");
-	AppendAppDatabase("ux0:data/VitaDB/apps.json", false);
+	if (strlen(boot_params) == 0) {
+		SceUID thd = sceKernelCreateThread("Apps List Downloader", &appListThread, 0x10000100, 0x100000, 0, 0, NULL);
+		sceKernelStartThread(thd, 0, NULL);
+		do {
+			DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading apps list", 1, true);
+			res = sceKernelGetThreadInfo(thd, &info);
+		} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
+		AppendAppDatabase("ux0:data/VitaDB/apps.json", false);
+	} else {
+		AppendAppDatabase("ux0:data/vitadb.json", false);
+	}
 	
 	// Initializing remaining stuffs
 	populate_pspemu_path();
@@ -1822,7 +1895,6 @@ int main(int argc, char *argv[]) {
 		vglSwapBuffers(GL_FALSE);
 		
 		// Extra controls handling
-		SceCtrlData pad;
 		sceCtrlPeekBufferPositive(0, &pad, 1);
 		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !show_screenshots && !show_changelog) {
 			calculate_right_len = true;
@@ -2169,13 +2241,54 @@ int main(int argc, char *argv[]) {
 			AppendAppDatabase("ux0:data/VitaDB/psp_apps.json", true);
 		}
 	}
-	
+
 	// Installing update
-	download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=877", "Downloading update");
-	extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
-	sceIoRemove(TEMP_DOWNLOAD_NAME);
-	FILE *f = fopen("ux0:app/VITADBDLD/hash.vdb", "w");
-	fwrite(to_download->hash, 1, 32, f);
-	fclose(f);
-	sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
+	if (to_download) {
+		if (strlen(boot_params) > 0) { // On-demand app updater
+			FILE *f;
+			char hb_url[256], hb_message[256];
+			sprintf(hb_url, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", boot_params);
+			sprintf(hb_message, "Downloading %s", to_download->name);
+			download_file(hb_url, hb_message);
+			sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
+			extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false);
+			sceIoRemove(TEMP_DOWNLOAD_NAME);
+			if (strlen(to_download->aux_hash) > 0) {
+				f = fopen("ux0:data/VitaDB/vpk/aux_hash.vdb", "w");
+				fwrite(to_download->aux_hash, 1, 32, f);
+				fclose(f);
+			}
+			f = fopen("ux0:data/VitaDB/vpk/hash.vdb", "w");
+			fwrite(to_download->hash, 1, 32, f);
+			fclose(f);
+			makeHeadBin("ux0:data/VitaDB/vpk");
+			scePromoterUtilInit();
+			scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
+			int state = 0;
+			do {
+				int ret = scePromoterUtilityGetState(&state);
+				if (ret < 0)
+					break;
+				DrawTextDialog("Installing the update", true, false);
+				vglSwapBuffers(GL_TRUE);
+			} while (state);
+			scePromoterUtilTerm();
+			if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0) {
+				init_msg_dialog("The installation process failed.");
+				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+					vglSwapBuffers(GL_TRUE);
+				}
+				sceMsgDialogTerm();
+				recursive_rmdir("ux0:/data/VitaDB/vpk");
+			}
+		} else { // VitaDB Downloader auto-updater
+			download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=877", "Downloading update");
+			extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
+			sceIoRemove(TEMP_DOWNLOAD_NAME);
+			FILE *f = fopen("ux0:app/VITADBDLD/hash.vdb", "w");
+			fwrite(to_download->hash, 1, 32, f);
+			fclose(f);
+			sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
+		}
+	}
 }
