@@ -1384,6 +1384,7 @@ int main(int argc, char *argv[]) {
 				glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 				vglSwapBuffers(GL_FALSE);
 			}
+			glColor4f(1, 1, 1, 1);
 			SceMsgDialogResult msg_res;
 			memset(&msg_res, 0, sizeof(SceMsgDialogResult));
 			sceMsgDialogGetResult(&msg_res);
@@ -1977,7 +1978,7 @@ int main(int argc, char *argv[]) {
 				node->state = APP_UPDATED;
 				to_download = nullptr;
 			} else {
-				if (to_download->requirements) {
+				if (to_download->requirements && (!strstr(to_download->requirements, "libshacccg.suprx") || strlen(to_download->requirements) != strlen("- libshacccg.suprx"))) {
 					uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
 					glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 					if (!previous_frame)
