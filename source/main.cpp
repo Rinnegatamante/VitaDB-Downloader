@@ -36,7 +36,6 @@
 #include "utils.h"
 #include "dialogs.h"
 #include "network.h"
-#include "md5.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -112,6 +111,35 @@ ThemeSelection *themes = nullptr;
 AppSelection *apps = nullptr;
 AppSelection *psp_apps = nullptr;
 AppSelection *to_download = nullptr;
+
+void prevent_burn_in() {
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrthof(0, 960, 544, 0, 0, 1);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	float vtx[4 * 2] = {
+		0, 544,
+		960, 544,
+		0,   0,
+		960,   0
+	};
+	float txcoord[4 * 2] = {
+		0,   0,
+		1,   0,
+		0,   1,
+		1,   1
+	};
+	// Workaround to prevent message dialog "burn in" on background
+	for (int i = 0; i < 15; i++) {
+		glEnableClientState(GL_VERTEX_ARRAY);
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glVertexPointer(2, GL_FLOAT, 0, vtx);
+		glTexCoordPointer(2, GL_FLOAT, 0, txcoord);
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+		vglSwapBuffers(GL_FALSE);
+	}
+}
 
 char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 	char label[32];
@@ -204,26 +232,7 @@ bool checksum_match(char *hash_fname, char *fname, AppSelection *node, uint8_t t
 			}
 		}
 		if (f2) {
-			MD5Context ctx;
-			MD5Init(&ctx);
-			fseek(f2, 0, SEEK_END);
-			int file_size = ftell(f2);
-			fseek(f2, 0, SEEK_SET);
-			int read_size = 0;
-			while (read_size < file_size) {
-				int read_buf_size = (file_size - read_size) > MEM_BUFFER_SIZE ? MEM_BUFFER_SIZE : (file_size - read_size);
-				fread(generic_mem_buffer, 1, read_buf_size, f2);
-				read_size += read_buf_size;
-				MD5Update(&ctx, generic_mem_buffer, read_buf_size);
-			}
-			fclose(f2);
-			//printf("closing file to hash\n");
-			unsigned char md5_buf[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-			MD5Final(md5_buf, &ctx);
-			sprintf(cur_hash, "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
-				md5_buf[0], md5_buf[1], md5_buf[2], md5_buf[3], md5_buf[4], md5_buf[5], md5_buf[6], md5_buf[7], md5_buf[8],
-				md5_buf[9], md5_buf[10], md5_buf[11], md5_buf[12], md5_buf[13], md5_buf[14], md5_buf[15]);
-			//printf("local hash %s\n", cur_hash);
+			calculate_md5(f2, cur_hash);
 			if (strncmp(cur_hash, type != AUXILIARY_FILE ? node->hash : node->aux_hash, 32))
 				node->state = APP_OUTDATED;
 			else
@@ -1224,6 +1233,7 @@ int main(int argc, char *argv[]) {
 	
 	// Checking for libshacccg.suprx existence
 	bool use_ur0_config = false;
+	bool has_kubridge = false;
 	char user_plugin_str[96];
 	strcpy(user_plugin_str, "*SHARKF00D\nux0:data/vitadb.suprx\n*NPXS10031\nux0:data/vitadb.suprx\n");
 	FILE *fp = fopen("ux0:tai/config.txt", "r");
@@ -1297,6 +1307,10 @@ int main(int argc, char *argv[]) {
 		sceKernelExitProcess(0);
 	}
 	
+	// Check for kubridge existence
+	if (strstr(generic_mem_buffer, "kubridge.skprx"))
+		has_kubridge = true;
+	
 	// Initializing SDL and SDL mixer
 	SDL_Init(SDL_INIT_AUDIO);
 	Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 512);
@@ -1358,32 +1372,7 @@ int main(int argc, char *argv[]) {
 				vglSwapBuffers(GL_TRUE);
 			}
 			glColor4f(0, 0, 0, 1);
-			glMatrixMode(GL_PROJECTION);
-			glLoadIdentity();
-			glOrthof(0, 960, 544, 0, 0, 1);
-			glMatrixMode(GL_MODELVIEW);
-			glLoadIdentity();
-			float vtx[4 * 2] = {
-				0, 544,
-				960, 544,
-				0,   0,
-				960,   0
-			};
-			float txcoord[4 * 2] = {
-				0,   0,
-				1,   0,
-				0,   1,
-				1,   1
-			};
-			// Workaround to prevent message dialog "burn in" on background
-			for (int i = 0; i < 15; i++) {
-				glEnableClientState(GL_VERTEX_ARRAY);
-				glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-				glVertexPointer(2, GL_FLOAT, 0, vtx);
-				glTexCoordPointer(2, GL_FLOAT, 0, txcoord);
-				glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-				vglSwapBuffers(GL_FALSE);
-			}
+			prevent_burn_in();
 			glColor4f(1, 1, 1, 1);
 			SceMsgDialogResult msg_res;
 			memset(&msg_res, 0, sizeof(SceMsgDialogResult));
@@ -1978,7 +1967,7 @@ int main(int argc, char *argv[]) {
 				node->state = APP_UPDATED;
 				to_download = nullptr;
 			} else {
-				if (to_download->requirements && (!strstr(to_download->requirements, "libshacccg.suprx") || strlen(to_download->requirements) != strlen("- libshacccg.suprx"))) {
+				if (to_download->requirements && ((!strstr(to_download->requirements, "libshacccg.suprx")) || strlen(to_download->requirements) != strlen("- libshacccg.suprx"))) {
 					uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
 					glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 					if (!previous_frame)
@@ -1991,31 +1980,72 @@ int main(int argc, char *argv[]) {
 						vglSwapBuffers(GL_TRUE);
 					}
 					sceMsgDialogTerm();
-					glMatrixMode(GL_PROJECTION);
-					glLoadIdentity();
-					glOrthof(0, 960, 544, 0, 0, 1);
-					glMatrixMode(GL_MODELVIEW);
-					glLoadIdentity();
-					float vtx[4 * 2] = {
-						0, 544,
-						960, 544,
-						0,   0,
-						960,   0
-					};
-					float txcoord[4 * 2] = {
-						0,   0,
-						1,   0,
-						0,   1,
-						1,   1
-					};
-					// Workaround to prevent message dialog "burn in" on background
-					for (int i = 0; i < 15; i++) {
-						glEnableClientState(GL_VERTEX_ARRAY);
-						glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-						glVertexPointer(2, GL_FLOAT, 0, vtx);
-						glTexCoordPointer(2, GL_FLOAT, 0, txcoord);
-						glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-						vglSwapBuffers(GL_FALSE);
+					prevent_burn_in();
+					if (strstr(to_download->requirements, "kubridge.skprx")) {
+						if (has_kubridge) {
+							char cur_hash[40];
+							FILE *f = fopen(use_ur0_config ? "ur0:tai/kubridge.skprx" : "ux0:tai/kubridge.skprx", "r");
+							calculate_md5(f, cur_hash);
+							//printf("starting silent download\n");
+							silent_download("https://vitadb.rinnegatamante.it/get_hb_hash.php?id=611");
+							//printf(generic_mem_buffer);
+							if (strncmp(cur_hash, generic_mem_buffer, 32)) {
+								init_interactive_msg_dialog("VitaDB Downloader detected an outdated version of kubridge.skprx. Do you wish to update it?\n\nNOTE: A console restart is required for kubridge.skprx update to complete.");
+								while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+									vglSwapBuffers(GL_TRUE);
+								}
+								prevent_burn_in();
+								SceMsgDialogResult msg_res;
+								memset(&msg_res, 0, sizeof(SceMsgDialogResult));
+								sceMsgDialogGetResult(&msg_res);
+								sceMsgDialogTerm();
+								if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
+									download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=611", "Downloading kubridge.skprx");
+									if (use_ur0_config) {
+										copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
+									} else {
+										sceIoRemove("ux0:tai/kubridge.skprx");
+										sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:tai/kubridge.skprx");
+									}
+								}
+							}
+							//printf("finished\n");
+						} else {
+							init_interactive_msg_dialog("This homebrew requires kubridge.skprx but it's not installed on this console. Do you wish to install it as well?\n\nNOTE: A console restart is required for kubridge.skprx installation to complete.");
+							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+								vglSwapBuffers(GL_TRUE);
+							}
+							prevent_burn_in();
+							SceMsgDialogResult msg_res;
+							memset(&msg_res, 0, sizeof(SceMsgDialogResult));
+							sceMsgDialogGetResult(&msg_res);
+							sceMsgDialogTerm();
+							if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
+								download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=611", "Downloading kubridge.skprx");
+								if (use_ur0_config) {
+									copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
+									FILE *f = fopen("ur0:tai/config.txt", "r");
+									size_t len = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
+									fclose(f);
+									sprintf(user_plugin_str, "*KERNEL\nur0:tai/kubridge.skprx\n");
+									f = fopen("ur0:tai/config.txt", "w");
+									fwrite(user_plugin_str, 1, strlen(user_plugin_str), f);
+									fwrite(generic_mem_buffer, 1, len, f);
+									fclose(f);
+								} else {
+									sceIoRemove("ux0:tai/kubridge.skprx"); // Just to be safe
+									sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:tai/kubridge.skprx");
+									FILE *f = fopen("ux0:tai/config.txt", "r");
+									size_t len = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
+									fclose(f);
+									sprintf(user_plugin_str, "*KERNEL\nux0:tai/kubridge.skprx\n");
+									f = fopen("ux0:tai/config.txt", "w");
+									fwrite(user_plugin_str, 1, strlen(user_plugin_str), f);
+									fwrite(generic_mem_buffer, 1, len, f);
+									fclose(f);
+								}
+							}
+						}
 					}
 				}
 				if (strlen(to_download->data_link) > 5) {
@@ -2032,32 +2062,7 @@ int main(int argc, char *argv[]) {
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 						vglSwapBuffers(GL_TRUE);
 					}
-					glMatrixMode(GL_PROJECTION);
-					glLoadIdentity();
-					glOrthof(0, 960, 544, 0, 0, 1);
-					glMatrixMode(GL_MODELVIEW);
-					glLoadIdentity();
-					float vtx[4 * 2] = {
-						0, 544,
-						960, 544,
-						0,   0,
-						960,   0
-					};
-					float txcoord[4 * 2] = {
-						0,   0,
-						1,   0,
-						0,   1,
-						1,   1
-					};
-					// Workaround to prevent message dialog "burn in" on background
-					for (int i = 0; i < 15; i++) {
-						glEnableClientState(GL_VERTEX_ARRAY);
-						glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-						glVertexPointer(2, GL_FLOAT, 0, vtx);
-						glTexCoordPointer(2, GL_FLOAT, 0, txcoord);
-						glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-						vglSwapBuffers(GL_FALSE);
-					}
+					prevent_burn_in();
 					SceMsgDialogResult msg_res;
 					memset(&msg_res, 0, sizeof(SceMsgDialogResult));
 					sceMsgDialogGetResult(&msg_res);

@@ -29,6 +29,7 @@
 #include "adrenaline.h"
 #include "network.h"
 #include "utils.h"
+#include "md5.h"
 
 char pspemu_dev[8];
 
@@ -185,6 +186,27 @@ char *unescape(char *src) {
 	res[i] = 0;
 	free(src);
 	return res;
+}
+
+void calculate_md5(FILE *f2, char *hash) {
+	MD5Context ctx;
+	MD5Init(&ctx);
+	fseek(f2, 0, SEEK_END);
+	size_t file_size = ftell(f2);
+	fseek(f2, 0, SEEK_SET);
+	size_t read_size = 0;
+	while (read_size < file_size) {
+		size_t read_buf_size = (file_size - read_size) > MEM_BUFFER_SIZE ? MEM_BUFFER_SIZE : (file_size - read_size);
+		fread(generic_mem_buffer, 1, read_buf_size, f2);
+		read_size += read_buf_size;
+		MD5Update(&ctx, generic_mem_buffer, read_buf_size);
+	}
+	fclose(f2);
+	unsigned char md5_buf[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	MD5Final(md5_buf, &ctx);
+	sprintf(hash, "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
+		md5_buf[0], md5_buf[1], md5_buf[2], md5_buf[3], md5_buf[4], md5_buf[5], md5_buf[6], md5_buf[7], md5_buf[8],
+		md5_buf[9], md5_buf[10], md5_buf[11], md5_buf[12], md5_buf[13], md5_buf[14], md5_buf[15]);
 }
 
 #define CIRCLE_SEGMENTS_NUM 30

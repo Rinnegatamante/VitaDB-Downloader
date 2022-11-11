@@ -132,6 +132,36 @@ int appPspListThread(unsigned int args, void *arg) {
 	return 0;
 }
 
+int downloadMemThread(unsigned int args, void *arg) {
+	curl_handle = curl_easy_init();
+	//printf("downloading %s\n", generic_url);
+	char *url = (char *)generic_url;
+	char *space = strstr(url, " ");
+	char *s = url;
+	char final_url[512] = "";
+	fh = NULL;
+	while (space) {
+		space[0] = 0;
+		sprintf(final_url, "%s%s%%20", final_url, s);
+		space[0] = ' ';
+		s = space + 1;
+		space = strstr(s, " ");
+	}
+	sprintf(final_url, "%s%s", final_url, s);
+	//printf("starting download of %s\n", final_url);
+	downloader_pass = 1;
+	downloaded_bytes = 0;
+	total_bytes = 20;
+	startDownload(final_url);
+	while (downloaded_bytes < total_bytes) {
+		startDownload(final_url);
+	}
+	downloaded_bytes = total_bytes;
+	generic_mem_buffer[downloaded_bytes] = 0;
+	curl_easy_cleanup(curl_handle);
+	return sceKernelExitDeleteThread(0);
+}
+
 int downloadThread(unsigned int args, void *arg) {
 	curl_handle = curl_easy_init();
 	//printf("downloading %s\n", generic_url);
@@ -175,6 +205,18 @@ void download_file(char *url, char *text) {
 	sceKernelStartThread(thd, 0, NULL);
 	do {
 		DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, text, 1, true);
+		res = sceKernelGetThreadInfo(thd, &info);
+	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
+}
+
+void silent_download(char *url) {
+	SceKernelThreadInfo info;
+	info.size = sizeof(SceKernelThreadInfo);
+	int res = 0;
+	SceUID thd = sceKernelCreateThread("Generic Downloader", &downloadMemThread, 0x10000100, 0x100000, 0, 0, NULL);
+	sprintf(generic_url, url);
+	sceKernelStartThread(thd, 0, NULL);
+	do {
 		res = sceKernelGetThreadInfo(thd, &info);
 	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 }

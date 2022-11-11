@@ -1,9 +1,6 @@
 # VitaDB Downloader
 VitaDB Downloader is the official PSVita/PSTV client for [VitaDB](https://vitadb.rinnegatamante.it/), the first database ever made for PSVITA/PSTV homebrew.
 
-## Requirements
-In order to run VitaDB Downloader, you need <b>libshacccg.suprx</b>. If you don't have it installed already, you can install it by following this guide: https://samilops2.gitbook.io/vita-troubleshooting-guide/shader-compiler/extract-libshacccg.suprx
-
 ## Features
 - Searching by author/homebrew name.
 - Filtering apps by category.
@@ -15,9 +12,9 @@ In order to run VitaDB Downloader, you need <b>libshacccg.suprx</b>. If you don'
 - Fast boot time (Only the very first boot will take a bit more due to app icons download. Successive boots will be basically instant)
 - Low storage usage (Screenshots are served on demand, the only data that are kept on storage are app icons with a complessive storage usage lower than 10 MBs).
 - Tracking of installed apps and of their state (outdated/updated) even when not installed through VitaDB Downloader.
-- Background music (You can customize it by changing ux0:data/VitaDB/bg.ogg with your own preferred track).
-- Background image/video (You can customize it by changing ux0:data/VitaDB/bg.mp4 or ux0:data/VitaDB/bg.png).
-- Support for themes (Customization of GUI elements via ux0:data/VitaDB/themes.ini) with built-in downloader and manager.
+- Background music (You can customize it by changing `ux0:data/VitaDB/bg.ogg` with your own preferred track).
+- Background image/video (You can customize it by `changing ux0:data/VitaDB/bg.mp4` or `ux0:data/VitaDB/bg.png`).
+- Support for themes (Customization of GUI elements via `ux0:data/VitaDB/themes.ini`) with built-in downloader and manager.
 - Support for PSP homebrews.
 - Daemon support for homebrews update check in background during normal console usage.
 
@@ -27,6 +24,11 @@ Those themes can also be accessed in the app itself by pressing L. While in Them
 - Single = A downloaded theme will be installed as active one by pressing X
 - Shuffle = Pressing X will mark a theme, you can mark how many themes you want. Once you've finished, press again Select to install a set of themes for shuffling. This means that every time the app is launched, a random theme will be selected from the set and used as active one.
 
+## Homebrew Updater Daemon
+Starting with v.1.7, VitaDB Downloader features an optional daemon that allows to check for all your installed homebrews updates in background. When console is booted and every hour after the first boot, updates will be searched and, if found, notifications will be fired to notify the user of its existence.
+By default, a couple of homebrews are blacklisted from this process either cause they are nightly builds (for which it's not reliable to checksum the hash on server side to perform the update veerification) or cause the Title ID of the app is being used by two or more applications (making impossible to perform an update check).
+It's also possible to add more blacklisted homebrews (for example, if you use a modded build which would be tagged as outdated by VitaDB Downloader). To do so, create the file `ux0:data/VitaDB/daemon_blacklist.txt` and add inside it a list of Title ID of the homebrews you want to blacklist in this format `ABCD12345;ABCD12346;ABCD12347`.
+
 ## Changelog
 
 ### v.1.7
@@ -34,6 +36,8 @@ Those themes can also be accessed in the app itself by pressing L. While in Them
 - Added an auto-downloader and extractor of libshacccg.suprx if this is missing.
 - Added proper support for PSP homebrews over different locations based on Adrenaline settings.
 - Fixed a bug causing all PSP homebrews to be categorized as Original Games.
+- Now requirements popup won't show up for homebrews requiring only libshacccg.suprx since already present if VitaDB Downloader is being used.
+- Added an optional kubridge.skprx updater/installer when attempting to install an homebrew requiring it.
 
 ### v.1.6
 - Fixed a bug causing VitaDB Downloader to be reported always as Outdated.
