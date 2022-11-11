@@ -2296,5 +2296,11 @@ int main(int argc, char *argv[]) {
 			fclose(f);
 			sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
 		}
+	} else {
+		init_msg_dialog("This homebrew is already up to date.");
+		while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+			vglSwapBuffers(GL_TRUE);
+		}
+		sceMsgDialogTerm();
 	}
 }
