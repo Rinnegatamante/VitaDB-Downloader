@@ -40,7 +40,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#define VERSION "1.6"
+#define VERSION "1.7"
 
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
@@ -2007,6 +2007,7 @@ int main(int argc, char *argv[]) {
 									download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=611", "Downloading kubridge.skprx");
 									if (kubridge_state == KUBRIDGE_UR0) {
 										copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
+										sceIoRemove(TEMP_DOWNLOAD_NAME);
 									} else {
 										sceIoRemove("ux0:tai/kubridge.skprx");
 										sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:tai/kubridge.skprx");
@@ -2027,6 +2028,7 @@ int main(int argc, char *argv[]) {
 								download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=611", "Downloading kubridge.skprx");
 								if (use_ur0_config) {
 									copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
+									sceIoRemove(TEMP_DOWNLOAD_NAME);
 									FILE *f = fopen("ur0:tai/config.txt", "r");
 									size_t len = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
 									fclose(f);
