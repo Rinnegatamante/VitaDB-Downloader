@@ -1298,16 +1298,19 @@ int main(int argc, char *argv[]) {
 		}
 	} else if (!(sceIoGetstat("ur0:/data/libshacccg.suprx", &st1) >= 0 || sceIoGetstat("ur0:/data/external/libshacccg.suprx", &st2) >= 0)) { // Step 1: Download PSM Runtime and install it
 		early_warning("Runtime shader compiler (libshacccg.suprx) is not installed. VitaDB Downloader will proceed with its extraction.");
-		fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "w");
-		fwrite(user_plugin_str, 1, strlen(user_plugin_str), fp);
-		fwrite(generic_mem_buffer, 1, cfg_size, fp);
-		fclose(fp);
+		void *tmp_buffer = malloc(cfg_size);
+		sceClibMemcpy(tmp_buffer, generic_mem_buffer, cfg_size);
 		early_download_file("http://ares.dl.playstation.net/psm-runtime/IP9100-PCSI00011_00-PSMRUNTIME000000.pkg", "Downloading PSM Runtime v.1.00");
 		sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:/data/Runtime1.00.pkg");
 		early_download_file("http://gs.ww.np.dl.playstation.net/ppkg/np/PCSI00011/PCSI00011_T8/286a65ec1ebc2d8b/IP9100-PCSI00011_00-PSMRUNTIME000000-A0201-V0100-e4708b1c1c71116c29632c23df590f68edbfc341-PE.pkg", "Downloading PSM Runtime v.2.01");
 		sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:/data/Runtime2.01.pkg");
 		copy_file("app0:vitadb.skprx", "ux0:data/vitadb.skprx");
 		copy_file("app0:vitadb.suprx", "ux0:data/vitadb.suprx");
+		fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "w");
+		fwrite(user_plugin_str, 1, strlen(user_plugin_str), fp);
+		fwrite(tmp_buffer, 1, cfg_size, fp);
+		fclose(fp);
+		free(tmp_buffer);
 		taiLoadStartKernelModule("ux0:data/vitadb.skprx", 0, NULL, 0);
 		sceAppMgrLaunchAppByName(0x60000, "NPXS10031", "[BATCH]host0:/package/Runtime1.00.pkg\nhost0:/package/Runtime2.01.pkg");
 		sceKernelExitProcess(0);
