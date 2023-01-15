@@ -31,7 +31,8 @@ char *blacklist[] = {
 	"VID000016",
 	"VITAPONG0",
 	"VSCU00001",
-	"YYOLOADER"
+	"YYOLOADER",
+	"NZZMBSPTB"
 };
 
 char *custom_blacklist = NULL;
