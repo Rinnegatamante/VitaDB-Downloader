@@ -1210,6 +1210,9 @@ int main(int argc, char *argv[]) {
 	sceIoMkdir("ux0:pspemu/PSP", 0777);
 	sceIoMkdir("ux0:pspemu/PSP/GAME", 0777);
 	
+	// Removing any failed app download leftover
+	sceIoRemove(TEMP_DOWNLOAD_NAME);
+	
 	// Initializing sceNet
 	generic_mem_buffer = (uint8_t*)malloc(MEM_BUFFER_SIZE);
 	sceSysmoduleLoadModule(SCE_SYSMODULE_NET);
