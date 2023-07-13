@@ -117,6 +117,7 @@ ThemeSelection *themes = nullptr;
 AppSelection *apps = nullptr;
 AppSelection *psp_apps = nullptr;
 AppSelection *to_download = nullptr;
+AppSelection *to_uninstall = nullptr;
 
 void prevent_burn_in() {
 	glMatrixMode(GL_PROJECTION);
@@ -1456,10 +1457,13 @@ extract_libshacccg:
 	char *changelog = nullptr;
 	char right_str[64];
 	bool show_changelog = false;
+	bool show_requirements = false;
 	bool calculate_right_len = true;
 	bool go_to_top = false;
 	bool fast_increment = false;
 	bool fast_decrement = false;
+	bool extra_menu_invoked = false;
+	bool has_touched = false;
 	bool is_app_hovered;
 	float right_len = 0.0f;
 	float text_diff_len = 0.0f;
@@ -1868,7 +1872,7 @@ extract_libshacccg:
 					ImGui::TextColored(TextLabel, "Press Start to view screenshots");
 				}
 				ImGui::SetCursorPosY(470);
-				ImGui::TextColored(TextLabel, "Press Select to view changelog");
+				ImGui::TextColored(TextLabel, "Press Select for more options");
 			}
 		}
 		if (mode_idx == MODE_THEMES) {
@@ -1888,22 +1892,113 @@ extract_libshacccg:
 		ImGui::Text("Free storage: %.2f %s / %.2f %s", format_size(free_space), format_size_str(free_space), format_size(total_space), format_size_str(total_space));
 		ImGui::End();
 		
+		if (extra_menu_invoked) {
+			int num_items;
+			switch (hovered->state) {
+			case APP_OUTDATED: // Launch, Update, Screenshots (if any), Changelog, Uninstall, Tag Update
+				num_items = mode_idx == MODE_VITA_HBS ? 5 : 4; // FIXME: Add PSP hbs launch via Adrenaline
+				break;
+			case APP_UPDATED: // Launch, Screenshots (if any), Changelog, Uninstall
+				num_items = mode_idx == MODE_VITA_HBS ? 3 : 2; // FIXME: Add PSP hbs launch via Adrenaline
+				break;
+			case APP_UNTRACKED: // Install, Screenshots (if any), Changelog
+				num_items = 2;
+				break;
+			default:
+				printf("Fatal error\n");
+				break;
+			}
+			if (hovered->requirements)
+				num_items++;
+			if (strlen(hovered->screenshots) > 5)
+				num_items++;
+			int h = 29 + 25 * num_items;
+			int y = 272 - h / 2;
+			ImGui::SetNextWindowPos(ImVec2(280, y), ImGuiSetCond_Always);
+			ImGui::SetNextWindowSize(ImVec2(400, h), ImGuiSetCond_Always);
+			char titlebar[256];
+			sprintf(titlebar, "%s - Manage", hovered->name);
+			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
+			if (mode_idx == MODE_VITA_HBS && hovered->state != APP_UNTRACKED) {
+				if (ImGui::Button("Launch", ImVec2(-1.0f, 0.0f))) {
+					sceAppMgrLaunchAppByName(0x60000, hovered->titleid, "");
+					sceKernelExitProcess(0);
+				}
+			}
+			if (hovered->state == APP_UNTRACKED) {
+				if (ImGui::Button("Install", ImVec2(-1.0f, 0.0f))) {
+					to_download = hovered;
+					extra_menu_invoked = false;
+				}
+			} else {
+				if (hovered->state == APP_OUTDATED) {
+					if (ImGui::Button("Update", ImVec2(-1.0f, 0.0f))) {
+						to_download = hovered;
+						extra_menu_invoked = false;
+					}
+				}
+				if (ImGui::Button("Uninstall", ImVec2(-1.0f, 0.0f))) {
+					to_uninstall = hovered;
+					extra_menu_invoked = false;
+				}
+			}
+			if (hovered->state == APP_OUTDATED) {
+				if (ImGui::Button("Tag as Updated", ImVec2(-1.0f, 0.0f))) {
+					char fname[256];
+					if (mode_idx == MODE_VITA_HBS) {
+						sprintf(fname, "ux0:app/%s/hash.vdb", hovered->titleid);
+					} else {
+						sprintf(fname, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, hovered->id);
+					}
+					FILE *f = fopen(fname, "w");
+					fwrite(hovered->hash, 1, 32, f);
+					fclose(f);
+					hovered->state = APP_UPDATED;
+				}
+			}
+			if (hovered->requirements) {
+				if (ImGui::Button("View Homebrew Requirements", ImVec2(-1.0f, 0.0f))) {
+					show_requirements = 1;
+				}
+			}
+			if (strlen(hovered->screenshots) > 5) {
+				if (ImGui::Button("View Screenshots", ImVec2(-1.0f, 0.0f))) {
+					show_screenshots = 1;
+				}
+			}
+			if (ImGui::Button("View Changelog", ImVec2(-1.0f, 0.0f))) {
+				show_changelog = 1;
+				changelog = GetChangelog("ux0:data/VitaDB/apps.json", hovered->id);
+			}
+			ImGui::End();
+		}
+		
 		if (show_screenshots == 2) {
 			LoadScreenshot();
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
-			ImGui::Begin("Screenshots Viewer (Left/Right to change current screenshot)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+			ImGui::Begin("Screenshots Viewer (Left/Right to change current screenshot, Start or Circle to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 			ImGui::Image((void*)preview_shot, ImVec2(800 - 19, 453 - 19));
 			ImGui::End();
 		}
 		
 		if (show_changelog) {
 			char titlebar[256];
-			sprintf(titlebar, "%s Changelog (Select to close)", hovered->name);
+			sprintf(titlebar, "%s Changelog (Circle to close)", hovered->name);
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
 			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 			ImGui::TextWrapped(changelog ? changelog : "- First Release.");
+			ImGui::End();
+		}
+		
+		if (show_requirements) {
+			char titlebar[256];
+			sprintf(titlebar, "%s Requirements (Circle to close)", hovered->name);
+			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
+			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
+			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+			ImGui::TextWrapped(hovered->requirements);
 			ImGui::End();
 		}
 		
@@ -1914,22 +2009,22 @@ extract_libshacccg:
 		
 		// Extra controls handling
 		sceCtrlPeekBufferPositive(0, &pad, 1);
-		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !show_screenshots && !show_changelog) {
+		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !show_screenshots && !show_changelog && !show_requirements && !extra_menu_invoked) {
 			calculate_right_len = true;
 			old_sort_idx = -1;
 			sort_idx = 0;
 			filter_idx = 0;
 			mode_idx = (mode_idx + 1) % MODES_NUM;
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_screenshots && !show_changelog) {
+		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_screenshots && !show_changelog && !show_requirements && !extra_menu_invoked) {
 			if (mode_idx == MODE_THEMES)
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_themes_str) / sizeof(sort_modes_themes_str[0]));
 			else
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_str) / sizeof(sort_modes_str[0]));
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES) && !show_changelog) {
+		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES) && !show_changelog && !show_requirements) {
 			show_screenshots = show_screenshots ? 0 : 1;
-		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && (hovered || mode_idx == MODE_THEMES) && !show_screenshots) {
+		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && !show_screenshots && !show_changelog && !show_requirements) {
 			if (mode_idx == MODE_THEMES) {
 				shuffle_themes = !shuffle_themes;
 				ThemeSelection *g = themes;
@@ -1948,14 +2043,9 @@ extract_libshacccg:
 					install_theme_from_shuffle(false);
 				} else
 					sceIoRemove("ux0:data/VitaDB/shuffle.cfg");
-			} else {
-				show_changelog = !show_changelog;
-				if (show_changelog)
-					changelog = GetChangelog("ux0:data/VitaDB/apps.json", hovered->id);
-				else
-					free(changelog);
-			}
-		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && !show_changelog) {
+			} else if (hovered)
+				extra_menu_invoked = !extra_menu_invoked;
+		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && !show_changelog && !show_requirements && (!extra_menu_invoked || show_screenshots)) {
 			if (show_screenshots)
 				cur_ss_idx--;
 			else {
@@ -1963,17 +2053,27 @@ extract_libshacccg:
 				decrement_stack_idx = 0;
 				decremented_app = nullptr;
 			}
-		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT) && !show_changelog) {
+		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT) && !show_changelog && !show_requirements && (!extra_menu_invoked || show_screenshots)) {
 			if (show_screenshots)
 				cur_ss_idx++;
 			else
 				fast_increment = true;
-		} else if (pad.buttons & SCE_CTRL_CIRCLE && !show_screenshots && !show_changelog) {
-			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !show_screenshots && !show_changelog) {
+		} else if (pad.buttons & SCE_CTRL_CIRCLE && !(oldpad & SCE_CTRL_CIRCLE)) {
+			if (show_changelog) {
+				show_changelog = 0;
+				free(changelog);
+			} else if (show_requirements) {
+				show_requirements = 0;
+			} else if (show_screenshots) {
+				show_screenshots = 0;
+			} else if (extra_menu_invoked) {
+				extra_menu_invoked = 0;
+			} else
+				go_to_top = true;
+		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !show_screenshots && !show_requirements && !show_changelog && !extra_menu_invoked) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !show_screenshots && !show_changelog) {
+		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !show_screenshots && !show_requirements && !show_changelog && !extra_menu_invoked) {
 			if (mode_idx == MODE_THEMES)
 				filter_idx = (filter_idx + 1) % (sizeof(filter_themes_modes) / sizeof(*filter_themes_modes));
 			else
@@ -1981,6 +2081,47 @@ extract_libshacccg:
 			go_to_top = true;
 		}
 		oldpad = pad.buttons;
+		
+		// Queued app uninstall
+		if (to_uninstall) {
+			uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
+			glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
+			if (!previous_frame)
+				glGenTextures(1, &previous_frame);
+			glBindTexture(GL_TEXTURE_2D, previous_frame);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
+			vglFree(scr_data);
+			init_interactive_msg_dialog("Do you really wish to uninstall this app?");
+			while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+				vglSwapBuffers(GL_TRUE);
+			}
+			prevent_burn_in();
+			SceMsgDialogResult msg_res;
+			memset(&msg_res, 0, sizeof(SceMsgDialogResult));
+			sceMsgDialogGetResult(&msg_res);
+			sceMsgDialogTerm();
+			if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
+				if (mode_idx == MODE_VITA_HBS) {
+					scePromoterUtilInit();
+					scePromoterUtilityDeletePkg(to_uninstall->titleid);
+					int state = 0;
+					do {
+						int ret = scePromoterUtilityGetState(&state);
+						if (ret < 0)
+							break;
+						DrawTextDialog("Uninstalling the app", true, false);
+						vglSwapBuffers(GL_TRUE);
+					} while (state);
+					scePromoterUtilTerm();
+				} else {
+					char tmp_path[256];
+					sprintf(tmp_path, "%spspemu/PSP/GAME/%s", pspemu_dev, to_uninstall->id);
+					recursive_rmdir(tmp_path);
+				}
+				to_uninstall->state = APP_UNTRACKED;
+			}
+			to_uninstall = nullptr;
+		}
 		
 		// Queued app download
 		if (to_download) {
