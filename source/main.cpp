@@ -413,14 +413,14 @@ void AppendThemeDatabase(const char *file) {
 		char *end, *end2;
 		do {
 			char name[128], fname[256];
-			SceIoStat st1;
+			SceIoStat st;
 			ptr = extractValue(name, ptr, "name", nullptr);
 			//printf("parsing %s\n", name);
 			if (!ptr)
 				break;
 			ThemeSelection *node = (ThemeSelection*)malloc(sizeof(ThemeSelection));
 			sprintf(fname, "ux0:data/VitaDB/previews/%s.png", name);
-			if (sceIoGetstat(fname, &st1) < 0)
+			if (sceIoGetstat(fname, &st) < 0)
 				missing_previews[missing_previews_num++] = node;
 			node->desc = nullptr;
 			node->shuffle = false;
@@ -1101,15 +1101,15 @@ void install_theme(ThemeSelection *g) {
 	}
 	ImGui::GetIO().Fonts->Clear();
 	ImGui_ImplVitaGL_InvalidateDeviceObjects();
-	SceIoStat st1;
-	if (sceIoGetstat("ux0:/data/VitaDB/font.ttf", &st1) >= 0)
+	SceIoStat st;
+	if (sceIoGetstat("ux0:/data/VitaDB/font.ttf", &st) >= 0)
 		ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/data/VitaDB/font.ttf", 16.0f);
 	else
 		ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/app/VITADBDLD/Roboto.ttf", 16.0f);
 }
 
 void install_theme_from_shuffle(bool boot) {
-	SceIoStat st1;
+	SceIoStat st;
 	int themes_num = 0;
 	
 	FILE *f = fopen("ux0:data/VitaDB/shuffle.cfg", "r");
@@ -1149,7 +1149,7 @@ void install_theme_from_shuffle(bool boot) {
 
 	//Start new background audio playback
 	sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.ogg", name);
-	if (sceIoGetstat(fname, &st1) >= 0) {
+	if (sceIoGetstat(fname, &st) >= 0) {
 		copy_file(fname, "ux0:data/VitaDB/bg.ogg");
 		if (!boot) {
 			audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
@@ -1163,11 +1163,11 @@ void install_theme_from_shuffle(bool boot) {
 
 	// Load new background image
 	sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.png", name);
-	if (sceIoGetstat(fname, &st1) >= 0)
+	if (sceIoGetstat(fname, &st) >= 0)
 		copy_file(fname, "ux0:data/VitaDB/bg.png");
 	else {
 		sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.mp4", name);
-		if (sceIoGetstat(fname, &st1) >= 0)
+		if (sceIoGetstat(fname, &st) >= 0)
 			copy_file(fname, "ux0:data/VitaDB/bg.mp4");
 	}
 	if (!boot)
@@ -1181,12 +1181,12 @@ void install_theme_from_shuffle(bool boot) {
 
 	// Set new font
 	sprintf(fname, "ux0:data/VitaDB/themes/%s/font.ttf", name);
-	if (sceIoGetstat(fname, &st1) >= 0)
+	if (sceIoGetstat(fname, &st) >= 0)
 		copy_file(fname, "ux0:data/VitaDB/font.ttf");
 	if (!boot) {
 		ImGui::GetIO().Fonts->Clear();
 		ImGui_ImplVitaGL_InvalidateDeviceObjects();
-		if (sceIoGetstat("ux0:/data/VitaDB/font.ttf", &st1) >= 0)
+		if (sceIoGetstat("ux0:/data/VitaDB/font.ttf", &st) >= 0)
 			ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/data/VitaDB/font.ttf", 16.0f);
 		else
 			ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/app/VITADBDLD/Roboto.ttf", 16.0f);
@@ -1200,11 +1200,12 @@ int main(int argc, char *argv[]) {
 		update_detected = true;
 		
 	srand(time(NULL));
-	SceIoStat st1, st2;
+	SceIoStat st;
 	
 	sceSysmoduleLoadModule(SCE_SYSMODULE_AVPLAYER);
 	scePowerSetArmClockFrequency(444);
 	scePowerSetBusClockFrequency(222);
+	sceIoMkdir("ux0:data", 0777);
 	sceIoMkdir("ux0:data/VitaDB", 0777);
 	sceIoMkdir("ux0:pspemu", 0777);
 	sceIoMkdir("ux0:pspemu/PSP", 0777);
@@ -1245,7 +1246,13 @@ int main(int argc, char *argv[]) {
 	uint8_t kubridge_state = KUBRIDGE_MISSING;
 	char user_plugin_str[96];
 	strcpy(user_plugin_str, "*SHARKF00D\nux0:data/vitadb.suprx\n*NPXS10031\nux0:data/vitadb.suprx\n");
-	FILE *fp = fopen("ux0:tai/config.txt", "r");
+	FILE *fp = NULL;
+	if (sceIoGetstat("ux0:tai/config.txt", &st) >= 0) {
+		if (!SCE_S_ISDIR(st.st_mode)) {
+			fp = fopen("ux0:tai/config.txt", "r");
+			//printf("using ux0 taiHEN config file\n");
+		}
+	}
 	if (!fp) {
 		fp = fopen("ur0:tai/config.txt", "r");
 		use_ur0_config = true;
@@ -1253,7 +1260,8 @@ int main(int argc, char *argv[]) {
 	int cfg_size = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, fp);
 	fclose(fp);
 	if (!strncmp(generic_mem_buffer, user_plugin_str, strlen(user_plugin_str))) {
-		if (!(sceIoGetstat("ur0:/data/libshacccg.suprx", &st1) >= 0 || sceIoGetstat("ur0:/data/external/libshacccg.suprx", &st2) >= 0)) { // Step 2: Extract libshacccg.suprx
+		if (!(sceIoGetstat("ur0:/data/libshacccg.suprx", &st) >= 0 || sceIoGetstat("ur0:/data/external/libshacccg.suprx", &st) >= 0)) { // Step 2: Extract libshacccg.suprx
+extract_libshacccg:
 			sceIoRemove("ux0:/data/Runtime1.00.pkg");
 			sceIoRemove("ux0:/data/Runtime2.01.pkg");
 			early_download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=567", "Downloading SharkF00D");
@@ -1299,29 +1307,37 @@ int main(int argc, char *argv[]) {
 			scePromoterUtilTerm();
 #endif
 		}
-	} else if (!(sceIoGetstat("ur0:/data/libshacccg.suprx", &st1) >= 0 || sceIoGetstat("ur0:/data/external/libshacccg.suprx", &st2) >= 0)) { // Step 1: Download PSM Runtime and install it
-		early_warning("Runtime shader compiler (libshacccg.suprx) is not installed. VitaDB Downloader will proceed with its extraction.");
-		void *tmp_buffer = malloc(cfg_size);
-		sceClibMemcpy(tmp_buffer, generic_mem_buffer, cfg_size);
-		early_download_file("http://ares.dl.playstation.net/psm-runtime/IP9100-PCSI00011_00-PSMRUNTIME000000.pkg", "Downloading PSM Runtime v.1.00");
-		sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:/data/Runtime1.00.pkg");
-		early_download_file("http://gs.ww.np.dl.playstation.net/ppkg/np/PCSI00011/PCSI00011_T8/286a65ec1ebc2d8b/IP9100-PCSI00011_00-PSMRUNTIME000000-A0201-V0100-e4708b1c1c71116c29632c23df590f68edbfc341-PE.pkg", "Downloading PSM Runtime v.2.01");
-		sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:/data/Runtime2.01.pkg");
-		copy_file("app0:vitadb.skprx", "ux0:data/vitadb.skprx");
-		copy_file("app0:vitadb.suprx", "ux0:data/vitadb.suprx");
-		fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "w");
-		fwrite(user_plugin_str, 1, strlen(user_plugin_str), fp);
-		fwrite(tmp_buffer, 1, cfg_size, fp);
-		fclose(fp);
-		free(tmp_buffer);
-		taiLoadStartKernelModule("ux0:data/vitadb.skprx", 0, NULL, 0);
-		sceAppMgrLaunchAppByName(0x60000, "NPXS10031", "[BATCH]host0:/package/Runtime1.00.pkg\nhost0:/package/Runtime2.01.pkg");
-		sceKernelExitProcess(0);
+	} else if (!(sceIoGetstat("ur0:/data/libshacccg.suprx", &st) >= 0 || sceIoGetstat("ur0:/data/external/libshacccg.suprx", &st) >= 0)) { // Step 1: Download PSM Runtime and install it
+		if (!(sceIoGetstat("ux0:/app/PCSI00011/runtime_version.txt", &st)) >= 0) { // PSM Runtime is not installed, downloading it
+			early_warning("Runtime shader compiler (libshacccg.suprx) is not installed. VitaDB Downloader will proceed with its extraction.");
+			void *tmp_buffer = malloc(cfg_size);
+			sceClibMemcpy(tmp_buffer, generic_mem_buffer, cfg_size);
+			early_download_file("http://ares.dl.playstation.net/psm-runtime/IP9100-PCSI00011_00-PSMRUNTIME000000.pkg", "Downloading PSM Runtime v.1.00");
+			sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:/data/Runtime1.00.pkg");
+			early_download_file("http://gs.ww.np.dl.playstation.net/ppkg/np/PCSI00011/PCSI00011_T8/286a65ec1ebc2d8b/IP9100-PCSI00011_00-PSMRUNTIME000000-A0201-V0100-e4708b1c1c71116c29632c23df590f68edbfc341-PE.pkg", "Downloading PSM Runtime v.2.01");
+			sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:/data/Runtime2.01.pkg");
+			fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "w");
+			copy_file("app0:vitadb.skprx", "ux0:data/vitadb.skprx");
+			copy_file("app0:vitadb.suprx", "ux0:data/vitadb.suprx");
+			fwrite(user_plugin_str, 1, strlen(user_plugin_str), fp);
+			fwrite(tmp_buffer, 1, cfg_size, fp);
+			fclose(fp);
+			free(tmp_buffer);
+			taiLoadStartKernelModule("ux0:data/vitadb.skprx", 0, NULL, 0);
+			sceAppMgrLaunchAppByName(0x60000, "NPXS10031", "[BATCH]host0:/package/Runtime1.00.pkg\nhost0:/package/Runtime2.01.pkg");
+			sceKernelExitProcess(0);
+		} else { // PSM Runtime already installed, we skip directly to SHARKF00D installation
+			goto extract_libshacccg;
+		}
 	}
+	
+	// Remove any leftover from libshacccg.suprx extraction
+	sceIoRemove("ux0:data/vitadb.skprx");
+	sceIoRemove("ux0:data/vitadb.suprx");
 	
 	// Check for kubridge existence
 	if (strstr(generic_mem_buffer, "kubridge.skprx"))
-		kubridge_state = sceIoGetstat("ur0:/tai/kubridge.skprx", &st1) >= 0 ? KUBRIDGE_UR0 : KUBRIDGE_UX0;
+		kubridge_state = sceIoGetstat("ur0:/tai/kubridge.skprx", &st) >= 0 ? KUBRIDGE_UR0 : KUBRIDGE_UX0;
 	
 	// Initializing SDL and SDL mixer
 	SDL_Init(SDL_INIT_AUDIO);
@@ -1329,7 +1345,7 @@ int main(int argc, char *argv[]) {
 	Mix_AllocateChannels(4);
 	
 	// Removing any failed app installation leftover
-	if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0)
+	if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st) >= 0)
 		recursive_rmdir("ux0:/data/VitaDB/vpk");
 	
 	// Initializing sceAppUtil
@@ -1344,7 +1360,7 @@ int main(int argc, char *argv[]) {
 	vglInitExtended(0, 960, 544, 0x1800000, SCE_GXM_MULTISAMPLE_NONE);
 
 	// Apply theme shuffling
-	if (sceIoGetstat("ux0:/data/VitaDB/shuffle.cfg", &st1) >= 0)
+	if (sceIoGetstat("ux0:/data/VitaDB/shuffle.cfg", &st) >= 0)
 		install_theme_from_shuffle(true);
 	LoadBackground();
 
@@ -1354,7 +1370,7 @@ int main(int argc, char *argv[]) {
 	info.size = sizeof(SceKernelThreadInfo);
 	int res = 0;
 	ImGui_ImplVitaGL_Init_Extended();
-	if (sceIoGetstat("ux0:/data/VitaDB/font.ttf", &st1) >= 0)
+	if (sceIoGetstat("ux0:/data/VitaDB/font.ttf", &st) >= 0)
 		ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/data/VitaDB/font.ttf", 16.0f);
 	else
 		ImGui::GetIO().Fonts->AddFontFromFileTTF("app0:/Roboto.ttf", 16.0f);
@@ -1374,7 +1390,7 @@ int main(int argc, char *argv[]) {
 	// Daemon popup
 	SceCtrlData pad;
 	sceCtrlPeekBufferPositive(0, &pad, 1);
-	if ((pad.buttons & SCE_CTRL_LTRIGGER) || sceIoGetstat("ux0:data/VitaDB/daemon.cfg", &st1) < 0) {
+	if ((pad.buttons & SCE_CTRL_LTRIGGER) || sceIoGetstat("ux0:data/VitaDB/daemon.cfg", &st) < 0) {
 		FILE *fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "r");
 		size_t len = fread(&generic_mem_buffer[20 * 1024 * 1024], 1, MEM_BUFFER_SIZE, fp);
 		fclose(fp);
@@ -1404,12 +1420,12 @@ int main(int argc, char *argv[]) {
 	}
 	
 	// Downloading icons
-	if ((sceIoGetstat("ux0:/data/VitaDB/icons.db", &st1) < 0) || (sceIoGetstat("ux0:data/VitaDB/icons", &st2) < 0)) {
+	if ((sceIoGetstat("ux0:/data/VitaDB/icons.db", &st) < 0) || (sceIoGetstat("ux0:data/VitaDB/icons", &st) < 0)) {
 		download_file("https://vitadb.rinnegatamante.it/icons_zip.php", "Downloading apps icons");
 		sceIoMkdir("ux0:data/VitaDB/icons", 0777);
 		extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/icons/", true);
 		sceIoRemove(TEMP_DOWNLOAD_NAME);
-	} else if (sceIoGetstat("ux0:/data/VitaDB/icons/0b", &st1) < 0) {
+	} else if (sceIoGetstat("ux0:/data/VitaDB/icons/0b", &st) < 0) {
 		// Checking if old icons system is being used and upgrade it
 		for (int i = 0; i < 3; i++) {
 			DrawTextDialog("Upgrading icons system, please wait...", true, false);
@@ -2162,7 +2178,7 @@ int main(int argc, char *argv[]) {
 							vglSwapBuffers(GL_TRUE);
 						} while (state);
 						scePromoterUtilTerm();
-						if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0) {
+						if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st) >= 0) {
 							init_msg_dialog("The installation process failed.");
 							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 								vglSwapBuffers(GL_TRUE);
@@ -2238,7 +2254,7 @@ int main(int argc, char *argv[]) {
 		
 		// Queued themes database download
 		if (mode_idx == MODE_THEMES && !themes) {
-			if (sceIoGetstat("ux0:/data/VitaDB/previews", &st1) < 0) {
+			if (sceIoGetstat("ux0:/data/VitaDB/previews", &st) < 0) {
 				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/previews.zip", "Downloading themes previews");
 				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/", false);
 			}
@@ -2292,7 +2308,7 @@ int main(int argc, char *argv[]) {
 				vglSwapBuffers(GL_TRUE);
 			} while (state);
 			scePromoterUtilTerm();
-			if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st1) >= 0) {
+			if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st) >= 0) {
 				init_msg_dialog("The installation process failed.");
 				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 					vglSwapBuffers(GL_TRUE);

@@ -43,14 +43,14 @@ target_link_libraries(VitaDB
   m
   z
   stdc++
+  SDL2_mixer
+  SDL2
   vitaGL
   vitashark
   SceShaccCgExt
   mathneon
   curl
   ssl
-  SDL2_mixer
-  SDL2
   vorbisfile
   vorbis
   ogg
