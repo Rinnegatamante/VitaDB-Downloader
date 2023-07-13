@@ -693,6 +693,7 @@ const char *filter_modes[] = {
 	"Game Ports",
 	"Utilities",
 	"Emulators",
+	"Freeware Apps",
 	"Not Installed Apps",
 	"Outdated Apps",
 	"Installed Apps",
@@ -833,12 +834,18 @@ bool filterApps(AppSelection *p) {
 				return true;
 		} else {
 			filter_cat -= 6;
-			if (filter_cat < 2) {
-				if (p->state != filter_cat)
+			if (filter_cat == 0) { // Freeware Apps
+				if (p->requirements && strstr(p->requirements, "Game Data Files"))
 					return true;
 			} else {
-				if (p->state == APP_UNTRACKED)
-					return true;
+				filter_cat--;
+				if (filter_cat < 2) {
+					if (p->state != filter_cat)
+						return true;
+				} else {
+					if (p->state == APP_UNTRACKED)
+						return true;
+				}
 			}
 		}
 	}
