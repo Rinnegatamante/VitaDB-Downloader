@@ -2144,20 +2144,45 @@ extract_libshacccg:
 					glBindTexture(GL_TEXTURE_2D, previous_frame);
 					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 					vglFree(scr_data);
-					init_msg_dialog("This homebrew has extra requirements in order to work properly:\n%s", to_download->requirements);
+					init_interactive_msg_dialog("This homebrew has extra requirements in order to work properly:\n%s\n\nDo you wish to install it still?", to_download->requirements);
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 						vglSwapBuffers(GL_TRUE);
 					}
+					SceMsgDialogResult msg_res;
+					memset(&msg_res, 0, sizeof(SceMsgDialogResult));
+					sceMsgDialogGetResult(&msg_res);
 					sceMsgDialogTerm();
-					prevent_burn_in();
-					if (strstr(to_download->requirements, "kubridge.skprx")) {
-						if (kubridge_state != KUBRIDGE_MISSING) {
-							char cur_hash[40];
-							FILE *f = fopen(kubridge_state == KUBRIDGE_UR0 ? "ur0:tai/kubridge.skprx" : "ux0:tai/kubridge.skprx", "r");
-							calculate_md5(f, cur_hash);
-							silent_download("https://vitadb.rinnegatamante.it/get_hb_hash.php?id=611");
-							if (strncmp(cur_hash, generic_mem_buffer, 32)) {
-								init_interactive_msg_dialog("VitaDB Downloader detected an outdated version of kubridge.skprx. Do you wish to update it?\n\nNOTE: A console restart is required for kubridge.skprx update to complete.");
+					if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
+						prevent_burn_in();
+						if (strstr(to_download->requirements, "kubridge.skprx")) {
+							if (kubridge_state != KUBRIDGE_MISSING) {
+								char cur_hash[40];
+								FILE *f = fopen(kubridge_state == KUBRIDGE_UR0 ? "ur0:tai/kubridge.skprx" : "ux0:tai/kubridge.skprx", "r");
+								calculate_md5(f, cur_hash);
+								silent_download("https://vitadb.rinnegatamante.it/get_hb_hash.php?id=611");
+								if (strncmp(cur_hash, generic_mem_buffer, 32)) {
+									init_interactive_msg_dialog("VitaDB Downloader detected an outdated version of kubridge.skprx. Do you wish to update it?\n\nNOTE: A console restart is required for kubridge.skprx update to complete.");
+									while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+										vglSwapBuffers(GL_TRUE);
+									}
+									prevent_burn_in();
+									SceMsgDialogResult msg_res;
+									memset(&msg_res, 0, sizeof(SceMsgDialogResult));
+									sceMsgDialogGetResult(&msg_res);
+									sceMsgDialogTerm();
+									if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
+										download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=611", "Downloading kubridge.skprx");
+										if (kubridge_state == KUBRIDGE_UR0) {
+											copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
+											sceIoRemove(TEMP_DOWNLOAD_NAME);
+										} else {
+											sceIoRemove("ux0:tai/kubridge.skprx");
+											sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:tai/kubridge.skprx");
+										}
+									}
+								}
+							} else {
+								init_interactive_msg_dialog("This homebrew requires kubridge.skprx but it's not installed on this console. Do you wish to install it as well?\n\nNOTE: A console restart is required for kubridge.skprx installation to complete.");
 								while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 									vglSwapBuffers(GL_TRUE);
 								}
@@ -2168,54 +2193,37 @@ extract_libshacccg:
 								sceMsgDialogTerm();
 								if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
 									download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=611", "Downloading kubridge.skprx");
-									if (kubridge_state == KUBRIDGE_UR0) {
+									if (use_ur0_config) {
 										copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
 										sceIoRemove(TEMP_DOWNLOAD_NAME);
+										FILE *f = fopen("ur0:tai/config.txt", "r");
+										size_t len = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
+										fclose(f);
+										sprintf(user_plugin_str, "*KERNEL\nur0:tai/kubridge.skprx\n");
+										f = fopen("ur0:tai/config.txt", "w");
+										fwrite(user_plugin_str, 1, strlen(user_plugin_str), f);
+										fwrite(generic_mem_buffer, 1, len, f);
+										fclose(f);
+										kubridge_state = KUBRIDGE_UR0;
 									} else {
-										sceIoRemove("ux0:tai/kubridge.skprx");
+										sceIoRemove("ux0:tai/kubridge.skprx"); // Just to be safe
 										sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:tai/kubridge.skprx");
+										FILE *f = fopen("ux0:tai/config.txt", "r");
+										size_t len = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
+										fclose(f);
+										sprintf(user_plugin_str, "*KERNEL\nux0:tai/kubridge.skprx\n");
+										f = fopen("ux0:tai/config.txt", "w");
+										fwrite(user_plugin_str, 1, strlen(user_plugin_str), f);
+										fwrite(generic_mem_buffer, 1, len, f);
+										fclose(f);
+										kubridge_state = KUBRIDGE_UX0;
 									}
 								}
 							}
-						} else {
-							init_interactive_msg_dialog("This homebrew requires kubridge.skprx but it's not installed on this console. Do you wish to install it as well?\n\nNOTE: A console restart is required for kubridge.skprx installation to complete.");
-							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-								vglSwapBuffers(GL_TRUE);
-							}
-							prevent_burn_in();
-							SceMsgDialogResult msg_res;
-							memset(&msg_res, 0, sizeof(SceMsgDialogResult));
-							sceMsgDialogGetResult(&msg_res);
-							sceMsgDialogTerm();
-							if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
-								download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=611", "Downloading kubridge.skprx");
-								if (use_ur0_config) {
-									copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
-									sceIoRemove(TEMP_DOWNLOAD_NAME);
-									FILE *f = fopen("ur0:tai/config.txt", "r");
-									size_t len = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
-									fclose(f);
-									sprintf(user_plugin_str, "*KERNEL\nur0:tai/kubridge.skprx\n");
-									f = fopen("ur0:tai/config.txt", "w");
-									fwrite(user_plugin_str, 1, strlen(user_plugin_str), f);
-									fwrite(generic_mem_buffer, 1, len, f);
-									fclose(f);
-									kubridge_state = KUBRIDGE_UR0;
-								} else {
-									sceIoRemove("ux0:tai/kubridge.skprx"); // Just to be safe
-									sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:tai/kubridge.skprx");
-									FILE *f = fopen("ux0:tai/config.txt", "r");
-									size_t len = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
-									fclose(f);
-									sprintf(user_plugin_str, "*KERNEL\nux0:tai/kubridge.skprx\n");
-									f = fopen("ux0:tai/config.txt", "w");
-									fwrite(user_plugin_str, 1, strlen(user_plugin_str), f);
-									fwrite(generic_mem_buffer, 1, len, f);
-									fclose(f);
-									kubridge_state = KUBRIDGE_UX0;
-								}
-							}
 						}
+					} else {
+						to_download = nullptr;
+						goto skip_install;
 					}
 				}
 				if (strlen(to_download->data_link) > 5) {
@@ -2334,7 +2342,7 @@ extract_libshacccg:
 				}
 			}
 		}
-		
+skip_install:		
 		// Ime dialog active
 		if (is_ime_active) {
 			while (sceImeDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {

@@ -22,7 +22,7 @@
 void early_fatal_error(const char *msg);
 void early_warning(const char *msg);
 
-int init_interactive_msg_dialog(const char *msg);
+int init_interactive_msg_dialog(const char *msg, ...);
 int init_msg_dialog(const char *msg, ...);
 int init_progressbar_dialog(const char *msg, ...);
 int init_interactive_ime_dialog(const char *msg, const char *start_text);

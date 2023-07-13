@@ -65,7 +65,14 @@ void early_warning(const char *msg) {
 	sceMsgDialogTerm();
 }
 
-int init_interactive_msg_dialog(const char *msg) {
+int init_interactive_msg_dialog(const char *fmt, ...) {
+	va_list list;
+	char msg[1024];
+
+	va_start(list, fmt);
+	vsnprintf(msg, sizeof(msg), fmt, list);
+	va_end(list);
+	
 	SceMsgDialogUserMessageParam msg_param;
 	sceClibMemset(&msg_param, 0, sizeof(msg_param));
 	msg_param.buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_YESNO;
