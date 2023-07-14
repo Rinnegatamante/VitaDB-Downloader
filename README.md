@@ -31,6 +31,21 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 
 ## Changelog
 
+### v.1.8
+- Fixed an issue causing libshacccg.suprx extraction to fail under certain circumstances.
+- Fixed an issue causing kubridge.skprx to not be activated under certain circumstances.
+- Made so that libshacccg.suprx will proceed if the app is launched after only some steps are performed instead of restarting from scratch.
+- Added more homebrew offered as Nightly releases to the Daemon blacklist (Xash3D, Nazi Zombies Portable).
+- Made so that VitaDB Downloader will automatically cleanup storage for leftover of failed homebrew installs.
+- Added a new Manage submenu accessible by pressing Select with different features.
+- Moved "View Changelog" feature to Manage submenu.
+- Added the possibility to launch PSVita homebrew from the Manage submenu.
+- Added the possibility to uninstall PSVita/PSP homebrew from the Manage submenu.
+- Added the possibility to view homebrew requirements from the Manage submenu.
+- Added the possibility to tag an homebrew as Updated from the Manage submenu.
+- Made possible to cancel an homebrew install if it has requirements from the requirements popup.
+- Added a new filter: Freeware Apps. It will show all the apps not requiring user to supply game data files manually in order to be used.
+
 ### v.1.7
 - Added an optional auto-updater daemon for installed Vita homebrews. It will check for any homebrew update every hour and at console boot even with VitaDB Downloader closed and send a notification to quickly perform the update.
 - Added an auto-downloader and extractor of libshacccg.suprx if this is missing.
