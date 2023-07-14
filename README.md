@@ -34,7 +34,7 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 ### v.1.8
 - Fixed an issue causing libshacccg.suprx extraction to fail under certain circumstances.
 - Fixed an issue causing kubridge.skprx to not be activated under certain circumstances.
-- Made so that libshacccg.suprx will proceed if the app is launched after only some steps are performed instead of restarting from scratch.
+- Made so that libshacccg.suprx extraction will proceed if the app is launched after only some steps are performed instead of restarting from scratch.
 - Added more homebrew offered as Nightly releases to the Daemon blacklist (Xash3D, Nazi Zombies Portable).
 - Made so that VitaDB Downloader will automatically cleanup storage for leftover of failed homebrew installs.
 - Added a new Manage submenu accessible by pressing Select with different features.
