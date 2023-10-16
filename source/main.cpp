@@ -929,7 +929,7 @@ void DrawBackground() {
 	bg_attributes[9] = 960.0f;
 	bg_attributes[10] = 544.0f;
 	bg_attributes[11] = 0.0f;
-	vglVertexPointerMapped(bg_attributes);
+	vglVertexPointerMapped(3, bg_attributes);
 	
 	bg_attributes[12] = 0.0f;
 	bg_attributes[13] = 0.0f;

@@ -74,7 +74,7 @@ target_link_libraries(VitaDB
   SceNet_stub
   SceNetCtl_stub
   SceShaccCg_stub
-  SceSysmodule_stub
+  -Wl,--whole-archive SceSysmodule_stub -Wl,--no-whole-archive
   ScePower_stub
   SceTouch_stub
   SceVshBridge_stub
