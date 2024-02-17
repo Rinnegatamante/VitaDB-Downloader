@@ -1204,9 +1204,14 @@ void install_theme_from_shuffle(bool boot) {
 int main(int argc, char *argv[]) {
 	// Check if an on demand update has been requested
 	sceAppMgrGetAppParam(boot_params);
-	if (strlen(boot_params) > 0)
-		update_detected = true;
-		
+	if (strlen(boot_params) > 0) {
+		if (!strstr(boot_params, "psgm")) {
+			update_detected = true;
+		} else {
+			boot_params[0] = 0;
+		}
+	}
+	
 	srand(time(NULL));
 	SceIoStat st;
 	
