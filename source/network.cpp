@@ -105,8 +105,7 @@ int appListThread(unsigned int args, void *arg) {
 	}
 	downloaded_bytes = total_bytes;
 	curl_easy_cleanup(curl_handle);
-	sceKernelExitDeleteThread(0);
-	return 0;
+	return sceKernelExitDeleteThread(0);
 }
 
 int appPspListThread(unsigned int args, void *arg) {
@@ -128,8 +127,7 @@ int appPspListThread(unsigned int args, void *arg) {
 	}
 	downloaded_bytes = total_bytes;
 	curl_easy_cleanup(curl_handle);
-	sceKernelExitDeleteThread(0);
-	return 0;
+	return sceKernelExitDeleteThread(0);
 }
 
 int downloadMemThread(unsigned int args, void *arg) {

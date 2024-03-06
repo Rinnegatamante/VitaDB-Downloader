@@ -667,11 +667,21 @@ void LoadBackground() {
 	}
 }
 
-GLuint LoadTrophy() {
+GLuint LoadTrophy(const char *tid, const char *name) {
+	char fname[256], dl_url[256];
+	sprintf(fname, "ux0:data/VitaDB/trophies/%s/%s", tid, name);
+	FILE *f = fopen(fname, "rb");
+	if (f) {
+		fclose(f);
+	} else {
+		sprintf(dl_url, "https://rinnegatamante.it/vitadb/trophies/%s", name);
+		download_file(dl_url, "Downloading trophy icon");
+		sceIoRename(TEMP_DOWNLOAD_NAME, fname);
+	}
 	int w, h;
 	GLuint res;
 	glGenTextures(1, &res);
-	uint8_t *icon_data = stbi_load(TEMP_DOWNLOAD_NAME, &w, &h, NULL, 4);
+	uint8_t *icon_data = stbi_load(fname, &w, &h, NULL, 4);
 	glBindTexture(GL_TEXTURE_2D, res);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
 	free(icon_data);
@@ -1247,6 +1257,7 @@ int main(int argc, char *argv[]) {
 	scePowerSetBusClockFrequency(222);
 	sceIoMkdir("ux0:data", 0777);
 	sceIoMkdir("ux0:data/VitaDB", 0777);
+	sceIoMkdir("ux0:data/VitaDB/trophies", 0777);
 	sceIoMkdir("ux0:pspemu", 0777);
 	sceIoMkdir("ux0:pspemu/PSP", 0777);
 	sceIoMkdir("ux0:pspemu/PSP/GAME", 0777);
@@ -2459,6 +2470,8 @@ skip_install:
 		// Queued trophies download
 		if (show_trophies == 1) {
 			char dl_url[512];
+			sprintf(dl_url, "ux0:data/VitaDB/trophies/%s", hovered->titleid);
+			sceIoMkdir(dl_url, 0777);
 			sprintf(dl_url, "https://vitadb.rinnegatamante.it/get_trophies_for_app.php?id=%s", hovered->titleid);
 			download_file(dl_url, "Downloading trophies data");
 			FILE *f = fopen(TEMP_DOWNLOAD_NAME, "rb");
@@ -2492,10 +2505,7 @@ skip_install:
 				char icon_name[64];
 				sceClibMemcpy(icon_name, s, end - s);
 				icon_name[end - s] = 0;
-				sprintf(dl_url, "https://rinnegatamante.it/vitadb/trophies/%s", icon_name);
-				download_file(dl_url, "Downloading trophy icon");
-				trp->icon = LoadTrophy();
-				sceIoRemove(TEMP_DOWNLOAD_NAME);
+				trp->icon = LoadTrophy(hovered->titleid, icon_name);
 				trp->next = nullptr;
 				if (last_trp)
 					last_trp->next = trp;
