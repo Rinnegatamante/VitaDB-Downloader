@@ -1515,12 +1515,14 @@ extract_libshacccg:
 	// Downloading apps list
 	sceAppMgrUmount("app0:");
 	if (strlen(boot_params) == 0) {
-		SceUID thd = sceKernelCreateThread("Apps List Downloader", &appListThread, 0x10000100, 0x100000, 0, 0, NULL);
-		sceKernelStartThread(thd, 0, NULL);
-		do {
-			DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading apps list", 1, true);
-			res = sceKernelGetThreadInfo(thd, &info);
-		} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
+		if (!(pad.buttons & SCE_CTRL_RTRIGGER) || sceIoGetstat("ux0:data/VitaDB/apps.json", &st) < 0) {
+			SceUID thd = sceKernelCreateThread("Apps List Downloader", &appListThread, 0x10000100, 0x100000, 0, 0, NULL);
+			sceKernelStartThread(thd, 0, NULL);
+			do {
+				DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading apps list", 1, true);
+				res = sceKernelGetThreadInfo(thd, &info);
+			} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
+		}
 		AppendAppDatabase("ux0:data/VitaDB/apps.json", false);
 	} else {
 		AppendAppDatabase("ux0:data/vitadb.json", false);
