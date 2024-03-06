@@ -71,6 +71,13 @@ enum {
 	KUBRIDGE_UR0
 };
 
+struct TrophySelection {
+	char name[64];
+	char *desc;
+	GLuint icon;
+	TrophySelection *next;
+};
+
 struct AppSelection {
 	char name[192];
 	char icon[128];
@@ -89,6 +96,7 @@ struct AppSelection {
 	char *requirements;
 	char data_link[128];
 	int state;
+	bool trophies;
 	AppSelection *next;
 };
 
@@ -118,6 +126,7 @@ AppSelection *apps = nullptr;
 AppSelection *psp_apps = nullptr;
 AppSelection *to_download = nullptr;
 AppSelection *to_uninstall = nullptr;
+TrophySelection *trophies = nullptr;
 
 void prevent_burn_in() {
 	glMatrixMode(GL_PROJECTION);
@@ -299,7 +308,7 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 		char *ptr = buffer;
 		char *end, *end2;
 		do {
-			char name[128], version[64], fname[128], fname2[128];
+			char name[128], version[64], fname[128], fname2[128], has_trophies[4];
 			ptr = extractValue(name, ptr, "name", nullptr);
 			//printf("parsing %s\n", name);
 			if (!ptr)
@@ -358,6 +367,8 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 			ptr = extractValue(node->requirements, ptr, "requirements", &node->requirements);
 			if (node->requirements)
 				node->requirements = unescape(node->requirements);
+			ptr = extractValue(has_trophies, ptr, "trophies", nullptr);
+			node->trophies = atoi(has_trophies);
 			ptr = extractValue(node->data_link, ptr, "data", nullptr);
 			sprintf(node->name, "%s %s", name, version);
 			if (is_psp) {
@@ -573,8 +584,9 @@ void extract_file(char *file, char *dir, bool indexing) {
 }
 
 static int preview_width, preview_height, preview_x, preview_y;
-GLuint preview_icon = 0, preview_shot = 0, previous_frame = 0, bg_image = 0;
+GLuint preview_icon = 0, preview_shot = 0, previous_frame = 0, bg_image = 0, trp_icon = 0;
 int show_screenshots = 0; // 0 = off, 1 = download, 2 = show
+int show_trophies = 0; // 0 = off, 1 = download, 2 = show
 void LoadPreview(AppSelection *game) {
 	if (old_hovered == game)
 		return;
@@ -655,6 +667,17 @@ void LoadBackground() {
 	}
 }
 
+GLuint LoadTrophy() {
+	int w, h;
+	GLuint res;
+	glGenTextures(1, &res);
+	uint8_t *icon_data = stbi_load(TEMP_DOWNLOAD_NAME, &w, &h, NULL, 4);
+	glBindTexture(GL_TEXTURE_2D, res);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+	free(icon_data);
+	return res;
+}
+
 void swap_apps(AppSelection *a, AppSelection *b) {
 	AppSelection tmp;
 	
@@ -697,6 +720,7 @@ const char *filter_modes[] = {
 	"Not Installed Apps",
 	"Outdated Apps",
 	"Installed Apps",
+	"Apps with Trophies",
 };
 const char *filter_themes_modes[] = {
 	"All Themes",
@@ -842,8 +866,11 @@ bool filterApps(AppSelection *p) {
 				if (filter_cat < 2) {
 					if (p->state != filter_cat)
 						return true;
-				} else {
+				} else if (filter_cat == 2) { // Installed Apps
 					if (p->state == APP_UNTRACKED)
+						return true;
+				} else {
+					if (!p->trophies)
 						return true;
 				}
 			}
@@ -1376,6 +1403,14 @@ extract_libshacccg:
 	if (sceIoGetstat("ux0:/data/VitaDB/shuffle.cfg", &st) >= 0)
 		install_theme_from_shuffle(true);
 	LoadBackground();
+	
+	// Load trophy icon
+	int w, h;
+	uint8_t *trp_data = stbi_load("app0:trophy.png", &w, &h, NULL, 4);
+	glGenTextures(1, &trp_icon);
+	glBindTexture(GL_TEXTURE_2D, trp_icon);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, trp_data);
+	free(trp_data);
 
 	// Initializing dear ImGui
 	ImGui::CreateContext();
@@ -1627,7 +1662,7 @@ extract_libshacccg:
 					continue;
 				}
 				if ((strlen(app_name_filter) == 0) || (strlen(app_name_filter) > 0 && (strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter)))) {
-					float y = ImGui::GetCursorPosY() + 2.0f;
+					float y = ImGui::GetCursorPosY() + 3.0f;
 					bool is_shuffle = false;
 					if (g->shuffle) {
 						is_shuffle = true;
@@ -1697,6 +1732,7 @@ extract_libshacccg:
 			AppSelection *g = mode_idx == MODE_VITA_HBS ? apps : psp_apps;
 			filtered_entries = 0;
 			int increment_idx = 0;
+			int btn_idx = 0;
 			is_app_hovered = false;
 			ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
 			while (g) {
@@ -1705,9 +1741,17 @@ extract_libshacccg:
 					continue;
 				}
 				if ((strlen(app_name_filter) == 0) || (strlen(app_name_filter) > 0 && (strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter)))) {
-					float y = ImGui::GetCursorPosY() + 2.0f;
-					if (ImGui::Button(g->name, ImVec2(-1.0f, 0.0f))) {
-						to_download = g;
+					float y = ImGui::GetCursorPosY() + 3.0f;
+					if (g->trophies) {
+						char lbl[128];
+						sprintf(lbl, "##%d", btn_idx++);
+						if (ImGui::Button(lbl, ImVec2(-1.0f, 0.0f))) {
+							to_download = g;
+						}
+					} else {
+						if (ImGui::Button(g->name, ImVec2(-1.0f, 0.0f))) {
+							to_download = g;
+						}
 					}
 					if (ImGui::IsItemHovered()) {
 						is_app_hovered = true;
@@ -1757,6 +1801,12 @@ extract_libshacccg:
 						ImGui::SetCursorPos(ImVec2(520.0f - tag_len.x, y));
 						ImGui::Text("Unknown");
 						break;
+					}
+					if (g->trophies) {
+						ImGui::SetCursorPosY(y - 2.0f);
+						ImGui::Image((void*)trp_icon, ImVec2(20, 20));
+						ImGui::SetCursorPos(ImVec2(28.0f, y));
+						ImGui::Text(g->name);
 					}
 					filtered_entries++;
 				}
@@ -1968,9 +2018,14 @@ extract_libshacccg:
 					hovered->state = APP_UPDATED;
 				}
 			}
+			if (hovered->trophies) {
+				if (ImGui::Button("View Available Trophies", ImVec2(-1.0f, 0.0f))) {
+					show_trophies = 1;
+				}
+			}
 			if (hovered->requirements) {
 				if (ImGui::Button("View Homebrew Requirements", ImVec2(-1.0f, 0.0f))) {
-					show_requirements = 1;
+					show_requirements = true;
 				}
 			}
 			if (strlen(hovered->screenshots) > 5) {
@@ -1979,7 +2034,7 @@ extract_libshacccg:
 				}
 			}
 			if (ImGui::Button("View Changelog", ImVec2(-1.0f, 0.0f))) {
-				show_changelog = 1;
+				show_changelog = true;
 				changelog = GetChangelog("ux0:data/VitaDB/apps.json", hovered->id);
 			}
 			ImGui::End();
@@ -2014,6 +2069,28 @@ extract_libshacccg:
 			ImGui::End();
 		}
 		
+		if (show_trophies == 2) {
+			char titlebar[256];
+			sprintf(titlebar, "%s Trophies (Circle to close)", hovered->name);
+			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
+			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
+			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+			ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
+			TrophySelection *t = trophies;
+			int trp_id = 0;
+			while (t) {
+				char label[512];
+				sprintf(label, "%s\n%s ##%d", t->name, t->desc, trp_id++);
+				float y = ImGui::GetCursorPosY() + 2.0f;
+				ImGui::Button(label, ImVec2(-1.0f, 0.0f));
+				ImGui::SetCursorPos(ImVec2(735.0f, y));
+				ImGui::Image((void*)t->icon, ImVec2(35, 35));
+				t = t->next;
+			}
+			ImGui::PopStyleVar();
+			ImGui::End();
+		}
+		
 		glViewport(0, 0, static_cast<int>(ImGui::GetIO().DisplaySize.x), static_cast<int>(ImGui::GetIO().DisplaySize.y));
 		ImGui::Render();
 		ImGui_ImplVitaGL_RenderDrawData(ImGui::GetDrawData());
@@ -2021,22 +2098,22 @@ extract_libshacccg:
 		
 		// Extra controls handling
 		sceCtrlPeekBufferPositive(0, &pad, 1);
-		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !show_screenshots && !show_changelog && !show_requirements && !extra_menu_invoked) {
+		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !show_screenshots && !show_changelog && !show_requirements && !show_trophies && !extra_menu_invoked) {
 			calculate_right_len = true;
 			old_sort_idx = -1;
 			sort_idx = 0;
 			filter_idx = 0;
 			mode_idx = (mode_idx + 1) % MODES_NUM;
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_screenshots && !show_changelog && !show_requirements && !extra_menu_invoked) {
+		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_screenshots && !show_changelog && !show_requirements && !show_trophies && !extra_menu_invoked) {
 			if (mode_idx == MODE_THEMES)
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_themes_str) / sizeof(sort_modes_themes_str[0]));
 			else
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_str) / sizeof(sort_modes_str[0]));
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES) && !show_changelog && !show_requirements) {
+		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES) && !show_changelog && !show_requirements && !show_trophies) {
 			show_screenshots = show_screenshots ? 0 : 1;
-		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && !show_screenshots && !show_changelog && !show_requirements) {
+		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && !show_screenshots && !show_changelog && !show_requirements && !show_trophies) {
 			if (mode_idx == MODE_THEMES) {
 				shuffle_themes = !shuffle_themes;
 				ThemeSelection *g = themes;
@@ -2057,7 +2134,7 @@ extract_libshacccg:
 					sceIoRemove("ux0:data/VitaDB/shuffle.cfg");
 			} else if (hovered)
 				extra_menu_invoked = !extra_menu_invoked;
-		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && !show_changelog && !show_requirements && (!extra_menu_invoked || show_screenshots)) {
+		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && !show_changelog && !show_requirements && !show_trophies && (!extra_menu_invoked || show_screenshots)) {
 			if (show_screenshots)
 				cur_ss_idx--;
 			else {
@@ -2065,27 +2142,36 @@ extract_libshacccg:
 				decrement_stack_idx = 0;
 				decremented_app = nullptr;
 			}
-		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT) && !show_changelog && !show_requirements && (!extra_menu_invoked || show_screenshots)) {
+		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT) && !show_changelog && !show_requirements && !show_trophies && (!extra_menu_invoked || show_screenshots)) {
 			if (show_screenshots)
 				cur_ss_idx++;
 			else
 				fast_increment = true;
 		} else if (pad.buttons & SCE_CTRL_CIRCLE && !(oldpad & SCE_CTRL_CIRCLE)) {
 			if (show_changelog) {
-				show_changelog = 0;
+				show_changelog = false;
 				free(changelog);
 			} else if (show_requirements) {
-				show_requirements = 0;
+				show_requirements = false;
+			} else if (show_trophies) {
+				show_trophies = 0;
+				while (trophies) {
+					TrophySelection *t = trophies;
+					free(t->desc);
+					glDeleteTextures(1, &t->icon);
+					trophies = trophies->next;
+					free(t);
+				}
 			} else if (show_screenshots) {
 				show_screenshots = 0;
 			} else if (extra_menu_invoked) {
-				extra_menu_invoked = 0;
+				extra_menu_invoked = false;
 			} else
 				go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !show_screenshots && !show_requirements && !show_changelog && !extra_menu_invoked) {
+		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !show_screenshots && !show_requirements && !show_trophies && !show_changelog && !extra_menu_invoked) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !show_screenshots && !show_requirements && !show_changelog && !extra_menu_invoked) {
+		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !show_screenshots && !show_requirements && !show_trophies && !show_changelog && !extra_menu_invoked) {
 			if (mode_idx == MODE_THEMES)
 				filter_idx = (filter_idx + 1) % (sizeof(filter_themes_modes) / sizeof(*filter_themes_modes));
 			else
@@ -2368,6 +2454,56 @@ skip_install:
 			}
 			sceImeDialogTerm();
 			is_ime_active = false;
+		}
+		
+		// Queued trophies download
+		if (show_trophies == 1) {
+			char dl_url[512];
+			sprintf(dl_url, "https://vitadb.rinnegatamante.it/get_trophies_for_app.php?id=%s", hovered->titleid);
+			download_file(dl_url, "Downloading trophies data");
+			FILE *f = fopen(TEMP_DOWNLOAD_NAME, "rb");
+			fseek(f, 0, SEEK_END);
+			size_t sz = ftell(f);
+			fseek(f, 0, SEEK_SET);
+			char *trp_data = malloc(sz + 1);
+			fread(trp_data, 1, sz, f);
+			trp_data[sz] = 0;
+			fclose(f);
+			sceIoRemove(TEMP_DOWNLOAD_NAME);
+			char *s = strstr(trp_data, "\"name\":");
+			TrophySelection *last_trp = nullptr;
+			trophies = nullptr;
+			while (s) {
+				TrophySelection *trp = (TrophySelection *)malloc(sizeof(TrophySelection));
+				if (trophies == nullptr)
+					trophies = trp;
+				s += 9;
+				char *end = strstr(s, "\"");
+				sceClibMemcpy(trp->name, s, end - s);
+				trp->name[end - s] = 0;
+				s = strstr(end, "\"desc\":") + 9;
+				end = strstr(s, "\",\n");
+				trp->desc = malloc(end - s + 1);
+				sceClibMemcpy(trp->desc, s, end - s);
+				trp->desc[end - s] = 0;
+				trp->desc = unescape(trp->desc);
+				s = strstr(end, "\"icon\":") + 9;
+				end = strstr(s, "\"");
+				char icon_name[64];
+				sceClibMemcpy(icon_name, s, end - s);
+				icon_name[end - s] = 0;
+				sprintf(dl_url, "https://rinnegatamante.it/vitadb/trophies/%s", icon_name);
+				download_file(dl_url, "Downloading trophy icon");
+				trp->icon = LoadTrophy();
+				sceIoRemove(TEMP_DOWNLOAD_NAME);
+				trp->next = nullptr;
+				if (last_trp)
+					last_trp->next = trp;
+				last_trp = trp;
+				s = strstr(end, "\"name\":");
+			}
+			free(trp_data);
+			show_trophies = 2;
 		}
 		
 		// Queued screenshots download

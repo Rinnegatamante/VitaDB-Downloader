@@ -158,6 +158,7 @@ vita_create_vpk(VitaDB.vpk ${VITA_TITLEID} eboot.bin
        ${CMAKE_SOURCE_DIR}/livearea/template.xml sce_sys/livearea/contents/template.xml
        ${CMAKE_BINARY_DIR}/vitadb.skprx vitadb.skprx
        ${CMAKE_BINARY_DIR}/vitadb.suprx vitadb.suprx
-	   ${CMAKE_BINARY_DIR}/vdb_daemon.suprx vdb_daemon.suprx
+       ${CMAKE_BINARY_DIR}/vdb_daemon.suprx vdb_daemon.suprx
        ${CMAKE_SOURCE_DIR}/Roboto.ttf Roboto.ttf
+       ${CMAKE_SOURCE_DIR}/trophy.png trophy.png
 )
