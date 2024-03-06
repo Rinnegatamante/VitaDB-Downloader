@@ -74,6 +74,8 @@ enum {
 struct TrophySelection {
 	char name[64];
 	char *desc;
+	char icon_name[32];
+	char titleid[10];
 	GLuint icon;
 	TrophySelection *next;
 };
@@ -583,8 +585,9 @@ void extract_file(char *file, char *dir, bool indexing) {
 	ImGui::GetIO().MouseDrawCursor = false;
 }
 
+SceUID trophy_thd;
 static int preview_width, preview_height, preview_x, preview_y;
-GLuint preview_icon = 0, preview_shot = 0, previous_frame = 0, bg_image = 0, trp_icon = 0;
+GLuint preview_icon = 0, preview_shot = 0, previous_frame = 0, bg_image = 0, trp_icon = 0, empty_icon = 0;
 int show_screenshots = 0; // 0 = off, 1 = download, 2 = show
 int show_trophies = 0; // 0 = off, 1 = download, 2 = show
 void LoadPreview(AppSelection *game) {
@@ -667,7 +670,27 @@ void LoadBackground() {
 	}
 }
 
-GLuint LoadTrophy(const char *tid, const char *name) {
+volatile uint8_t early_stop_trp_icon_upload = 0;
+int trophy_loader(unsigned int args, void *arg) {
+	TrophySelection *t = trophies;
+	while (t) {
+		if (early_stop_trp_icon_upload)
+			break;
+		int w, h;
+		char fname[256];
+		sprintf(fname, "ux0:data/VitaDB/trophies/%s/%s", t->titleid, t->icon_name);
+		GLuint res;
+		glGenTextures(1, &res);
+		uint8_t *icon_data = stbi_load(fname, &w, &h, NULL, 4);
+		glTextureImage2D(res, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+		free(icon_data);
+		t->icon = res;
+		t = t->next;
+	}
+	return sceKernelExitDeleteThread(0);
+}
+
+void PrepareTrophy(const char *tid, const char *name) {
 	char fname[256], dl_url[256];
 	sprintf(fname, "ux0:data/VitaDB/trophies/%s/%s", tid, name);
 	FILE *f = fopen(fname, "rb");
@@ -678,14 +701,6 @@ GLuint LoadTrophy(const char *tid, const char *name) {
 		download_file(dl_url, "Downloading trophy icon");
 		sceIoRename(TEMP_DOWNLOAD_NAME, fname);
 	}
-	int w, h;
-	GLuint res;
-	glGenTextures(1, &res);
-	uint8_t *icon_data = stbi_load(fname, &w, &h, NULL, 4);
-	glBindTexture(GL_TEXTURE_2D, res);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
-	free(icon_data);
-	return res;
 }
 
 void swap_apps(AppSelection *a, AppSelection *b) {
@@ -1422,6 +1437,7 @@ extract_libshacccg:
 	glBindTexture(GL_TEXTURE_2D, trp_icon);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, trp_data);
 	free(trp_data);
+	glGenTextures(1, &empty_icon);
 
 	// Initializing dear ImGui
 	ImGui::CreateContext();
@@ -2165,11 +2181,15 @@ extract_libshacccg:
 			} else if (show_requirements) {
 				show_requirements = false;
 			} else if (show_trophies) {
+				early_stop_trp_icon_upload = 1;
+				sceKernelWaitThreadEnd(trophy_thd, NULL, NULL);
+				early_stop_trp_icon_upload = 0;
 				show_trophies = 0;
 				while (trophies) {
 					TrophySelection *t = trophies;
 					free(t->desc);
-					glDeleteTextures(1, &t->icon);
+					if (t->icon != empty_icon)
+						glDeleteTextures(1, &t->icon);
 					trophies = trophies->next;
 					free(t);
 				}
@@ -2502,16 +2522,19 @@ skip_install:
 				trp->desc = unescape(trp->desc);
 				s = strstr(end, "\"icon\":") + 9;
 				end = strstr(s, "\"");
-				char icon_name[64];
-				sceClibMemcpy(icon_name, s, end - s);
-				icon_name[end - s] = 0;
-				trp->icon = LoadTrophy(hovered->titleid, icon_name);
+				sceClibMemcpy(trp->icon_name, s, end - s);
+				trp->icon_name[end - s] = 0;
+				trp->icon = empty_icon;
+				strcpy(trp->titleid, hovered->titleid);
+				PrepareTrophy(hovered->titleid, trp->icon_name);
 				trp->next = nullptr;
 				if (last_trp)
 					last_trp->next = trp;
 				last_trp = trp;
 				s = strstr(end, "\"name\":");
 			}
+			trophy_thd = sceKernelCreateThread("Audio Playback", &trophy_loader, 0x10000100, 0x100000, 0, 0, NULL);
+			sceKernelStartThread(trophy_thd, 0, NULL);
 			free(trp_data);
 			show_trophies = 2;
 		}
