@@ -31,6 +31,15 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 
 ## Changelog
 
+### v.1.9
+- Added possibility to skip database update at boot by holding R trigger.
+- Added possibility to launch VitaDB Downloader by other means (eg: from other applications).
+- Updated to latest vitaGL commit.
+- Fixed a vertical alignment mismatch between homebrew entries and install tag info.
+- Added an icon showing homebrews providing trophies support.
+- Added "Apps with Trophies" filter.
+- Added the possibility to view available trophies for PSVita homebrew from the Manage submenu.
+
 ### v.1.8
 - Fixed an issue causing libshacccg.suprx extraction to fail under certain circumstances.
 - Fixed an issue causing kubridge.skprx to not be activated under certain circumstances.
