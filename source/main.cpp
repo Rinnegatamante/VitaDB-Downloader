@@ -1099,6 +1099,7 @@ void set_gui_theme() {
 }
 
 void install_theme(ThemeSelection *g) {
+	SceIoStat st;
 	char fname[256];
 	// Burning on screen the parsing text dialog
 	for (int i = 0; i < 3; i++) {
@@ -1125,9 +1126,11 @@ void install_theme(ThemeSelection *g) {
 	//Start new background audio playback
 	if (g->has_music[0] == '1') {
 		sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.ogg", g->name);
-		copy_file(fname, "ux0:data/VitaDB/bg.ogg");
-		audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
-		sceKernelStartThread(audio_thd, 0, NULL);
+		if (sceIoGetstat(fname, &st) >= 0) {
+			copy_file(fname, "ux0:data/VitaDB/bg.ogg");
+			audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
+			sceKernelStartThread(audio_thd, 0, NULL);
+		}
 	}
 	
 	// Kill old animated background
@@ -1138,11 +1141,13 @@ void install_theme(ThemeSelection *g) {
 	switch (g->bg_type[0]) {
 	case '1':
 		sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.png", g->name);
-		copy_file(fname, "ux0:data/VitaDB/bg.png");
+		if (sceIoGetstat(fname, &st) >= 0)
+			copy_file(fname, "ux0:data/VitaDB/bg.png");
 		break;
 	case '2':
 		sprintf(fname, "ux0:data/VitaDB/themes/%s/bg.mp4", g->name);
-		copy_file(fname, "ux0:data/VitaDB/bg.mp4");
+		if (sceIoGetstat(fname, &st) >= 0)
+			copy_file(fname, "ux0:data/VitaDB/bg.mp4");
 		break;
 	default:
 		break;
@@ -1157,11 +1162,11 @@ void install_theme(ThemeSelection *g) {
 	// Set new font
 	if (g->has_font[0] == '1') {
 		sprintf(fname, "ux0:data/VitaDB/themes/%s/font.ttf", g->name);
-		copy_file(fname, "ux0:data/VitaDB/font.ttf");
+		if (sceIoGetstat(fname, &st) >= 0)
+			copy_file(fname, "ux0:data/VitaDB/font.ttf");
 	}
 	ImGui::GetIO().Fonts->Clear();
 	ImGui_ImplVitaGL_InvalidateDeviceObjects();
-	SceIoStat st;
 	if (sceIoGetstat("ux0:/data/VitaDB/font.ttf", &st) >= 0)
 		ImGui::GetIO().Fonts->AddFontFromFileTTF("ux0:/data/VitaDB/font.ttf", 16.0f);
 	else
