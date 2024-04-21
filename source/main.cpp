@@ -477,7 +477,7 @@ void AppendThemeDatabase(const char *file) {
 static char fname[512], ext_fname[512], read_buffer[8192];
 
 void early_extract_file(char *file, char *dir) {
-	init_progressbar_dialog("Extracting SharkF00D"); // Hardcoded for now since it's the sole instance of this function
+	init_progressbar_dialog("Extracting ShaRKF00D"); // Hardcoded for now since it's the sole instance of this function
 	FILE *f;
 	unz_global_info global_info;
 	unz_file_info file_info;
@@ -491,9 +491,11 @@ void early_extract_file(char *file, char *dir) {
 	for (int zip_idx = 0; zip_idx < num_files; ++zip_idx) {
 		unzGetCurrentFileInfo(zipfile, &file_info, fname, 512, NULL, 0, NULL, 0);
 		total_extracted_bytes += file_info.uncompressed_size;
-		if ((zip_idx + 1) < num_files) unzGoToNextFile(zipfile);
+		if ((zip_idx + 1) < num_files)
+			unzGoToNextFile(zipfile);
 	}
 	unzGoToFirstFile(zipfile);
+	uint32_t prog_delta = 100 / num_files;
 	for (int zip_idx = 0; zip_idx < num_files; ++zip_idx) {
 		unzGetCurrentFileInfo(zipfile, &file_info, fname, 512, NULL, 0, NULL, 0);
 		sprintf(ext_fname, "%s/%s", dir, fname);
@@ -511,13 +513,14 @@ void early_extract_file(char *file, char *dir) {
 					curr_file_bytes += rbytes;
 				}
 				sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
-				sceMsgDialogProgressBarSetValue(SCE_MSG_DIALOG_PROGRESSBAR_TARGET_BAR_DEFAULT, ((zip_idx + 1) / num_files) * 100);
 				vglSwapBuffers(GL_TRUE);
 			}
 			fclose(f);
 			unzCloseCurrentFile(zipfile);
 		}
-		if ((zip_idx + 1) < num_files) unzGoToNextFile(zipfile);
+		sceMsgDialogProgressBarInc(SCE_MSG_DIALOG_PROGRESSBAR_TARGET_BAR_DEFAULT, prog_delta);
+		if ((zip_idx + 1) < num_files)
+			unzGoToNextFile(zipfile);
 	}
 	unzClose(zipfile);
 	sceMsgDialogClose();
@@ -543,7 +546,8 @@ void extract_file(char *file, char *dir, bool indexing) {
 	for (int zip_idx = 0; zip_idx < num_files; ++zip_idx) {
 		unzGetCurrentFileInfo(zipfile, &file_info, fname, 512, NULL, 0, NULL, 0);
 		total_extracted_bytes += file_info.uncompressed_size;
-		if ((zip_idx + 1) < num_files) unzGoToNextFile(zipfile);
+		if ((zip_idx + 1) < num_files)
+			unzGoToNextFile(zipfile);
 	}
 	unzGoToFirstFile(zipfile);
 	FILE *f2;
@@ -577,7 +581,8 @@ void extract_file(char *file, char *dir, bool indexing) {
 			fclose(f);
 			unzCloseCurrentFile(zipfile);
 		}
-		if ((zip_idx + 1) < num_files) unzGoToNextFile(zipfile);
+		if ((zip_idx + 1) < num_files)
+			unzGoToNextFile(zipfile);
 	}
 	if (indexing)
 		fclose(f2);
