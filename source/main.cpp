@@ -391,7 +391,7 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 		// Downloading missing icons
 		if (!update_detected) {
 			for (int i = 0; i < missing_icons_num; i++) {
-				sprintf(download_link, "https://rinnegatamante.it/vitadb/icons/%s", missing_icons[i]->icon);
+				sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/icons/%s", missing_icons[i]->icon);
 				download_file(download_link, "Downloading missing icons");
 				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c", missing_icons[i]->icon[0], missing_icons[i]->icon[1]);
 				sceIoMkdir(download_link, 0777);
@@ -714,7 +714,7 @@ void PrepareTrophy(const char *tid, const char *name) {
 	if (f) {
 		fclose(f);
 	} else {
-		sprintf(dl_url, "https://rinnegatamante.it/vitadb/trophies/%s", name);
+		sprintf(dl_url, "https://www.rinnegatamante.eu/vitadb/trophies/%s", name);
 		download_file(dl_url, "Downloading trophy icon");
 		sceIoRename(TEMP_DOWNLOAD_NAME, fname);
 	}
