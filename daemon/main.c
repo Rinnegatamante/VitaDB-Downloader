@@ -197,8 +197,8 @@ int daemon_thread(SceSize args, void *argp) {
 	
 	for (;;) {
 		SceUID http_template = sceHttpCreateTemplate("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36", 2, 1);
-		SceUID conn = sceHttpCreateConnectionWithURL(http_template, "http://dl.coolatoms.org/list_hbs_json.php", 0);
-		SceUID req = sceHttpCreateRequestWithURL(conn, 0, "http://dl.coolatoms.org/list_hbs_json.php", 0);
+		SceUID conn = sceHttpCreateConnectionWithURL(http_template, "http://www.rinnegatamante.eu/vitadb/list_hbs_json.php", 0);
+		SceUID req = sceHttpCreateRequestWithURL(conn, 0, "http://www.rinnegatamante.eu/vitadb/list_hbs_json.php", 0);
 		if (!sceHttpSendRequest(req, NULL, 0)) {
 			fd = sceIoOpen(DB_FILE_NAME, SCE_O_TRUNC | SCE_O_CREAT | SCE_O_WRONLY, 0777);
 			void *buffer = taipool_alloc(BUF_SIZE);

@@ -107,7 +107,7 @@ int appListThread(unsigned int args, void *arg) {
 	sceIoGetstat("ux0:data/VitaDB/apps.json", &stat);
 	total_bytes = stat.st_size;
 
-	startDownload("https://vitadb.rinnegatamante.it/list_hbs_json.php");
+	startDownload("https://www.rinnegatamante.eu/vitadb/list_hbs_json.php");
 
 	if (downloaded_bytes > 12 * 1024) {
 		fh = fopen("ux0:data/VitaDB/apps.json", "wb");
@@ -129,7 +129,7 @@ int appPspListThread(unsigned int args, void *arg) {
 	sceIoGetstat("ux0:data/VitaDB/psp_apps.json", &stat);
 	total_bytes = stat.st_size;
 
-	startDownload("https://vitadb.rinnegatamante.it/list_psp_hbs_json.php");
+	startDownload("https://www.rinnegatamante.eu/vitadb/list_psp_hbs_json.php");
 
 	if (downloaded_bytes > 12 * 1024) {
 		fh = fopen("ux0:data/VitaDB/psp_apps.json", "wb");

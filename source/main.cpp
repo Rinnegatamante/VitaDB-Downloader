@@ -40,7 +40,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#define VERSION "1.9"
+#define VERSION "2.0"
 
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
@@ -1354,7 +1354,7 @@ int main(int argc, char *argv[]) {
 extract_libshacccg:
 			sceIoRemove("ux0:/data/Runtime1.00.pkg");
 			sceIoRemove("ux0:/data/Runtime2.01.pkg");
-			early_download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=567", "Downloading SharkF00D");
+			early_download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=567", "Downloading SharkF00D");
 			sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
 			early_extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/");
 			sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -1522,7 +1522,7 @@ extract_libshacccg:
 	
 	// Downloading icons
 	if ((sceIoGetstat("ux0:/data/VitaDB/icons.db", &st) < 0) || (sceIoGetstat("ux0:data/VitaDB/icons", &st) < 0)) {
-		download_file("https://vitadb.rinnegatamante.it/icons_zip.php", "Downloading apps icons");
+		download_file("https://www.rinnegatamante.eu/vitadb/icons_zip.php", "Downloading apps icons");
 		sceIoMkdir("ux0:data/VitaDB/icons", 0777);
 		extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/icons/", true);
 		sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -1532,7 +1532,7 @@ extract_libshacccg:
 			DrawTextDialog("Upgrading icons system, please wait...", true, false);
 		}
 		recursive_rmdir("ux0:data/VitaDB/icons");
-		download_file("https://vitadb.rinnegatamante.it/icons_zip.php", "Downloading apps icons");
+		download_file("https://www.rinnegatamante.eu/vitadb/icons_zip.php", "Downloading apps icons");
 		sceIoMkdir("ux0:data/VitaDB/icons", 0777);
 		extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/icons/", true);
 		sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -2324,7 +2324,7 @@ extract_libshacccg:
 								char cur_hash[40];
 								FILE *f = fopen(kubridge_state == KUBRIDGE_UR0 ? "ur0:tai/kubridge.skprx" : "ux0:tai/kubridge.skprx", "r");
 								calculate_md5(f, cur_hash);
-								silent_download("https://vitadb.rinnegatamante.it/get_hb_hash.php?id=611");
+								silent_download("https://www.rinnegatamante.eu/vitadb/get_hb_hash.php?id=611");
 								if (strncmp(cur_hash, generic_mem_buffer, 32)) {
 									init_interactive_msg_dialog("VitaDB Downloader detected an outdated version of kubridge.skprx. Do you wish to update it?\n\nNOTE: A console restart is required for kubridge.skprx update to complete.");
 									while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
@@ -2336,7 +2336,7 @@ extract_libshacccg:
 									sceMsgDialogGetResult(&msg_res);
 									sceMsgDialogTerm();
 									if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
-										download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=611", "Downloading kubridge.skprx");
+										download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=611", "Downloading kubridge.skprx");
 										if (kubridge_state == KUBRIDGE_UR0) {
 											copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
 											sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -2357,7 +2357,7 @@ extract_libshacccg:
 								sceMsgDialogGetResult(&msg_res);
 								sceMsgDialogTerm();
 								if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
-									download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=611", "Downloading kubridge.skprx");
+									download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=611", "Downloading kubridge.skprx");
 									if (use_ur0_config) {
 										copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
 										sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -2460,11 +2460,13 @@ extract_libshacccg:
 					to_download = nullptr;
 					continue;
 				}
-				sprintf(download_link, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", to_download->id);
+				sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=%s", to_download->id);
 				if (!download_file(download_link, mode_idx == MODE_VITA_HBS ? "Downloading vpk" : "Downloading app", true)) {
 					to_download = nullptr;
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
-					goto skip_install;
+					if (downloading_data_files)
+						recursive_rmdir("ux0:vitadb_data_tmp");
+					continue;
 				}
 				if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
 					extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false); // We don't want VitaDB Downloader update to be abortable to prevent corruption
@@ -2562,7 +2564,7 @@ skip_install:
 			char dl_url[512];
 			sprintf(dl_url, "ux0:data/VitaDB/trophies/%s", hovered->titleid);
 			sceIoMkdir(dl_url, 0777);
-			sprintf(dl_url, "https://vitadb.rinnegatamante.it/get_trophies_for_app.php?id=%s", hovered->titleid);
+			sprintf(dl_url, "https://www.rinnegatamante.eu/vitadb/get_trophies_for_app.php?id=%s", hovered->titleid);
 			download_file(dl_url, "Downloading trophies data");
 			FILE *f = fopen(TEMP_DOWNLOAD_NAME, "rb");
 			fseek(f, 0, SEEK_END);
@@ -2630,7 +2632,7 @@ skip_install:
 					if (end) {
 						end[0] = 0;
 					}
-					sprintf(download_link, "https://vitadb.rinnegatamante.it/%s", s);				
+					sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/%s", s);				
 					download_file(download_link, "Downloading screenshot");
 					sprintf(download_link, "ux0:data/VitaDB/ss%d.png", shot_idx++);
 					sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
@@ -2682,7 +2684,7 @@ skip_install:
 		if (strlen(boot_params) > 0) { // On-demand app updater
 			FILE *f;
 			char hb_url[256], hb_message[256];
-			sprintf(hb_url, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", boot_params);
+			sprintf(hb_url, "https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=%s", boot_params);
 			sprintf(hb_message, "Downloading %s", to_download->name);
 			download_file(hb_url, hb_message);
 			sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
@@ -2717,7 +2719,7 @@ skip_install:
 				recursive_rmdir("ux0:/data/VitaDB/vpk");
 			}
 		} else { // VitaDB Downloader auto-updater
-			download_file("https://vitadb.rinnegatamante.it/get_hb_url.php?id=877", "Downloading update");
+			download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=877", "Downloading update");
 			extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
 			sceIoRemove(TEMP_DOWNLOAD_NAME);
 			FILE *f = fopen("ux0:app/VITADBDLD/hash.vdb", "w");
