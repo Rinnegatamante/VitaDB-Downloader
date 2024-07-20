@@ -533,7 +533,7 @@ void early_extract_file(char *file, char *dir) {
 	sceMsgDialogTerm();
 }
 
-void extract_file(char *file, char *dir, bool indexing) {
+bool extract_file(char *file, char *dir, bool indexing, bool cancelable = false) {
 	FILE *f;
 	unz_global_info global_info;
 	unz_file_info file_info;
@@ -578,6 +578,16 @@ void extract_file(char *file, char *dir, bool indexing) {
 					curr_file_bytes += rbytes;
 				}
 				DrawExtractorDialog(zip_idx + 1, curr_file_bytes, curr_extracted_bytes, file_info.uncompressed_size, total_extracted_bytes, fname, num_files);
+				if (cancelable) {
+					SceCtrlData pad;
+					sceCtrlPeekBufferPositive(0, &pad, 1);
+					if (pad.buttons & SCE_CTRL_CANCEL) {
+						fclose(f);
+						unzCloseCurrentFile(zipfile);
+						unzClose(zipfile);
+						return false;
+					}
+				}
 			}
 			fclose(f);
 			unzCloseCurrentFile(zipfile);
@@ -589,6 +599,7 @@ void extract_file(char *file, char *dir, bool indexing) {
 		fclose(f2);
 	unzClose(zipfile);
 	ImGui::GetIO().MouseDrawCursor = false;
+	return true;
 }
 
 SceUID trophy_thd;
@@ -1424,8 +1435,10 @@ extract_libshacccg:
 	Mix_AllocateChannels(4);
 	
 	// Removing any failed app installation leftover
-	if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st) >= 0)
-		recursive_rmdir("ux0:/data/VitaDB/vpk");
+	if (sceIoGetstat("ux0:data/VitaDB/vpk", &st) >= 0)
+		recursive_rmdir("ux0:data/VitaDB/vpk");
+	if (sceIoGetstat("ux0:vitadb_data_tmp", &st) >= 0)
+		recursive_rmdir("ux0:vitadb_data_tmp");
 	
 	// Initializing sceAppUtil
 	SceAppUtilInitParam appUtilParam;
@@ -2197,7 +2210,7 @@ extract_libshacccg:
 				cur_ss_idx++;
 			else
 				fast_increment = true;
-		} else if (pad.buttons & SCE_CTRL_CIRCLE && !(oldpad & SCE_CTRL_CIRCLE)) {
+		} else if (pad.buttons & SCE_CTRL_CANCEL && !(oldpad & SCE_CTRL_CANCEL)) {
 			if (show_changelog) {
 				show_changelog = false;
 				free(changelog);
@@ -2378,6 +2391,7 @@ extract_libshacccg:
 						goto skip_install;
 					}
 				}
+				bool downloading_data_files = false;
 				if (strlen(to_download->data_link) > 5) {
 					if (!to_download->requirements) {
 						uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
@@ -2398,6 +2412,7 @@ extract_libshacccg:
 					sceMsgDialogGetResult(&msg_res);
 					sceMsgDialogTerm();
 					if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
+						downloading_data_files = true;
 						// Check if enough storage is left for the install
 						char *dummy;
 						uint64_t sz = strtoull(to_download->size, &dummy, 10);
@@ -2414,15 +2429,22 @@ extract_libshacccg:
 						if (!download_file(to_download->data_link, "Downloading data files", true)) {
 							to_download = nullptr;
 							sceIoRemove(TEMP_DOWNLOAD_NAME);
-							goto skip_install;
+							continue;
 						}
-						if (mode_idx == MODE_VITA_HBS)
-							extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/", false);
-						else {
+						if (mode_idx == MODE_VITA_HBS) {
+							sceIoMkdir("ux0:vitadb_data_tmp", 0777);
+							if (!extract_file(TEMP_DOWNLOAD_NAME, "ux0:vitadb_data_tmp/", false, true)) {
+								sceIoRemove(TEMP_DOWNLOAD_NAME);
+								recursive_rmdir("ux0:vitadb_data_tmp");
+								to_download = nullptr;
+								continue;
+							}
+						} /* else {
+							// This should never happen since PSP homebrews are self contained
 							char tmp[16];
 							sprintf(tmp, "%spspemu/", pspemu_dev);
 							extract_file(TEMP_DOWNLOAD_NAME, tmp, false);
-						}
+						} */
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 					}
 				}
@@ -2445,7 +2467,7 @@ extract_libshacccg:
 					goto skip_install;
 				}
 				if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
-					extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
+					extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false); // We don't want VitaDB Downloader update to be abortable to prevent corruption
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 					FILE *f = fopen("ux0:app/VITADBDLD/hash.vdb", "w");
 					fwrite(to_download->hash, 1, 32, f);
@@ -2456,8 +2478,15 @@ extract_libshacccg:
 					char tmp_path[256];
 					if (mode_idx == MODE_VITA_HBS) {
 						sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
-						extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false);
+						bool extract_finished = extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false, true);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
+						if (!extract_finished) {
+							if (downloading_data_files)
+								recursive_rmdir("ux0:vitadb_data_tmp");
+							recursive_rmdir("ux0:/data/VitaDB/vpk");
+							to_download = nullptr;
+							continue;
+						}
 						if (strlen(to_download->aux_hash) > 0) {
 							f = fopen("ux0:data/VitaDB/vpk/aux_hash.vdb", "w");
 							fwrite(to_download->aux_hash, 1, 32, f);
@@ -2467,8 +2496,13 @@ extract_libshacccg:
 					} else {
 						sprintf(tmp_path, "%spspemu/PSP/GAME/%s/", pspemu_dev, to_download->id);
 						sceIoMkdir(tmp_path, 0777);
-						extract_file(TEMP_DOWNLOAD_NAME, tmp_path, false);
+						bool extract_finished = extract_file(TEMP_DOWNLOAD_NAME, tmp_path, false, true);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
+						if (!extract_finished) {
+							recursive_rmdir(tmp_path);
+							to_download = nullptr;
+							continue;
+						}
 						sprintf(tmp_path, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, to_download->id);
 						f = fopen(tmp_path, "w");
 					}
@@ -2494,8 +2528,13 @@ extract_libshacccg:
 							}
 							sceMsgDialogTerm();
 							recursive_rmdir("ux0:/data/VitaDB/vpk");
-						} else
+							if (downloading_data_files)
+								recursive_rmdir("ux0:vitadb_data_tmp");
+						} else {
 							to_download->state = APP_UPDATED;
+							if (downloading_data_files)
+								move_path("ux0:vitadb_data_tmp", "ux0:data");
+						}
 					} else
 						to_download->state = APP_UPDATED;
 					to_download = nullptr;

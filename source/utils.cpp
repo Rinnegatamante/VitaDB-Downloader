@@ -31,6 +31,8 @@
 #include "utils.h"
 #include "md5.h"
 
+#define SCE_ERROR_ERRNO_EEXIST 0x80010011
+
 char pspemu_dev[8];
 
 static const char *sizes[] = {
@@ -63,7 +65,47 @@ void copy_file(const char *src, const char *dst) {
 	fclose(fd);
 }
 
-void recursive_rmdir(const char *path) {
+void move_path(char *src, char *dst) {
+	if (src[strlen(src) - 1] == '/')
+		src[strlen(src) - 1] = 0;
+	if (dst[strlen(dst) - 1] == '/')
+		dst[strlen(dst) - 1] = 0;
+	if (sceIoRename(src, dst) == SCE_ERROR_ERRNO_EEXIST) {
+		SceIoStat src_stat, dst_stat;
+		sceIoGetstat(src, &src_stat);
+		sceIoGetstat(dst, &dst_stat);
+		bool src_is_dir = SCE_S_ISDIR(src_stat.st_mode);
+		bool dst_is_dir = SCE_S_ISDIR(dst_stat.st_mode);
+		if (src_is_dir != dst_is_dir) {
+			if (dst_is_dir)
+				recursive_rmdir(dst);
+			else
+				sceIoRemove(dst);
+			sceIoRename(src, dst);
+		} else {
+			if (src_is_dir) {
+				SceUID dfd = sceIoDopen(src);
+				int r = 0;
+				SceIoDirent dir;
+				while (r = sceIoDread(dfd, &dir) > 0) {
+					char spath[512], dpath[512];
+					sprintf(spath, "%s/%s", src, dir.d_name);
+					sprintf(dpath, "%s/%s", dst, dir.d_name);
+					move_path(spath, dpath);
+				}
+				sceIoDclose(dfd);
+				sceIoRmdir(src);
+			} else {
+				sceIoRemove(dst);
+				sceIoRename(src, dst);
+			}
+		}
+	}
+}
+
+void recursive_rmdir(char *path) {
+	if (path[strlen(path) - 1] == '/')
+		path[strlen(path) - 1] = 0;
 	SceUID d = sceIoDopen(path);
 	if (d >= 0) {
 		SceIoDirent g_dir;
@@ -148,7 +190,7 @@ uint64_t get_total_storage() {
 }
 
 char *unescape(char *src) {
-	char *res = malloc(strlen(src) + 1);
+	char *res = (char *)malloc(strlen(src) + 1);
 	uint32_t i = 0;
 	char *s = src;
 	while (*s) {

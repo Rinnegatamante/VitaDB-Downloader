@@ -32,8 +32,9 @@ extern int mode_idx;
 float format_size(float len);
 const char *format_size_str(uint64_t len);
 
+void move_path(char *src, char *dst);
 void copy_file(const char *src, const char *dst);
-void recursive_rmdir(const char *path);
+void recursive_rmdir(char *path);
 void recursive_mkdir(char *dir);
 void populate_pspemu_path();
 
