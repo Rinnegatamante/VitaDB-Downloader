@@ -1935,11 +1935,19 @@ extract_libshacccg:
 				ImGui::SetCursorPosX(mode_idx == MODE_VITA_HBS ? 140 : 156);
 				ImGui::Text(hovered->date);
 				ImGui::SetCursorPosY(6);
-				ImGui::SetCursorPosX(330);
+				ImGui::SetCursorPosX(320);
 				ImGui::TextColored(TextLabel, "Downloads:");
 				ImGui::SetCursorPosY(22);
-				ImGui::SetCursorPosX(330);
+				ImGui::SetCursorPosX(320);
 				ImGui::Text(hovered->downloads);
+				if (mode_idx == MODE_VITA_HBS) {
+					ImGui::SetCursorPosY(38);
+					ImGui::SetCursorPosX(320);
+					ImGui::TextColored(TextLabel, "TitleID:");
+					ImGui::SetCursorPosY(56);
+					ImGui::SetCursorPosX(320);
+					ImGui::Text(hovered->titleid);
+				}
 				ImGui::SetCursorPosY(38);
 				ImGui::SetCursorPosX(mode_idx == MODE_VITA_HBS ? 140 : 156);
 				ImGui::TextColored(TextLabel, "Category:");
