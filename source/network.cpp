@@ -32,11 +32,21 @@ static CURL *curl_handle = NULL;
 volatile uint64_t total_bytes = 0xFFFFFFFF;
 volatile uint64_t downloaded_bytes = 0;
 volatile uint8_t downloader_pass = 1;
+volatile bool is_cancelable = false;
+volatile bool is_canceled = false;
 uint8_t *generic_mem_buffer = nullptr;
 static FILE *fh;
 char *bytes_string;
 
 static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *stream) {
+	if (is_cancelable) {
+		SceCtrlData pad;
+		sceCtrlPeekBufferPositive(0, &pad, 1);
+		if (pad.buttons & SCE_CTRL_CROSS) {
+			is_canceled = true;
+			return 0;
+		}
+	}
 	if (total_bytes > MEM_BUFFER_SIZE || fh) {
 		if (!fh)
 			fh = fopen(TEMP_DOWNLOAD_NAME, "wb");
@@ -182,19 +192,25 @@ int downloadThread(unsigned int args, void *arg) {
 	total_bytes = 180;
 	startDownload(final_url);
 	while (downloaded_bytes < total_bytes) {
+		if (is_cancelable && is_canceled) {
+			goto ABORT_DOWNLOAD;
+		}
 		startDownload(final_url);
 	}
 	if (downloaded_bytes > 180 && total_bytes <= MEM_BUFFER_SIZE) {
 		fh = fopen(TEMP_DOWNLOAD_NAME, "wb");
 		fwrite(generic_mem_buffer, 1, downloaded_bytes, fh);
 	}
+ABORT_DOWNLOAD:
 	fclose(fh);
 	downloaded_bytes = total_bytes;
 	curl_easy_cleanup(curl_handle);
 	return sceKernelExitDeleteThread(0);
 }
 
-void download_file(char *url, char *text) {
+bool download_file(char *url, char *text, bool cancelable) {
+	is_canceled = false;
+	is_cancelable = cancelable;
 	SceKernelThreadInfo info;
 	info.size = sizeof(SceKernelThreadInfo);
 	int res = 0;
@@ -205,6 +221,12 @@ void download_file(char *url, char *text) {
 		DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, text, 1, true);
 		res = sceKernelGetThreadInfo(thd, &info);
 	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
+	
+	if (is_cancelable) {
+		return !is_canceled;
+	}
+	
+	return true;
 }
 
 void silent_download(char *url) {

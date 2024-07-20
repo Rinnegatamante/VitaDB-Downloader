@@ -31,7 +31,7 @@ int appListThread(unsigned int args, void *arg);
 int appPspListThread(unsigned int args, void *arg);
 int downloadThread(unsigned int args, void *arg);
 
-void download_file(char *url, char *text);
+bool download_file(char *url, char *text, bool cancelable = false);
 void silent_download(char *url);
 void early_download_file(char *url, char *text);
 

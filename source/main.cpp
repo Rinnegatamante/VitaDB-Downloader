@@ -58,6 +58,7 @@ char boot_params[1024] = {};
 SceUID audio_thd = -1;
 void *audio_buffer = nullptr;
 bool shuffle_themes = false;
+int SCE_CTRL_CANCEL = SCE_CTRL_CROSS;
 
 enum {
 	APP_UNTRACKED,
@@ -1308,6 +1309,8 @@ int main(int argc, char *argv[]) {
 	sceCommonDialogConfigParamInit(&cmnDlgCfgParam);
 	sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG, (int *)&cmnDlgCfgParam.language);
 	sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_ENTER_BUTTON, (int *)&cmnDlgCfgParam.enterButtonAssign);
+	if (cmnDlgCfgParam.enterButtonAssign == SCE_SYSTEM_PARAM_ENTER_BUTTON_CROSS)
+		SCE_CTRL_CANCEL = SCE_CTRL_CIRCLE;
 	sceCommonDialogSetConfigParam(&cmnDlgCfgParam);
 	
 	// Checking for network connection
@@ -2408,7 +2411,11 @@ extract_libshacccg:
 							sceMsgDialogTerm();
 							continue;
 						}
-						download_file(to_download->data_link, "Downloading data files");
+						if (!download_file(to_download->data_link, "Downloading data files", true)) {
+							to_download = nullptr;
+							sceIoRemove(TEMP_DOWNLOAD_NAME);
+							goto skip_install;
+						}
 						if (mode_idx == MODE_VITA_HBS)
 							extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/", false);
 						else {
@@ -2432,7 +2439,11 @@ extract_libshacccg:
 					continue;
 				}
 				sprintf(download_link, "https://vitadb.rinnegatamante.it/get_hb_url.php?id=%s", to_download->id);
-				download_file(download_link, mode_idx == MODE_VITA_HBS ? "Downloading vpk" : "Downloading app");
+				if (!download_file(download_link, mode_idx == MODE_VITA_HBS ? "Downloading vpk" : "Downloading app", true)) {
+					to_download = nullptr;
+					sceIoRemove(TEMP_DOWNLOAD_NAME);
+					goto skip_install;
+				}
 				if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
 					extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
