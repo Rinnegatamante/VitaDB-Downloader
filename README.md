@@ -31,6 +31,16 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 
 ## Changelog
 
+### v.2.0
+- Updated to latest vitaGL commit.
+- Now the application UI will respect OS confirm/cancel button settings (O/X).
+- Added TitleID info shown for PSVita homebrews.
+- Added safety checks for when single themes installations occurred.
+- Made progressbar during SharkF00D installation smoother.
+- Made possible to cancel applications downloads/installations by pressing the cancel button (O/X).
+- Made so that when an application installation fails, eventual downloaded data files are deleted as well.
+- Migrated to new backend webhost.
+
 ### v.1.9
 - Added possibility to skip database update at boot by holding R trigger.
 - Added possibility to launch VitaDB Downloader by other means (eg: from other applications).
