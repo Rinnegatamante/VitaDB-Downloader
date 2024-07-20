@@ -37,12 +37,13 @@ volatile bool is_canceled = false;
 uint8_t *generic_mem_buffer = nullptr;
 static FILE *fh;
 char *bytes_string;
+extern int SCE_CTRL_CANCEL;
 
 static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *stream) {
 	if (is_cancelable) {
 		SceCtrlData pad;
 		sceCtrlPeekBufferPositive(0, &pad, 1);
-		if (pad.buttons & SCE_CTRL_CROSS) {
+		if (pad.buttons & SCE_CTRL_CANCEL) {
 			is_canceled = true;
 			return 0;
 		}
