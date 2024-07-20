@@ -1,5 +1,5 @@
 # VitaDB Downloader
-VitaDB Downloader is the official PSVita/PSTV client for [VitaDB](https://vitadb.rinnegatamante.it/), the first database ever made for PSVITA/PSTV homebrew.
+VitaDB Downloader is the official PSVita/PSTV client for [VitaDB](https://www.rinnegatamante.eu/vitadb), the first database ever made for PSVITA/PSTV homebrew.
 
 ## Features
 - Searching by author/homebrew name.
