@@ -720,22 +720,18 @@ void PrepareTrophy(const char *tid, const char *name) {
 	}
 }
 
-void swap_apps(AppSelection *a, AppSelection *b) {
-	AppSelection tmp;
-	
-	// Swapping everything except next leaf pointer
-	sceClibMemcpy(&tmp, a, sizeof(AppSelection) - 4);
-	sceClibMemcpy(a, b, sizeof(AppSelection) - 4);
-	sceClibMemcpy(b, &tmp, sizeof(AppSelection) - 4);
+inline void swap_apps(AppSelection *prev, AppSelection *cur, AppSelection *next) {
+	if (prev)
+		prev->next = next;
+	cur->next = next->next;
+	next->next = cur;
 }
 
-void swap_themes(ThemeSelection *a, ThemeSelection *b) {
-	AppSelection tmp;
-	
-	// Swapping everything except next leaf pointer
-	sceClibMemcpy(&tmp, a, sizeof(ThemeSelection) - 4);
-	sceClibMemcpy(a, b, sizeof(ThemeSelection) - 4);
-	sceClibMemcpy(b, &tmp, sizeof(ThemeSelection) - 4);
+inline void swap_themes(ThemeSelection *prev, ThemeSelection *cur, ThemeSelection *next) {
+	if (prev)
+		prev->next = next;
+	cur->next = next->next;
+	next->next = cur;
 }
 
 const char *sort_modes_str[] = {
@@ -772,123 +768,146 @@ const char *filter_themes_modes[] = {
 int sort_idx = 0;
 int old_sort_idx = -1;
 
-void sort_themelist(ThemeSelection *start) {
+void sort_themelist(ThemeSelection **start) {
 	// Checking for empty list
 	if (start == NULL) 
 		return; 
 	
-	int swapped; 
-	ThemeSelection *ptr1; 
-	ThemeSelection *lptr = NULL; 
+	bool swapped; 
   
-	do { 
-		swapped = 0; 
-		ptr1 = start; 
-		
+	do {
+		ThemeSelection *ptr1 = *start; 
+		ThemeSelection *lptr = NULL; 
+		swapped = false; 
+
 		int64_t d1, d2;
-		char * dummy;
-		while (ptr1->next != lptr && ptr1->next) {
+		while (ptr1->next) {
+			bool last_swapped = false;
+			ThemeSelection *old_next = ptr1->next;
 			switch (sort_idx) {
 			case 0: // A-Z
 				if (strcasecmp(ptr1->name, ptr1->next->name) > 0) {
-					swap_themes(ptr1, ptr1->next); 
-					swapped = 1; 
+					swap_themes(lptr, ptr1, ptr1->next); 
+					swapped = true;
+					last_swapped = true;
 				}
 				break;
 			case 1: // Z-A
 				if (strcasecmp(ptr1->name, ptr1->next->name) < 0) {
-					swap_themes(ptr1, ptr1->next); 
-					swapped = 1; 
+					swap_themes(lptr, ptr1, ptr1->next); 
+					swapped = true;
+					last_swapped = true;
 				}
 				break;
 			default:
 				break;
 			}
-			ptr1 = ptr1->next; 
+			if (!last_swapped) {
+				lptr = ptr1;
+				ptr1 = ptr1->next; 
+			} else {
+				if (*start == ptr1)
+					*start = old_next;
+				lptr = old_next;
+			}
 		} 
-		lptr = ptr1; 
 	} while (swapped); 
 }
 
-void sort_applist(AppSelection *start) { 
+void sort_applist(AppSelection **start) {
 	// Checking for empty list
 	if (start == NULL) 
 		return; 
 	
-	int swapped; 
-	AppSelection *ptr1; 
-	AppSelection *lptr = NULL; 
+	bool swapped; 
   
-	do { 
-		swapped = 0; 
-		ptr1 = start; 
+	do {
+		AppSelection *lptr = NULL; 
+		AppSelection *ptr1 = *start; 
+		swapped = false; 
 		
 		int64_t d1, d2;
-		char * dummy;
-		while (ptr1->next != lptr && ptr1->next) {
+		char *dummy;
+		while (ptr1->next) {
+			bool last_swapped = false;
+			AppSelection *old_next = ptr1->next;
 			switch (sort_idx) {
 			case 0: // Most Recent
 				if (strcasecmp(ptr1->date, ptr1->next->date) < 0) {
-					swap_apps(ptr1, ptr1->next); 
-					swapped = 1; 
+					swap_apps(lptr, ptr1, ptr1->next); 
+					swapped = true;
+					last_swapped = true;
 				}
 				break;
 			case 1: // Oldest
 				if (strcasecmp(ptr1->date, ptr1->next->date) > 0) {
-					swap_apps(ptr1, ptr1->next); 
-					swapped = 1; 
+					swap_apps(lptr, ptr1, ptr1->next); 
+					swapped = true;
+					last_swapped = true;
 				}
 				break;
 			case 2: // Most Downloaded
 				d1 = strtoll(ptr1->downloads, &dummy, 10);
 				d2 = strtoll(ptr1->next->downloads, &dummy, 10);
 				if (d1 < d2) {
-					swap_apps(ptr1, ptr1->next); 
-					swapped = 1; 
+					swap_apps(lptr, ptr1, ptr1->next); 
+					swapped = true;
+					last_swapped = true;
 				}
 				break;
 			case 3: // Least Downloaded
 				d1 = strtoll(ptr1->downloads, &dummy, 10);
 				d2 = strtoll(ptr1->next->downloads, &dummy, 10);
 				if (d1 > d2) {
-					swap_apps(ptr1, ptr1->next); 
-					swapped = 1; 
+					swap_apps(lptr, ptr1, ptr1->next); 
+					swapped = 1;
+					last_swapped = true;
 				}
 				break;
 			case 4: // A-Z
 				if (strcasecmp(ptr1->name, ptr1->next->name) > 0) {
-					swap_apps(ptr1, ptr1->next); 
-					swapped = 1; 
+					swap_apps(lptr, ptr1, ptr1->next); 
+					swapped = true;
+					last_swapped = true;
 				}
 				break;
 			case 5: // Z-A
 				if (strcasecmp(ptr1->name, ptr1->next->name) < 0) {
-					swap_apps(ptr1, ptr1->next); 
-					swapped = 1; 
+					swap_apps(lptr, ptr1, ptr1->next); 
+					swapped = true;
+					last_swapped = true;
 				}
 				break;
 			case 6: // Smallest
 				d1 = strtoll(ptr1->size, &dummy, 10) + strtoll(ptr1->data_size, &dummy, 10);
 				d2 = strtoll(ptr1->next->size, &dummy, 10) + strtoll(ptr1->next->data_size, &dummy, 10);
 				if (d1 > d2) {
-					swap_apps(ptr1, ptr1->next); 
-					swapped = 1; 
+					swap_apps(lptr, ptr1, ptr1->next); 
+					swapped = true;
+					last_swapped = true;
 				}
 				break;
 			case 7: // Largest
 				d1 = strtoll(ptr1->size, &dummy, 10) + strtoll(ptr1->data_size, &dummy, 10);
 				d2 = strtoll(ptr1->next->size, &dummy, 10) + strtoll(ptr1->next->data_size, &dummy, 10);
 				if (d1 < d2) {
-					swap_apps(ptr1, ptr1->next); 
-					swapped = 1; 
+					swap_apps(lptr, ptr1, ptr1->next); 
+					swapped = true;
+					last_swapped = true;
 				}
 				break;
 			default:
 				break;
 			}
-			ptr1 = ptr1->next; 
+			if (!last_swapped) {
+				lptr = ptr1;
+				ptr1 = ptr1->next; 
+			} else {
+				if (*start == ptr1)
+					*start = old_next;
+				lptr = old_next;
+			}
 		} 
-		lptr = ptr1; 
 	} while (swapped); 
 }
 
@@ -1538,6 +1557,7 @@ extract_libshacccg:
 		sceIoRemove(TEMP_DOWNLOAD_NAME);
 	}
 	
+	
 	// Downloading apps list
 	sceAppMgrUmount("app0:");
 	if (strlen(boot_params) == 0) {
@@ -1579,9 +1599,9 @@ extract_libshacccg:
 		if (old_sort_idx != sort_idx) {
 			old_sort_idx = sort_idx;
 			if (mode_idx == MODE_THEMES)
-				sort_themelist(themes);
+				sort_themelist(&themes);
 			else
-				sort_applist(mode_idx == MODE_VITA_HBS ? apps : psp_apps);
+				sort_applist(mode_idx == MODE_VITA_HBS ? &apps : &psp_apps);
 		}
 		
 		if (bg_image || has_animated_bg)
