@@ -100,6 +100,8 @@ struct AppSelection {
 	char data_link[128];
 	int state;
 	bool trophies;
+	AppSelection *next_clash;
+	AppSelection *prev_clash;
 	AppSelection *next;
 };
 
@@ -280,6 +282,25 @@ bool checksum_match(char *hash_fname, char *fname, AppSelection *node, uint8_t t
 	}
 }
 
+SceUID clash_thd;
+static int clashThread(unsigned int args, void *arg) {
+	AppSelection *app = apps;
+	while (app) {
+		AppSelection *chk = app->next;
+		while (chk) {
+			if (!strcmp(chk->titleid, app->titleid)) {
+				app->next_clash = chk;
+				chk->prev_clash = app;
+				break;
+			}
+			chk = chk->next;
+		}
+		app = app->next;
+	}
+	printf("clash thread ended\n");
+	return sceKernelExitDeleteThread(0);
+}
+
 bool update_detected = false;
 void AppendAppDatabase(const char *file, bool is_psp) {
 	// Read icons database
@@ -319,6 +340,8 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 			AppSelection *node = (AppSelection*)malloc(sizeof(AppSelection));
 			node->desc = nullptr;
 			node->requirements = nullptr;
+			node->next_clash = nullptr;
+			node->prev_clash = nullptr;
 			ptr = extractValue(node->icon, ptr, "icon", nullptr);
 			if (!strstr(icons_db, node->icon)) {
 				missing_icons[missing_icons_num++] = node;
@@ -387,6 +410,12 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 			}
 		} while (ptr);
 		free(buffer);
+		
+		if (!is_psp) {
+			// Populate TitleID clashes
+			clash_thd = sceKernelCreateThread("Clasher Thread", &clashThread, 0x10000100, 0x100000, 0, 0, NULL);
+			sceKernelStartThread(clash_thd, 0, NULL);
+		}
 		
 		// Downloading missing icons
 		if (!update_detected) {
@@ -815,6 +844,10 @@ void sort_themelist(ThemeSelection **start) {
 }
 
 void sort_applist(AppSelection **start) {
+	// Ensuring clasher titleids check finished
+	sceKernelWaitThreadEnd(clash_thd, NULL, NULL);
+	printf("sort_applist called\n");
+
 	// Checking for empty list
 	if (start == NULL) 
 		return; 
@@ -1982,7 +2015,10 @@ extract_libshacccg:
 					ImGui::TextColored(TextLabel, "TitleID:");
 					ImGui::SetCursorPosY(56);
 					ImGui::SetCursorPosX(320);
-					ImGui::Text(hovered->titleid);
+					if (hovered->next_clash || hovered->prev_clash)
+						ImGui::TextColored(TextOutdated, hovered->titleid);
+					else
+						ImGui::Text(hovered->titleid);
 				}
 				ImGui::SetCursorPosY(38);
 				ImGui::SetCursorPosX(mode_idx == MODE_VITA_HBS ? 140 : 156);
