@@ -660,6 +660,17 @@ void LoadPreview(AppSelection *game) {
 	free(icon_data);
 }
 
+bool PrepareAntiBurnIn() {
+	uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
+	glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
+	if (!previous_frame)
+		glGenTextures(1, &previous_frame);
+	glBindTexture(GL_TEXTURE_2D, previous_frame);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
+	vglFree(scr_data);
+	return true;
+}
+
 void LoadScreenshot() {
 	if (old_ss_idx == cur_ss_idx)
 		return;
@@ -2314,16 +2325,12 @@ extract_libshacccg:
 			go_to_top = true;
 		}
 		oldpad = pad.buttons;
+		bool anti_burn_in_set_up = false;
 		
 		// Queued app uninstall
 		if (to_uninstall) {
-			uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
-			glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
-			if (!previous_frame)
-				glGenTextures(1, &previous_frame);
-			glBindTexture(GL_TEXTURE_2D, previous_frame);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
-			vglFree(scr_data);
+			if (!anti_burn_in_set_up)
+				anti_burn_in_set_up = PrepareAntiBurnIn();
 			init_interactive_msg_dialog("Do you really wish to uninstall this app?");
 			while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 				vglSwapBuffers(GL_TRUE);
@@ -2370,13 +2377,8 @@ extract_libshacccg:
 				to_download = nullptr;
 			} else {
 				if (to_download->requirements && ((!strstr(to_download->requirements, "libshacccg.suprx")) || strlen(to_download->requirements) != strlen("- libshacccg.suprx"))) {
-					uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
-					glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
-					if (!previous_frame)
-						glGenTextures(1, &previous_frame);
-					glBindTexture(GL_TEXTURE_2D, previous_frame);
-					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
-					vglFree(scr_data);
+					if (!anti_burn_in_set_up)
+						anti_burn_in_set_up = PrepareAntiBurnIn();
 					init_interactive_msg_dialog("This homebrew has extra requirements in order to work properly:\n%s\n\nDo you wish to install it still?", to_download->requirements);
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 						vglSwapBuffers(GL_TRUE);
@@ -2459,17 +2461,33 @@ extract_libshacccg:
 						goto skip_install;
 					}
 				}
+				
+				if (to_download->prev_clash || to_download->next_clash) {
+					if (to_download->state != APP_UNTRACKED) {
+						if (!anti_burn_in_set_up)
+							anti_burn_in_set_up = PrepareAntiBurnIn();
+						char clash_text[512];
+						sprintf(clash_text, "This homebrew has a TitleID that clashes with other homebrews. Installing it will automatically uninstall any homebrew you have installed with the same TitleID. Do you want to proceed?");
+						init_interactive_msg_dialog(clash_text);
+						while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+							vglSwapBuffers(GL_TRUE);
+						}
+						prevent_burn_in();
+						SceMsgDialogResult msg_res;
+						memset(&msg_res, 0, sizeof(SceMsgDialogResult));
+						sceMsgDialogGetResult(&msg_res);
+						sceMsgDialogTerm();
+						if (msg_res.buttonId != SCE_MSG_DIALOG_BUTTON_ID_YES) {
+							to_download = nullptr;
+							continue;
+						}
+					}
+				}
+				
 				bool downloading_data_files = false;
 				if (strlen(to_download->data_link) > 5) {
-					if (!to_download->requirements) {
-						uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
-						glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
-						if (!previous_frame)
-							glGenTextures(1, &previous_frame);
-						glBindTexture(GL_TEXTURE_2D, previous_frame);
-						glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
-						vglFree(scr_data);
-					}
+					if (!anti_burn_in_set_up)
+						anti_burn_in_set_up = PrepareAntiBurnIn();
 					init_interactive_msg_dialog("This homebrew also has data files. Do you wish to install them as well?");
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 						vglSwapBuffers(GL_TRUE);
