@@ -2464,10 +2464,32 @@ extract_libshacccg:
 				
 				if (to_download->prev_clash || to_download->next_clash) {
 					if (to_download->state != APP_UNTRACKED) {
+						AppSelection *installed_clasher = nullptr;
+						AppSelection *chk = to_download->prev_clash;
+						while (chk) {
+							if (chk->state == APP_UPDATED) {
+								installed_clasher = chk;
+								break;
+							}
+							chk = chk->prev_clash;
+						}
+						if (!installed_clasher) {
+							chk = to_download->next_clash;
+							while (chk) {
+								if (chk->state == APP_UPDATED) {
+									installed_clasher = chk;
+									break;
+								}
+								chk = chk->next_clash;
+							}
+						}
 						if (!anti_burn_in_set_up)
 							anti_burn_in_set_up = PrepareAntiBurnIn();
 						char clash_text[512];
-						sprintf(clash_text, "This homebrew has a TitleID that clashes with other homebrews. Installing it will automatically uninstall any homebrew you have installed with the same TitleID. Do you want to proceed?");
+						if (installed_clasher)
+							sprintf(clash_text, "This homebrew has a TitleID that clashes with other homebrews. Installing it will automatically uninstall any homebrew you have installed with the same TitleID.\nVitaDB Downloader detected this app as the installed one with clashing TitleID:\n%s\nDo you want to proceed?", installed_clasher->name);
+						else
+							sprintf(clash_text, "This homebrew has a TitleID that clashes with other homebrews. Installing it will automatically uninstall any homebrew you have installed with the same TitleID.\nDo you want to proceed?");
 						init_interactive_msg_dialog(clash_text);
 						while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 							vglSwapBuffers(GL_TRUE);
