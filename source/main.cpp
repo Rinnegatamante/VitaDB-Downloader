@@ -1572,6 +1572,18 @@ extract_libshacccg:
 		fclose(fp);
 	}
 	
+	// Checking for VitaDB Daemon updates
+	if (sceIoGetstat("ux0:data/VitaDB/vdb_daemon.suprx", &st) >= 0) {
+		FILE *f = fopen("ux0:data/VitaDB/vdb_daemon.suprx", "rb");
+		char cur_hash[40], new_hash[40];
+		calculate_md5(f, cur_hash);
+		f = fopen("app0:vdb_daemon.suprx", "rb");
+		calculate_md5(f, new_hash);
+		if (strncmp(cur_hash, new_hash, 32)) {
+			copy_file("app0:vdb_daemon.suprx", "ux0:data/VitaDB/vdb_daemon.suprx");
+		}
+	}
+	
 	// Downloading icons
 	if ((sceIoGetstat("ux0:/data/VitaDB/icons.db", &st) < 0) || (sceIoGetstat("ux0:data/VitaDB/icons", &st) < 0)) {
 		download_file("https://www.rinnegatamante.eu/vitadb/icons_zip.php", "Downloading apps icons");
