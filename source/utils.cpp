@@ -57,12 +57,14 @@ const char *format_size_str(uint64_t len) {
 }
 
 void copy_file(const char *src, const char *dst) {
-	FILE *fs = fopen(src, "r");
-	FILE *fd = fopen(dst, "w");
-	size_t fsize = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, fs);
-	fwrite(generic_mem_buffer, 1, fsize, fd);
-	fclose(fs);
-	fclose(fd);
+	SceUID fs = sceIoOpen(src, SCE_O_RDONLY, 0777);
+	SceUID fd = sceIoOpen(dst, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+	size_t fsize;
+	while (fsize = sceIoRead(fs, generic_mem_buffer, MEM_BUFFER_SIZE)) {
+		sceIoWrite(fd, generic_mem_buffer, fsize);
+	}
+	sceIoClose(fs);
+	sceIoClose(fd);
 }
 
 void move_path(char *src, char *dst) {
@@ -136,11 +138,11 @@ void recursive_mkdir(char *dir) {
 }
 
 void populate_pspemu_path() {
-	FILE *f = fopen("ux0:app/PSPEMUCFW/adrenaline.bin", "r");
-	if (f) {
+	SceUID f = sceIoOpen("ux0:app/PSPEMUCFW/adrenaline.bin", SCE_O_RDONLY, 0777);
+	if (f >= 0) {
 		AdrenalineConfig cfg;
-		fread(&cfg, 1, sizeof(AdrenalineConfig), f);
-		fclose(f);
+		sceIoRead(f, &cfg, sizeof(AdrenalineConfig));
+		sceIoClose(f);
 		if (cfg.magic[0] == ADRENALINE_CFG_MAGIC_1 && cfg.magic[1] == ADRENALINE_CFG_MAGIC_2) {
 			switch (cfg.ms_location) {
 			case MEMORY_STICK_LOCATION_UR0:
@@ -230,20 +232,19 @@ char *unescape(char *src) {
 	return res;
 }
 
-void calculate_md5(FILE *f2, char *hash) {
+void calculate_md5(SceUID f, char *hash) {
 	MD5Context ctx;
 	MD5Init(&ctx);
-	fseek(f2, 0, SEEK_END);
-	size_t file_size = ftell(f2);
-	fseek(f2, 0, SEEK_SET);
+	size_t file_size = sceIoLseek(f, 0, SCE_SEEK_END);
+	sceIoLseek(f, 0, SCE_SEEK_SET);
 	size_t read_size = 0;
 	while (read_size < file_size) {
 		size_t read_buf_size = (file_size - read_size) > MEM_BUFFER_SIZE ? MEM_BUFFER_SIZE : (file_size - read_size);
-		fread(generic_mem_buffer, 1, read_buf_size, f2);
+		sceIoRead(f, generic_mem_buffer, read_buf_size);
 		read_size += read_buf_size;
 		MD5Update(&ctx, generic_mem_buffer, read_buf_size);
 	}
-	fclose(f2);
+	sceIoClose(f);
 	unsigned char md5_buf[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	MD5Final(md5_buf, &ctx);
 	sprintf(hash, "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",

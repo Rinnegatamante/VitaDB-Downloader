@@ -173,7 +173,7 @@ char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 	char *end2 = strstr(ptr, (val[0] == 'l' || val[0] == 'c') ? "\"," : "\"");
 	if (dst == nullptr) {
 		if (end2 - ptr > 0) {
-			dst = malloc(end2 - ptr + 1);
+			dst = (char *)malloc(end2 - ptr + 1);
 			*new_ptr = dst;
 		} else {
 			*new_ptr = nullptr;
@@ -188,13 +188,12 @@ char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 
 char *GetChangelog(const char *file, char *id) {
 	char *res = nullptr;
-	FILE *f = fopen(file, "rb");
-	if (f) {
-		fseek(f, 0, SEEK_END);
-		uint64_t len = ftell(f);
-		fseek(f, 0, SEEK_SET);
+	SceUID f = sceIoOpen(file, SCE_O_RDONLY, 0777);
+	if (f >= 0) {
+		size_t len = sceIoLseek(f, 0, SCE_SEEK_END);
+		sceIoLseek(f, 0, SCE_SEEK_SET);
 		char *buffer = (char*)malloc(len + 1);
-		fread(buffer, 1, len, f);
+		sceIoRead(f, buffer, len);
 		buffer[len] = 0;
 		char *ptr = buffer;
 		char *end, *end2;
@@ -208,7 +207,7 @@ char *GetChangelog(const char *file, char *id) {
 				break;
 			}
 		} while (ptr);
-		fclose(f);
+		sceIoClose(f);
 		free(buffer);
 	}
 	return res;
@@ -230,11 +229,11 @@ enum {
 
 bool checksum_match(char *hash_fname, char *fname, AppSelection *node, uint8_t type) {
 	char cur_hash[40], aux_fname[256];
-	FILE *f2 = fopen(hash_fname, "r");
-	if (f2) {
-		fread(cur_hash, 1, 32, f2);
+	SceUID f = sceIoOpen(hash_fname, SCE_O_RDONLY, 0777);
+	if (f >= 0) {
+		sceIoRead(f, cur_hash, 32);
 		cur_hash[32] = 0;
-		fclose(f2);
+		sceIoClose(f);
 		if (strncmp(cur_hash, type != AUXILIARY_FILE ? node->hash : node->aux_hash, 32))
 			node->state = APP_OUTDATED;
 		else
@@ -242,18 +241,18 @@ bool checksum_match(char *hash_fname, char *fname, AppSelection *node, uint8_t t
 		return true;
 	} else {
 		if (type != AUXILIARY_FILE)
-			f2 = fopen(fname, "r");
+			f = sceIoOpen(fname, SCE_O_RDONLY, 0777);
 		else {
 			for (int i = 0; i < sizeof(aux_main_files) / sizeof(*aux_main_files); i++) {
 				sprintf(aux_fname, "ux0:app/%s/%s", node->titleid, aux_main_files[i]);
 				//printf("attempting with %s\n", aux_fname);
-				f2 = fopen(aux_fname, "r");
-				if (f2)
+				f = sceIoOpen(aux_fname, SCE_O_RDONLY, 0777);
+				if (f >= 0)
 					break;
 			}
 		}
-		if (f2) {
-			calculate_md5(f2, cur_hash);
+		if (f >= 0) {
+			calculate_md5(f, cur_hash);
 			if (strncmp(cur_hash, type != AUXILIARY_FILE ? node->hash : node->aux_hash, 32))
 				node->state = APP_OUTDATED;
 			else
@@ -272,9 +271,9 @@ bool checksum_match(char *hash_fname, char *fname, AppSelection *node, uint8_t t
 				printf("Fatal Error!!!!\n");
 				break;
 			}
-			f2 = fopen(aux_fname, "w");
-			fwrite(cur_hash, 1, 32, f2);
-			fclose(f2);
+			f = sceIoOpen(aux_fname, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+			sceIoWrite(f, cur_hash, 32);
+			sceIoClose(f);
 			return true;
 		} else
 			node->state = APP_UNTRACKED;
@@ -304,14 +303,14 @@ static int clashThread(unsigned int args, void *arg) {
 bool update_detected = false;
 void AppendAppDatabase(const char *file, bool is_psp) {
 	// Read icons database
-	FILE *f = fopen("ux0:data/VitaDB/icons.db", "r");
+	SceUID f = sceIoOpen("ux0:data/VitaDB/icons.db", SCE_O_RDONLY, 0777);
 	//printf("f is %x\n", f);
-	size_t icons_db_size = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
+	size_t icons_db_size = sceIoRead(f, generic_mem_buffer, MEM_BUFFER_SIZE);
 	//printf("icons_db_size is %x\n", icons_db_size);
 	char *icons_db = (char *)vglMalloc(icons_db_size + 1);
 	sceClibMemcpy(icons_db, generic_mem_buffer, icons_db_size);
 	icons_db[icons_db_size] = 0;
-	fclose(f);
+	sceIoClose(f);
 	
 	uint32_t missing_icons_num = 0;
 	AppSelection *missing_icons[2048];
@@ -320,14 +319,13 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 	for (int i = 0; i < 3; i++) {
 		DrawTextDialog("Parsing apps list", true, !is_psp);
 	}
-	f = fopen(file, "rb");
-	if (f) {
-		fseek(f, 0, SEEK_END);
-		uint64_t len = ftell(f);
-		fseek(f, 0, SEEK_SET);
+	f = sceIoOpen(file, SCE_O_RDONLY, 0777);
+	if (f >= 0) {
+		size_t len = sceIoLseek(f, 0, SCE_SEEK_END);
+		sceIoLseek(f, 0, SCE_SEEK_SET);
 		char *buffer = (char*)malloc(len + 1);
-		fread(buffer, 1, len, f);
-		fclose(f);
+		sceIoRead(f, buffer, len);
+		sceIoClose(f);
 		buffer[len] = 0;
 		char *ptr = buffer;
 		char *end, *end2;
@@ -426,7 +424,7 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 				sceIoMkdir(download_link, 0777);
 				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c/%s", missing_icons[i]->icon[0], missing_icons[i]->icon[1], missing_icons[i]->icon);
 				sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
-				f = fopen("ux0:data/VitaDB/icons.db", "a");
+				FILE *f = fopen("ux0:data/VitaDB/icons.db", "a");
 				fprintf(f, "%s\n", download_link);
 				fclose(f);
 			}
@@ -442,16 +440,15 @@ void AppendThemeDatabase(const char *file) {
 	for (int i = 0; i < 3; i++) {
 		DrawTextDialog("Parsing themes list", true, false);
 	}
-	FILE *f = fopen(file, "rb");
-	if (f) {
+	SceUID f = sceIoOpen(file, SCE_O_RDONLY, 0777);
+	if (f >= 0) {
 		uint32_t missing_previews_num = 0;
 		ThemeSelection *missing_previews[2048];
 		
-		fseek(f, 0, SEEK_END);
-		uint64_t len = ftell(f);
-		fseek(f, 0, SEEK_SET);
+		size_t len = sceIoLseek(f, 0, SCE_SEEK_END);
+		sceIoLseek(f, 0, SCE_SEEK_SET);
 		char *buffer = (char*)malloc(len + 1);
-		fread(buffer, 1, len, f);
+		sceIoRead(f, buffer, len);
 		buffer[len] = 0;
 		char *ptr = buffer;
 		char *end, *end2;
@@ -470,8 +467,8 @@ void AppendThemeDatabase(const char *file) {
 			node->shuffle = false;
 			strcpy(node->name, name);
 			sprintf(fname, "ux0:data/VitaDB/themes/%s/theme.ini", node->name);
-			FILE *f2 = fopen(fname, "r");
-			if (f2)
+			
+			if (sceIoGetstat(fname, &st) >= 0)
 				node->state = APP_UPDATED;
 			else
 				node->state = APP_UNTRACKED;
@@ -490,7 +487,7 @@ void AppendThemeDatabase(const char *file) {
 			node->next = themes;
 			themes = node;
 		} while (ptr);
-		fclose(f);
+		sceIoClose(f);
 		free(buffer);
 		
 		// Downloading missing previews
@@ -507,7 +504,8 @@ void AppendThemeDatabase(const char *file) {
 static char fname[512], ext_fname[512], read_buffer[8192];
 
 void early_extract_file(char *file, char *dir) {
-	init_progressbar_dialog("Extracting ShaRKF00D"); // Hardcoded for now since it's the sole instance of this function
+	//init_progressbar_dialog("Extracting ShaRKF00D"); // Hardcoded for now since it's the sole instance of this function
+	uint32_t start = sceKernelGetProcessTimeWide();
 	FILE *f;
 	unz_global_info global_info;
 	unz_file_info file_info;
@@ -534,36 +532,37 @@ void early_extract_file(char *file, char *dir) {
 			curr_file_bytes = 0;
 			unzOpenCurrentFile(zipfile);
 			recursive_mkdir(ext_fname);
-			FILE *f = fopen(ext_fname, "wb");
+			SceUID f = sceIoOpen(ext_fname, SCE_O_TRUNC | SCE_O_CREAT | SCE_O_WRONLY, 0777);
 			while (curr_file_bytes < file_info.uncompressed_size) {
 				int rbytes = unzReadCurrentFile(zipfile, read_buffer, 8192);
 				if (rbytes > 0) {
-					fwrite(read_buffer, 1, rbytes, f);
+					sceIoWrite(f, read_buffer, rbytes);
 					curr_extracted_bytes += rbytes;
 					curr_file_bytes += rbytes;
 				}
 				sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
-				vglSwapBuffers(GL_TRUE);
+				//vglSwapBuffers(GL_TRUE);
 			}
-			fclose(f);
+			sceIoClose(f);
 			unzCloseCurrentFile(zipfile);
 		}
-		sceMsgDialogProgressBarInc(SCE_MSG_DIALOG_PROGRESSBAR_TARGET_BAR_DEFAULT, prog_delta);
+		//sceMsgDialogProgressBarInc(SCE_MSG_DIALOG_PROGRESSBAR_TARGET_BAR_DEFAULT, prog_delta);
 		if ((zip_idx + 1) < num_files)
 			unzGoToNextFile(zipfile);
 	}
 	unzClose(zipfile);
-	sceMsgDialogClose();
-	int status = sceMsgDialogGetStatus();
-	do {
-		vglSwapBuffers(GL_TRUE);
-		status = sceMsgDialogGetStatus();
-	} while (status != SCE_COMMON_DIALOG_STATUS_FINISHED);
-	sceMsgDialogTerm();
+	uint32_t end = sceKernelGetProcessTimeWide();
+	printf("zip -> %u\n", end - start);
+	//sceMsgDialogClose();
+	//int status = sceMsgDialogGetStatus();
+	//do {
+	//	vglSwapBuffers(GL_TRUE);
+	//	status = sceMsgDialogGetStatus();
+	//} while (status != SCE_COMMON_DIALOG_STATUS_FINISHED);
+	//sceMsgDialogTerm();
 }
 
 bool extract_file(char *file, char *dir, bool indexing, bool cancelable = false) {
-	FILE *f;
 	unz_global_info global_info;
 	unz_file_info file_info;
 	unzFile zipfile = unzOpen(file);
@@ -598,11 +597,11 @@ bool extract_file(char *file, char *dir, bool indexing, bool cancelable = false)
 			recursive_mkdir(ext_fname);
 			if (indexing)
 				fprintf(f2, "%s\n", ext_fname);
-			FILE *f = fopen(ext_fname, "wb");
+			SceUID f = sceIoOpen(ext_fname, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 			while (curr_file_bytes < file_info.uncompressed_size) {
 				int rbytes = unzReadCurrentFile(zipfile, read_buffer, 8192);
 				if (rbytes > 0) {
-					fwrite(read_buffer, 1, rbytes, f);
+					sceIoWrite(f, read_buffer, rbytes);
 					curr_extracted_bytes += rbytes;
 					curr_file_bytes += rbytes;
 				}
@@ -611,14 +610,14 @@ bool extract_file(char *file, char *dir, bool indexing, bool cancelable = false)
 					SceCtrlData pad;
 					sceCtrlPeekBufferPositive(0, &pad, 1);
 					if (pad.buttons & SCE_CTRL_CANCEL) {
-						fclose(f);
+						sceIoClose(f);
 						unzCloseCurrentFile(zipfile);
 						unzClose(zipfile);
 						return false;
 					}
 				}
 			}
-			fclose(f);
+			sceIoClose(f);
 			unzCloseCurrentFile(zipfile);
 		}
 		if ((zip_idx + 1) < num_files)
@@ -710,9 +709,8 @@ bool has_animated_bg = false;
 void LoadBackground() {
 	int w, h;
 	
-	FILE *f = fopen("ux0:data/VitaDB/bg.mp4", "rb");
-	if (f) {
-		fclose(f);
+	SceIoStat st;
+	if (sceIoGetstat("ux0:data/VitaDB/bg.mp4", &st) >= 0) {
 		video_open("ux0:data/VitaDB/bg.mp4");
 		has_animated_bg = true;
 	} else {
@@ -750,10 +748,8 @@ int trophy_loader(unsigned int args, void *arg) {
 void PrepareTrophy(const char *tid, const char *name) {
 	char fname[256], dl_url[256];
 	sprintf(fname, "ux0:data/VitaDB/trophies/%s/%s", tid, name);
-	FILE *f = fopen(fname, "rb");
-	if (f) {
-		fclose(f);
-	} else {
+	SceIoStat st;
+	if (sceIoGetstat(fname, &st) < 0) {
 		sprintf(dl_url, "https://www.rinnegatamante.eu/vitadb/trophies/%s", name);
 		download_file(dl_url, "Downloading trophy icon");
 		sceIoRename(TEMP_DOWNLOAD_NAME, fname);
@@ -1003,16 +999,15 @@ bool filterThemes(ThemeSelection *p) {
 volatile bool kill_audio_thread = false;
 static int musicThread(unsigned int args, void *arg) {
 	// Starting background music
-	FILE *f = fopen("ux0:/data/VitaDB/bg.ogg", "r");
+	SceUID f = sceIoOpen("ux0:/data/VitaDB/bg.ogg", SCE_O_RDONLY, 0777);
 	int chn;
 	Mix_Music *mus;
-	if (f) {
-		fseek(f, 0, SEEK_END);
-		int size = ftell(f);
-		fseek(f, 0, SEEK_SET);
+	if (f >= 0) {
+		size_t size = sceIoLseek(f, 0, SCE_SEEK_END);
+		sceIoLseek(f, 0, SCE_SEEK_SET);
 		audio_buffer = vglMalloc(size);
-		fread(audio_buffer, 1, size, f);
-		fclose(f);
+		sceIoRead(f, audio_buffer, size);
+		sceIoClose(f);
 		SDL_RWops *rw = SDL_RWFromMem(audio_buffer, size);
 		mus = Mix_LoadMUS_RW(rw, 0);
 		Mix_PlayMusic(mus, -1);
@@ -1338,6 +1333,19 @@ void install_theme_from_shuffle(bool boot) {
 	}
 }
 
+enum {
+	ENTRY_TYPE_FILE,
+	ENTRY_TYPE_FOLDER
+};
+
+typedef struct {
+	char name[512];
+	uint8_t type;
+	uint32_t size;
+} entry;
+
+#include <lz4.h>
+
 int main(int argc, char *argv[]) {
 	// Check if an on demand update has been requested
 	sceAppMgrGetAppParam(boot_params);
@@ -1399,20 +1407,20 @@ int main(int argc, char *argv[]) {
 	uint8_t kubridge_state = KUBRIDGE_MISSING;
 	char user_plugin_str[96];
 	strcpy(user_plugin_str, "*SHARKF00D\nux0:data/vitadb.suprx\n*NPXS10031\nux0:data/vitadb.suprx\n");
-	FILE *fp = NULL;
+	SceUID fp = -1;
 	if (sceIoGetstat("ux0:tai/config.txt", &st) >= 0) {
 		if (!SCE_S_ISDIR(st.st_mode)) {
-			fp = fopen("ux0:tai/config.txt", "r");
+			fp = sceIoOpen("ux0:tai/config.txt", SCE_O_RDONLY, 0777);
 			//printf("using ux0 taiHEN config file\n");
 		}
 	}
-	if (!fp) {
-		fp = fopen("ur0:tai/config.txt", "r");
+	if (fp < 0) {
+		fp = sceIoOpen("ur0:tai/config.txt", SCE_O_RDONLY, 0777);
 		use_ur0_config = true;
 	}
-	int cfg_size = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, fp);
-	fclose(fp);
-	if (!strncmp(generic_mem_buffer, user_plugin_str, strlen(user_plugin_str))) {
+	int cfg_size = sceIoRead(fp, generic_mem_buffer, MEM_BUFFER_SIZE);
+	sceIoClose(fp);
+	if (!strncmp((const char *)generic_mem_buffer, user_plugin_str, strlen(user_plugin_str))) {
 		if (!(sceIoGetstat("ur0:/data/libshacccg.suprx", &st) >= 0 || sceIoGetstat("ur0:/data/external/libshacccg.suprx", &st) >= 0)) { // Step 2: Extract libshacccg.suprx
 extract_libshacccg:
 			sceIoRemove("ux0:/data/Runtime1.00.pkg");
@@ -1443,9 +1451,9 @@ extract_libshacccg:
 			sceAppMgrLaunchAppByName(0x60000, "SHARKF00D", "");
 			sceKernelExitProcess(0);
 		} else { // Step 3: Cleanup
-			fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "w");
-			fwrite(&generic_mem_buffer[strlen(user_plugin_str)], 1, cfg_size - strlen(user_plugin_str), fp);
-			fclose(fp);
+			fp = sceIoOpen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+			sceIoWrite(fp, &generic_mem_buffer[strlen(user_plugin_str)], cfg_size - strlen(user_plugin_str));
+			sceIoClose(fp);
 			sceIoRemove("ux0:data/vitadb.skprx");
 			sceIoRemove("ux0:data/vitadb.suprx");
 #if 0 // On retail console, this causes the app to get minimized which we don't want to
@@ -1469,12 +1477,12 @@ extract_libshacccg:
 			sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:/data/Runtime1.00.pkg");
 			early_download_file("http://gs.ww.np.dl.playstation.net/ppkg/np/PCSI00011/PCSI00011_T8/286a65ec1ebc2d8b/IP9100-PCSI00011_00-PSMRUNTIME000000-A0201-V0100-e4708b1c1c71116c29632c23df590f68edbfc341-PE.pkg", "Downloading PSM Runtime v.2.01");
 			sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:/data/Runtime2.01.pkg");
-			fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "w");
+			fp = sceIoOpen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", SCE_O_CREAT | SCE_O_TRUNC | SCE_O_WRONLY, 0777);
 			copy_file("app0:vitadb.skprx", "ux0:data/vitadb.skprx");
 			copy_file("app0:vitadb.suprx", "ux0:data/vitadb.suprx");
-			fwrite(user_plugin_str, 1, strlen(user_plugin_str), fp);
-			fwrite(tmp_buffer, 1, cfg_size, fp);
-			fclose(fp);
+			sceIoWrite(fp, user_plugin_str, strlen(user_plugin_str));
+			sceIoWrite(fp, tmp_buffer, cfg_size);
+			sceIoClose(fp);
 			free(tmp_buffer);
 			taiLoadStartKernelModule("ux0:data/vitadb.skprx", 0, NULL, 0);
 			sceAppMgrLaunchAppByName(0x60000, "NPXS10031", "[BATCH]host0:/package/Runtime1.00.pkg\nhost0:/package/Runtime2.01.pkg");
@@ -1489,7 +1497,7 @@ extract_libshacccg:
 	sceIoRemove("ux0:data/vitadb.suprx");
 	
 	// Check for kubridge existence
-	if (strstr(generic_mem_buffer, "kubridge.skprx"))
+	if (strstr((const char *)generic_mem_buffer, "kubridge.skprx"))
 		kubridge_state = sceIoGetstat("ur0:/tai/kubridge.skprx", &st) >= 0 ? KUBRIDGE_UR0 : KUBRIDGE_UX0;
 	
 	// Initializing SDL and SDL mixer
@@ -1545,7 +1553,7 @@ extract_libshacccg:
 	ImGui_ImplVitaGL_TouchUsage(false);
 	ImGui_ImplVitaGL_GamepadUsage(true);
 	ImGui_ImplVitaGL_MouseStickUsage(false);
-	sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, 0);
+	sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_STOP);
 	
 	// Start background audio playback
 	audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
@@ -1555,10 +1563,10 @@ extract_libshacccg:
 	SceCtrlData pad;
 	sceCtrlPeekBufferPositive(0, &pad, 1);
 	if ((pad.buttons & SCE_CTRL_LTRIGGER) || sceIoGetstat("ux0:data/VitaDB/daemon.cfg", &st) < 0) {
-		FILE *fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "r");
-		size_t len = fread(&generic_mem_buffer[20 * 1024 * 1024], 1, MEM_BUFFER_SIZE, fp);
-		fclose(fp);
-		if (!strstr(&generic_mem_buffer[20 * 1024 * 1024], "ux0:data/VitaDB/vdb_daemon.suprx")) {
+		SceUID fp = sceIoOpen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", SCE_O_RDONLY, 0777);
+		size_t len = sceIoRead(fp, &generic_mem_buffer[20 * 1024 * 1024], MEM_BUFFER_SIZE);
+		sceIoClose(fp);
+		if (!strstr((const char *)&generic_mem_buffer[20 * 1024 * 1024], "ux0:data/VitaDB/vdb_daemon.suprx")) {
 			init_interactive_msg_dialog("VitaDB Downloader features a functionality that allows the homebrew to check automatically, every hour and at every console bootup, if an update for an installed homebrew is available. A plugin is required to enable this feature, do you want to install it?");
 			while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 				vglSwapBuffers(GL_TRUE);
@@ -1572,23 +1580,23 @@ extract_libshacccg:
 			sceMsgDialogTerm();
 			if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
 				copy_file("app0:vdb_daemon.suprx", "ux0:data/VitaDB/vdb_daemon.suprx");
-				fp = fopen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", "w");
+				fp = sceIoOpen(use_ur0_config ? "ur0:tai/config.txt" : "ux0:tai/config.txt", SCE_O_TRUNC | SCE_O_CREAT | SCE_O_WRONLY, 0777);
 				strcpy(user_plugin_str, "*main\nux0:data/VitaDB/vdb_daemon.suprx\n");
-				fwrite(user_plugin_str, 1, strlen(user_plugin_str), fp);
-				fwrite(&generic_mem_buffer[20 * 1024 * 1024], 1, len, fp);
-				fclose(fp);
+				sceIoWrite(fp, user_plugin_str, strlen(user_plugin_str));
+				sceIoWrite(fp, &generic_mem_buffer[20 * 1024 * 1024], len);
+				sceIoClose(fp);
 			}
 		}
-		fp = fopen("ux0:data/VitaDB/daemon.cfg", "w");
-		fclose(fp);
+		fp = sceIoOpen("ux0:data/VitaDB/daemon.cfg", SCE_O_TRUNC | SCE_O_CREAT | SCE_O_WRONLY, 0777);
+		sceIoClose(fp);
 	}
 	
 	// Checking for VitaDB Daemon updates
 	if (sceIoGetstat("ux0:data/VitaDB/vdb_daemon.suprx", &st) >= 0) {
-		FILE *f = fopen("ux0:data/VitaDB/vdb_daemon.suprx", "rb");
+		SceUID f = sceIoOpen("ux0:data/VitaDB/vdb_daemon.suprx", SCE_O_RDONLY, 0777);
 		char cur_hash[40], new_hash[40];
 		calculate_md5(f, cur_hash);
-		f = fopen("app0:vdb_daemon.suprx", "rb");
+		f = sceIoOpen("app0:vdb_daemon.suprx", SCE_O_RDONLY, 0777);
 		calculate_md5(f, new_hash);
 		if (strncmp(cur_hash, new_hash, 32)) {
 			copy_file("app0:vdb_daemon.suprx", "ux0:data/VitaDB/vdb_daemon.suprx");
@@ -2154,9 +2162,9 @@ extract_libshacccg:
 					} else {
 						sprintf(fname, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, hovered->id);
 					}
-					FILE *f = fopen(fname, "w");
-					fwrite(hovered->hash, 1, 32, f);
-					fclose(f);
+					SceUID f = sceIoOpen(fname, SCE_O_CREAT | SCE_O_TRUNC | SCE_O_WRONLY, 0777);
+					sceIoWrite(f, hovered->hash, 32);
+					sceIoClose(f);
 					hovered->state = APP_UPDATED;
 				}
 			}
@@ -2392,10 +2400,10 @@ extract_libshacccg:
 						if (strstr(to_download->requirements, "kubridge.skprx")) {
 							if (kubridge_state != KUBRIDGE_MISSING) {
 								char cur_hash[40];
-								FILE *f = fopen(kubridge_state == KUBRIDGE_UR0 ? "ur0:tai/kubridge.skprx" : "ux0:tai/kubridge.skprx", "r");
+								SceUID f = sceIoOpen(kubridge_state == KUBRIDGE_UR0 ? "ur0:tai/kubridge.skprx" : "ux0:tai/kubridge.skprx", SCE_O_RDONLY, 0777);
 								calculate_md5(f, cur_hash);
 								silent_download("https://www.rinnegatamante.eu/vitadb/get_hb_hash.php?id=611");
-								if (strncmp(cur_hash, generic_mem_buffer, 32)) {
+								if (strncmp(cur_hash, (const char *)generic_mem_buffer, 32)) {
 									init_interactive_msg_dialog("VitaDB Downloader detected an outdated version of kubridge.skprx. Do you wish to update it?\n\nNOTE: A console restart is required for kubridge.skprx update to complete.");
 									while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 										vglSwapBuffers(GL_TRUE);
@@ -2431,26 +2439,26 @@ extract_libshacccg:
 									if (use_ur0_config) {
 										copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
 										sceIoRemove(TEMP_DOWNLOAD_NAME);
-										FILE *f = fopen("ur0:tai/config.txt", "r");
-										size_t len = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
-										fclose(f);
+										SceUID f = sceIoOpen("ur0:tai/config.txt", SCE_O_RDONLY, 0777);
+										size_t len = sceIoRead(f, generic_mem_buffer, MEM_BUFFER_SIZE);
+										sceIoClose(f);
 										sprintf(user_plugin_str, "*KERNEL\nur0:tai/kubridge.skprx\n");
-										f = fopen("ur0:tai/config.txt", "w");
-										fwrite(user_plugin_str, 1, strlen(user_plugin_str), f);
-										fwrite(generic_mem_buffer, 1, len, f);
-										fclose(f);
+										f = sceIoOpen("ur0:tai/config.txt", SCE_O_CREAT | SCE_O_TRUNC | SCE_O_WRONLY, 0777);
+										sceIoWrite(f, user_plugin_str, strlen(user_plugin_str));
+										sceIoWrite(f, generic_mem_buffer, len);
+										sceIoClose(f);
 										kubridge_state = KUBRIDGE_UR0;
 									} else {
 										sceIoRemove("ux0:tai/kubridge.skprx"); // Just to be safe
 										sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:tai/kubridge.skprx");
-										FILE *f = fopen("ux0:tai/config.txt", "r");
-										size_t len = fread(generic_mem_buffer, 1, MEM_BUFFER_SIZE, f);
-										fclose(f);
+										SceUID f = sceIoOpen("ux0:tai/config.txt", SCE_O_RDONLY, 0777);
+										size_t len = sceIoRead(f, generic_mem_buffer, MEM_BUFFER_SIZE);
+										sceIoClose(f);
 										sprintf(user_plugin_str, "*KERNEL\nux0:tai/kubridge.skprx\n");
-										f = fopen("ux0:tai/config.txt", "w");
-										fwrite(user_plugin_str, 1, strlen(user_plugin_str), f);
-										fwrite(generic_mem_buffer, 1, len, f);
-										fclose(f);
+										f = sceIoOpen("ux0:tai/config.txt", SCE_O_TRUNC | SCE_O_CREAT | SCE_O_WRONLY, 0777);
+										sceIoWrite(f, user_plugin_str, strlen(user_plugin_str));
+										sceIoWrite(f, generic_mem_buffer, len);
+										sceIoClose(f);
 										kubridge_state = KUBRIDGE_UX0;
 									}
 								}
@@ -2569,7 +2577,7 @@ extract_libshacccg:
 					continue;
 				}
 				sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=%s", to_download->id);
-				if (!download_file(download_link, mode_idx == MODE_VITA_HBS ? "Downloading vpk" : "Downloading app", true)) {
+				if (!download_file(download_link, (char *)(mode_idx == MODE_VITA_HBS ? "Downloading vpk" : "Downloading app"), true)) {
 					to_download = nullptr;
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 					if (downloading_data_files)
@@ -2579,12 +2587,12 @@ extract_libshacccg:
 				if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
 					extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false); // We don't want VitaDB Downloader update to be abortable to prevent corruption
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
-					FILE *f = fopen("ux0:app/VITADBDLD/hash.vdb", "w");
-					fwrite(to_download->hash, 1, 32, f);
-					fclose(f);
+					SceUID f = sceIoOpen("ux0:app/VITADBDLD/hash.vdb", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+					sceIoWrite(f, to_download->hash, 32);
+					sceIoClose(f);
 					sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
 				} else {
-					FILE *f;
+					SceUID f;
 					char tmp_path[256];
 					if (mode_idx == MODE_VITA_HBS) {
 						sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
@@ -2598,11 +2606,11 @@ extract_libshacccg:
 							continue;
 						}
 						if (strlen(to_download->aux_hash) > 0) {
-							f = fopen("ux0:data/VitaDB/vpk/aux_hash.vdb", "w");
-							fwrite(to_download->aux_hash, 1, 32, f);
-							fclose(f);
+							f = sceIoOpen("ux0:data/VitaDB/vpk/aux_hash.vdb", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+							sceIoWrite(f, to_download->aux_hash, 32);
+							sceIoClose(f);
 						}
-						f = fopen("ux0:data/VitaDB/vpk/hash.vdb", "w");
+						f = sceIoOpen("ux0:data/VitaDB/vpk/hash.vdb", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 					} else {
 						sprintf(tmp_path, "%spspemu/PSP/GAME/%s/", pspemu_dev, to_download->id);
 						sceIoMkdir(tmp_path, 0777);
@@ -2614,10 +2622,10 @@ extract_libshacccg:
 							continue;
 						}
 						sprintf(tmp_path, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, to_download->id);
-						f = fopen(tmp_path, "w");
+						f = sceIoOpen(tmp_path, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 					}
-					fwrite(to_download->hash, 1, 32, f);
-					fclose(f);
+					sceIoWrite(f, to_download->hash, 32);
+					sceIoClose(f);
 					if (mode_idx == MODE_VITA_HBS) {
 						makeHeadBin("ux0:data/VitaDB/vpk");
 						scePromoterUtilInit();
@@ -2674,14 +2682,13 @@ skip_install:
 			sceIoMkdir(dl_url, 0777);
 			sprintf(dl_url, "https://www.rinnegatamante.eu/vitadb/get_trophies_for_app.php?id=%s", hovered->titleid);
 			download_file(dl_url, "Downloading trophies data");
-			FILE *f = fopen(TEMP_DOWNLOAD_NAME, "rb");
-			fseek(f, 0, SEEK_END);
-			size_t sz = ftell(f);
-			fseek(f, 0, SEEK_SET);
-			char *trp_data = malloc(sz + 1);
-			fread(trp_data, 1, sz, f);
+			SceUID f = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_RDONLY, 0777);
+			size_t sz = sceIoLseek(f, 0, SCE_SEEK_END);
+			sceIoLseek(f, 0, SCE_SEEK_SET);
+			char *trp_data = (char *)malloc(sz + 1);
+			sceIoRead(f, trp_data, sz);
 			trp_data[sz] = 0;
-			fclose(f);
+			sceIoClose(f);
 			sceIoRemove(TEMP_DOWNLOAD_NAME);
 			char *s = strstr(trp_data, "\"name\":");
 			TrophySelection *last_trp = nullptr;
@@ -2696,7 +2703,7 @@ skip_install:
 				trp->name[end - s] = 0;
 				s = strstr(end, "\"desc\":") + 9;
 				end = strstr(s, "\",\n");
-				trp->desc = malloc(end - s + 1);
+				trp->desc = (char *)malloc(end - s + 1);
 				sceClibMemcpy(trp->desc, s, end - s);
 				trp->desc[end - s] = 0;
 				trp->desc = unescape(trp->desc);
@@ -2790,7 +2797,7 @@ skip_install:
 	// Installing update
 	if (to_download) {
 		if (strlen(boot_params) > 0) { // On-demand app updater
-			FILE *f;
+			SceUID f;
 			char hb_url[256], hb_message[256];
 			sprintf(hb_url, "https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=%s", boot_params);
 			sprintf(hb_message, "Downloading %s", to_download->name);
@@ -2799,13 +2806,13 @@ skip_install:
 			extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false);
 			sceIoRemove(TEMP_DOWNLOAD_NAME);
 			if (strlen(to_download->aux_hash) > 0) {
-				f = fopen("ux0:data/VitaDB/vpk/aux_hash.vdb", "w");
-				fwrite(to_download->aux_hash, 1, 32, f);
-				fclose(f);
+				f = sceIoOpen("ux0:data/VitaDB/vpk/aux_hash.vdb", SCE_O_CREAT | SCE_O_TRUNC | SCE_O_WRONLY, 0777);
+				sceIoWrite(f, to_download->aux_hash, 32);
+				sceIoClose(f);
 			}
-			f = fopen("ux0:data/VitaDB/vpk/hash.vdb", "w");
-			fwrite(to_download->hash, 1, 32, f);
-			fclose(f);
+			f = sceIoOpen("ux0:data/VitaDB/vpk/hash.vdb", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+			sceIoWrite(f, to_download->hash, 32);
+			sceIoClose(f);
 			makeHeadBin("ux0:data/VitaDB/vpk");
 			scePromoterUtilInit();
 			scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
@@ -2830,9 +2837,9 @@ skip_install:
 			download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=877", "Downloading update");
 			extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
 			sceIoRemove(TEMP_DOWNLOAD_NAME);
-			FILE *f = fopen("ux0:app/VITADBDLD/hash.vdb", "w");
-			fwrite(to_download->hash, 1, 32, f);
-			fclose(f);
+			SceUID f = sceIoOpen("ux0:app/VITADBDLD/hash.vdb", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+			sceIoWrite(f, to_download->hash, 32);
+			sceIoClose(f);
 			sceAppMgrLoadExec("app0:eboot.bin", NULL, NULL);
 		}
 	} else {

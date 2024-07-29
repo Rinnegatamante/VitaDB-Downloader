@@ -35,7 +35,7 @@ volatile uint8_t downloader_pass = 1;
 volatile bool is_cancelable = false;
 volatile bool is_canceled = false;
 uint8_t *generic_mem_buffer = nullptr;
-static FILE *fh;
+static SceUID fh;
 char *bytes_string;
 extern int SCE_CTRL_CANCEL;
 
@@ -48,22 +48,24 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *stream) {
 			return 0;
 		}
 	}
-	if (total_bytes > MEM_BUFFER_SIZE || fh) {
-		if (!fh)
-			fh = fopen(TEMP_DOWNLOAD_NAME, "wb");
-		fwrite(ptr, 1, nmemb, fh);
+	if (total_bytes > MEM_BUFFER_SIZE || fh >= 0) {
+		if (fh < 0)
+			fh = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+		sceIoWrite(fh, ptr, nmemb);
 	} else {
 		uint8_t *dst = &generic_mem_buffer[downloaded_bytes];
 		sceClibMemcpy(dst, ptr, nmemb);
 	}
 	downloaded_bytes += nmemb;
-	if (total_bytes < downloaded_bytes) total_bytes = downloaded_bytes;
+	if (total_bytes < downloaded_bytes)
+		total_bytes = downloaded_bytes;
 	return nmemb;
 }
 
 static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata) {
 	char *ptr = strcasestr(buffer, "Content-Length");
-	if (ptr != NULL) sscanf(ptr, "Content-Length: %llu", &total_bytes);
+	if (ptr != NULL)
+		sscanf(ptr, "Content-Length: %llu", &total_bytes);
 	return nitems;
 }
 
@@ -101,7 +103,7 @@ int appListThread(unsigned int args, void *arg) {
 	curl_handle = curl_easy_init();
 	downloader_pass = 1;
 	downloaded_bytes = 0;
-	fh = NULL;
+	fh = -1;
 
 	SceIoStat stat;
 	sceIoGetstat("ux0:data/VitaDB/apps.json", &stat);
@@ -110,9 +112,9 @@ int appListThread(unsigned int args, void *arg) {
 	startDownload("https://www.rinnegatamante.eu/vitadb/list_hbs_json.php");
 
 	if (downloaded_bytes > 12 * 1024) {
-		fh = fopen("ux0:data/VitaDB/apps.json", "wb");
-		fwrite(generic_mem_buffer, 1, downloaded_bytes, fh);
-		fclose(fh);
+		fh = sceIoOpen("ux0:data/VitaDB/apps.json", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+		sceIoWrite(fh, generic_mem_buffer, downloaded_bytes);
+		sceIoClose(fh);
 	}
 	downloaded_bytes = total_bytes;
 	curl_easy_cleanup(curl_handle);
@@ -123,7 +125,7 @@ int appPspListThread(unsigned int args, void *arg) {
 	curl_handle = curl_easy_init();
 	downloader_pass = 1;
 	downloaded_bytes = 0;
-	fh = NULL;
+	fh = -1;
 
 	SceIoStat stat;
 	sceIoGetstat("ux0:data/VitaDB/psp_apps.json", &stat);
@@ -132,9 +134,9 @@ int appPspListThread(unsigned int args, void *arg) {
 	startDownload("https://www.rinnegatamante.eu/vitadb/list_psp_hbs_json.php");
 
 	if (downloaded_bytes > 12 * 1024) {
-		fh = fopen("ux0:data/VitaDB/psp_apps.json", "wb");
-		fwrite(generic_mem_buffer, 1, downloaded_bytes, fh);
-		fclose(fh);
+		fh = sceIoOpen("ux0:data/VitaDB/psp_apps.json", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+		sceIoWrite(fh, generic_mem_buffer, downloaded_bytes);
+		sceIoClose(fh);
 	}
 	downloaded_bytes = total_bytes;
 	curl_easy_cleanup(curl_handle);
@@ -148,7 +150,7 @@ int downloadMemThread(unsigned int args, void *arg) {
 	char *space = strstr(url, " ");
 	char *s = url;
 	char final_url[512] = "";
-	fh = NULL;
+	fh = -1;
 	while (space) {
 		space[0] = 0;
 		sprintf(final_url, "%s%s%%20", final_url, s);
@@ -178,7 +180,7 @@ int downloadThread(unsigned int args, void *arg) {
 	char *space = strstr(url, " ");
 	char *s = url;
 	char final_url[512] = "";
-	fh = NULL;
+	fh = -1;
 	while (space) {
 		space[0] = 0;
 		sprintf(final_url, "%s%s%%20", final_url, s);
@@ -199,11 +201,11 @@ int downloadThread(unsigned int args, void *arg) {
 		startDownload(final_url);
 	}
 	if (downloaded_bytes > 180 && total_bytes <= MEM_BUFFER_SIZE) {
-		fh = fopen(TEMP_DOWNLOAD_NAME, "wb");
-		fwrite(generic_mem_buffer, 1, downloaded_bytes, fh);
+		fh = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+		sceIoWrite(fh, generic_mem_buffer, downloaded_bytes);
 	}
 ABORT_DOWNLOAD:
-	fclose(fh);
+	sceIoClose(fh);
 	downloaded_bytes = total_bytes;
 	curl_easy_cleanup(curl_handle);
 	return sceKernelExitDeleteThread(0);

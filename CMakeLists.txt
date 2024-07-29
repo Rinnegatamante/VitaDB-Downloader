@@ -72,7 +72,7 @@ target_link_libraries(VitaDB
   SceKernelDmacMgr_stub
   SceGxm_stub
   SceNet_stub
-  SceNetCtl_stub
+  -Wl,--whole-archive SceNetCtl_stub -Wl,--no-whole-archive
   SceShaccCg_stub
   -Wl,--whole-archive SceSysmodule_stub -Wl,--no-whole-archive
   ScePower_stub

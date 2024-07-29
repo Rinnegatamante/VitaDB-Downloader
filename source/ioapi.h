@@ -14,7 +14,11 @@
 #ifndef _ZLIBIOAPI64_H
 #define _ZLIBIOAPI64_H
 
-#if (!defined(_WIN32)) && (!defined(WIN32)) && (!defined(__APPLE__))
+#ifdef __vita__
+#define USE_FILE32API
+#endif
+
+#if (!defined(_WIN32)) && (!defined(WIN32)) && (!defined(__APPLE__) && (!defined(__vita__)))
 #    ifndef __USE_FILE_OFFSET64
 #        define __USE_FILE_OFFSET64
 #    endif

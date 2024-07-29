@@ -42,7 +42,7 @@ uint64_t get_free_storage();
 uint64_t get_total_storage();
 
 char *unescape(char *src);
-void calculate_md5(FILE *fd, char *hash);
+void calculate_md5(SceUID fd, char *hash);
 
 namespace ImGui {
 void ImageRound(ImTextureID user_texture_id, const ImVec2 &size);
