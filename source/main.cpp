@@ -26,6 +26,7 @@
 #include <imgui_internal.h>
 #include <bzlib.h>
 #include <stdio.h>
+#include <malloc.h>
 #include <string>
 #include <taihen.h>
 #include <SDL2/SDL.h>
@@ -501,7 +502,8 @@ void AppendThemeDatabase(const char *file) {
 	//printf("finished parsing\n");
 }
 
-static char fname[512], ext_fname[512], read_buffer[8192];
+#define READ_BUFFER_SIZE (128 * 1024)
+static char fname[512], ext_fname[512], *read_buffer;
 
 void early_extract_file(char *file, char *dir) {
 	//init_progressbar_dialog("Extracting ShaRKF00D"); // Hardcoded for now since it's the sole instance of this function
@@ -534,7 +536,7 @@ void early_extract_file(char *file, char *dir) {
 			recursive_mkdir(ext_fname);
 			SceUID f = sceIoOpen(ext_fname, SCE_O_TRUNC | SCE_O_CREAT | SCE_O_WRONLY, 0777);
 			while (curr_file_bytes < file_info.uncompressed_size) {
-				int rbytes = unzReadCurrentFile(zipfile, read_buffer, 8192);
+				int rbytes = unzReadCurrentFile(zipfile, read_buffer, READ_BUFFER_SIZE);
 				if (rbytes > 0) {
 					sceIoWrite(f, read_buffer, rbytes);
 					curr_extracted_bytes += rbytes;
@@ -560,6 +562,52 @@ void early_extract_file(char *file, char *dir) {
 	//	status = sceMsgDialogGetStatus();
 	//} while (status != SCE_COMMON_DIALOG_STATUS_FINISHED);
 	//sceMsgDialogTerm();
+}
+
+enum {
+    VDB_ENTRY_TYPE_FILE,
+    VDB_ENTRY_TYPE_FOLDER
+};
+
+typedef struct {
+    char name[512];
+    uint8_t type;
+    uint32_t size;
+} vdb_entry;
+
+bool extract_vdb_file(char *file, char *dir, bool cancelable = false) {
+	SceUID f = sceIoOpen(file, SCE_O_RDONLY, 0777);
+	vdb_entry en;
+	while (sceIoRead(f, &en, sizeof(en))) {
+		char path[512];
+		sprintf(path, "%s/%s", dir, en.name);
+		if (en.type == VDB_ENTRY_TYPE_FOLDER) {
+			sceIoMkdir(path, 0777);
+		} else {
+			SceUID f2 = sceIoOpen(path, SCE_O_CREAT | SCE_O_WRONLY | SCE_O_TRUNC, 0777);
+			size_t left = en.size;
+			while (left) {
+				size_t read_size = MIN(READ_BUFFER_SIZE, left);
+				sceIoRead(f, read_buffer, read_size);
+				sceIoWrite(f2, read_buffer, read_size);
+				left -= read_size;
+				DrawDearchiverDialog(en.size - left, en.size, en.name);
+				if (cancelable) {
+					SceCtrlData pad;
+					sceCtrlPeekBufferPositive(0, &pad, 1);
+					if (pad.buttons & SCE_CTRL_CANCEL) {
+						sceIoClose(f);
+						sceIoClose(f2);
+						return false;
+					}
+				}
+			}
+			sceIoClose(f2);
+		}
+	}
+	
+	ImGui::GetIO().MouseDrawCursor = false;
+	return true;
 }
 
 bool extract_file(char *file, char *dir, bool indexing, bool cancelable = false) {
@@ -599,7 +647,7 @@ bool extract_file(char *file, char *dir, bool indexing, bool cancelable = false)
 				fprintf(f2, "%s\n", ext_fname);
 			SceUID f = sceIoOpen(ext_fname, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 			while (curr_file_bytes < file_info.uncompressed_size) {
-				int rbytes = unzReadCurrentFile(zipfile, read_buffer, 8192);
+				int rbytes = unzReadCurrentFile(zipfile, read_buffer, READ_BUFFER_SIZE);
 				if (rbytes > 0) {
 					sceIoWrite(f, read_buffer, rbytes);
 					curr_extracted_bytes += rbytes;
@@ -1374,7 +1422,8 @@ int main(int argc, char *argv[]) {
 	sceIoRemove(TEMP_DOWNLOAD_NAME);
 	
 	// Initializing sceNet
-	generic_mem_buffer = (uint8_t*)malloc(MEM_BUFFER_SIZE);
+	generic_mem_buffer = (uint8_t *)memalign(64, MEM_BUFFER_SIZE);
+	read_buffer = (char *)memalign(64, READ_BUFFER_SIZE);
 	sceSysmoduleLoadModule(SCE_SYSMODULE_NET);
 	int ret = sceNetShowNetstat();
 	SceNetInitParam initparam;

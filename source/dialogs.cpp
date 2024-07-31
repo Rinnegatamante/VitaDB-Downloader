@@ -213,6 +213,34 @@ void DrawExtractorDialog(int index, float file_extracted_bytes, float extracted_
 	sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
 }
 
+void DrawDearchiverDialog(float file_extracted_bytes, float file_total_bytes, char *filename) {
+	ImGui_ImplVitaGL_NewFrame();
+	
+	char msg1[256], msg2[256];
+	sprintf(msg1, "%s", "Extracting fast archive...");
+	sprintf(msg2, "%s (%.2f %s / %.2f %s)", filename, format_size(file_extracted_bytes), format_size_str(file_extracted_bytes), format_size(file_total_bytes), format_size_str(file_total_bytes));
+	ImVec2 pos1 = ImGui::CalcTextSize(msg1);
+	ImVec2 pos2 = ImGui::CalcTextSize(msg2);
+	
+	ImGui::GetIO().MouseDrawCursor = false;
+	ImGui::SetNextWindowPos(ImVec2((SCR_WIDTH / 2) - 200, (SCR_HEIGHT / 2) - 50), ImGuiSetCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(400, 100), ImGuiSetCond_Always);
+	ImGui::Begin("", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+	ImGui::SetCursorPos(ImVec2((400 - pos1.x) / 2, 20));
+	ImGui::Text(msg1);
+	ImGui::SetCursorPos(ImVec2((400 - pos2.x) / 2, 40));
+	ImGui::Text(msg2);
+	ImGui::SetCursorPos(ImVec2(100, 60));
+	ImGui::ProgressBar(file_extracted_bytes / file_total_bytes, ImVec2(200, 0));
+	
+	ImGui::End();
+	glViewport(0, 0, static_cast<int>(ImGui::GetIO().DisplaySize.x), static_cast<int>(ImGui::GetIO().DisplaySize.y));
+	ImGui::Render();
+	ImGui_ImplVitaGL_RenderDrawData(ImGui::GetDrawData());
+	vglSwapBuffers(GL_FALSE);
+	sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
+}
+
 void DrawDownloaderDialog(int index, float downloaded_bytes, float total_bytes, char *text, int passes, bool self_contained) {
 	sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
 	
