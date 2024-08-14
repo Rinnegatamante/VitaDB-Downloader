@@ -31,6 +31,16 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 
 ## Changelog
 
+### v.2.1
+- Fixed a bug causing the background image to get flipped during some applications installations.
+- Fixed a bug causing trophies and icons to still get recovered using old backend.
+- Greatly optimized sorting algorithm (faster booting time and faster switching between sorting modes).
+- Added an automatic updater for the Daemon plugin. (Prior it wasn't getting updated at all).
+- Added a feature that will mark applications with clashing TitleIDs by showing said TitleIDs in red.
+- Added a confirmation check when installing applications with clashing TitleIDs when an application sharing the same TitleID is already installed.
+- Fixed a filehandle leak in themes installer.
+- Made application extractions faster. Now installing homebrews will take less time.
+
 ### v.2.0
 - Updated to latest vitaGL commit.
 - Now the application UI will respect OS confirm/cancel button settings (O/X).
