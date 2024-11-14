@@ -64,8 +64,9 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *stream) {
 
 static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata) {
 	char *ptr = strcasestr(buffer, "Content-Length");
-	if (ptr != NULL)
+	if (ptr != NULL) {
 		sscanf(ptr, "Content-Length: %llu", &total_bytes);
+	}
 	return nitems;
 }
 
@@ -254,7 +255,7 @@ void early_download_file(char *url, char *text) {
 	init_progressbar_dialog(text);
 	do {
 		sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
-		sceMsgDialogProgressBarSetValue(SCE_MSG_DIALOG_PROGRESSBAR_TARGET_BAR_DEFAULT, (downloaded_bytes / total_bytes) * 100);
+		sceMsgDialogProgressBarSetValue(SCE_MSG_DIALOG_PROGRESSBAR_TARGET_BAR_DEFAULT, (((float)downloaded_bytes / (float)total_bytes) * 100.0f));
 		vglSwapBuffers(GL_TRUE);
 		res = sceKernelGetThreadInfo(thd, &info);
 	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
