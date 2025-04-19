@@ -494,7 +494,7 @@ void AppendThemeDatabase(const char *file) {
 		// Downloading missing previews
 		for (int i = 0; i < missing_previews_num; i++) {
 			sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/raw/main/previews/%s.png", missing_previews[i]->name);
-			download_file(download_link, "Downloading missing previews");
+			download_file(download_link, "Downloading missing previews", false, i + 1, missing_previews_num);
 			sprintf(download_link, "ux0:data/VitaDB/previews/%s.png", missing_previews[i]->name);
 			sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
 		}
