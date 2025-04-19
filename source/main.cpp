@@ -420,7 +420,7 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 		if (!update_detected) {
 			for (int i = 0; i < missing_icons_num; i++) {
 				sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/icons/%s", missing_icons[i]->icon);
-				download_file(download_link, "Downloading missing icons");
+				download_file(download_link, "Downloading missing icons", false, i + 1, missing_icons_num);
 				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c", missing_icons[i]->icon[0], missing_icons[i]->icon[1]);
 				sceIoMkdir(download_link, 0777);
 				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c/%s", missing_icons[i]->icon[0], missing_icons[i]->icon[1], missing_icons[i]->icon);

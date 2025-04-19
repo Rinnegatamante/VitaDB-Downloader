@@ -212,7 +212,7 @@ ABORT_DOWNLOAD:
 	return sceKernelExitDeleteThread(0);
 }
 
-bool download_file(char *url, char *text, bool cancelable) {
+bool download_file(char *url, char *text, bool cancelable, int custom_index, int custom_num_passes) {
 	is_canceled = false;
 	is_cancelable = cancelable;
 	SceKernelThreadInfo info;
@@ -222,7 +222,9 @@ bool download_file(char *url, char *text, bool cancelable) {
 	sprintf(generic_url, url);
 	sceKernelStartThread(thd, 0, NULL);
 	do {
-		DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, text, 1, true);
+		int pass_idx = custom_index >= 0 ? custom_index : downloader_pass;
+		int num_passes = custom_num_passes >= 0 ? custom_num_passes : 1;
+		DrawDownloaderDialog(pass_idx, downloaded_bytes, total_bytes, text, num_passes, true);
 		res = sceKernelGetThreadInfo(thd, &info);
 	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 	
