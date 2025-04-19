@@ -793,13 +793,13 @@ int trophy_loader(unsigned int args, void *arg) {
 	return sceKernelExitDeleteThread(0);
 }
 
-void PrepareTrophy(const char *tid, const char *name) {
+void PrepareTrophy(const char *tid, const char *name, int index, int count) {
 	char fname[256], dl_url[256];
 	sprintf(fname, "ux0:data/VitaDB/trophies/%s/%s", tid, name);
 	SceIoStat st;
 	if (sceIoGetstat(fname, &st) < 0) {
 		sprintf(dl_url, "https://www.rinnegatamante.eu/vitadb/trophies/%s", name);
-		download_file(dl_url, "Downloading trophy icon");
+		download_file(dl_url, "Downloading trophy icon", false, index + 1, count);
 		sceIoRename(TEMP_DOWNLOAD_NAME, fname);
 	}
 }
@@ -2742,6 +2742,7 @@ skip_install:
 			char *s = strstr(trp_data, "\"name\":");
 			TrophySelection *last_trp = nullptr;
 			trophies = nullptr;
+			int trp_count = 0;
 			while (s) {
 				TrophySelection *trp = (TrophySelection *)malloc(sizeof(TrophySelection));
 				if (trophies == nullptr)
@@ -2762,12 +2763,18 @@ skip_install:
 				trp->icon_name[end - s] = 0;
 				trp->icon = empty_icon;
 				strcpy(trp->titleid, hovered->titleid);
-				PrepareTrophy(hovered->titleid, trp->icon_name);
 				trp->next = nullptr;
 				if (last_trp)
 					last_trp->next = trp;
 				last_trp = trp;
 				s = strstr(end, "\"name\":");
+				trp_count++;
+			}
+			TrophySelection *trp = trophies;
+			int trp_index = 0;
+			while (trp) {
+				PrepareTrophy(hovered->titleid, trp->icon_name, trp_index++, trp_count);
+				trp = trp->next;
 			}
 			trophy_thd = sceKernelCreateThread("Audio Playback", &trophy_loader, 0x10000100, 0x100000, 0, 0, NULL);
 			sceKernelStartThread(trophy_thd, 0, NULL);
