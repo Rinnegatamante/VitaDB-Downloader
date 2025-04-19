@@ -506,9 +506,7 @@ void AppendThemeDatabase(const char *file) {
 static char fname[512], ext_fname[512], *read_buffer;
 
 void early_extract_file(char *file, char *dir) {
-	//init_progressbar_dialog("Extracting ShaRKF00D"); // Hardcoded for now since it's the sole instance of this function
-	uint32_t start = sceKernelGetProcessTimeWide();
-	FILE *f;
+	init_progressbar_dialog("Extracting ShaRKF00D"); // Hardcoded for now since it's the sole instance of this function
 	unz_global_info global_info;
 	unz_file_info file_info;
 	unzFile zipfile = unzOpen(file);
@@ -543,25 +541,23 @@ void early_extract_file(char *file, char *dir) {
 					curr_file_bytes += rbytes;
 				}
 				sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
-				//vglSwapBuffers(GL_TRUE);
+				vglSwapBuffers(GL_TRUE);
 			}
 			sceIoClose(f);
 			unzCloseCurrentFile(zipfile);
 		}
-		//sceMsgDialogProgressBarInc(SCE_MSG_DIALOG_PROGRESSBAR_TARGET_BAR_DEFAULT, prog_delta);
+		sceMsgDialogProgressBarInc(SCE_MSG_DIALOG_PROGRESSBAR_TARGET_BAR_DEFAULT, prog_delta);
 		if ((zip_idx + 1) < num_files)
 			unzGoToNextFile(zipfile);
 	}
 	unzClose(zipfile);
-	uint32_t end = sceKernelGetProcessTimeWide();
-	printf("zip -> %u\n", end - start);
-	//sceMsgDialogClose();
-	//int status = sceMsgDialogGetStatus();
-	//do {
-	//	vglSwapBuffers(GL_TRUE);
-	//	status = sceMsgDialogGetStatus();
-	//} while (status != SCE_COMMON_DIALOG_STATUS_FINISHED);
-	//sceMsgDialogTerm();
+	sceMsgDialogClose();
+	int status = sceMsgDialogGetStatus();
+	do {
+		vglSwapBuffers(GL_TRUE);
+		status = sceMsgDialogGetStatus();
+	} while (status != SCE_COMMON_DIALOG_STATUS_FINISHED);
+	sceMsgDialogTerm();
 }
 
 enum {
