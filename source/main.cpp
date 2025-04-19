@@ -2798,21 +2798,25 @@ skip_install:
 				sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/ss0.png");
 			} else {
 				char *s = hovered->screenshots;
+				char shot_links[4][256];
+				int shot_num = 0;
 				for (;;) {
 					char *end = strstr(s, ";");
 					if (end) {
 						end[0] = 0;
 					}
-					sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/%s", s);				
-					download_file(download_link, "Downloading screenshot");
-					sprintf(download_link, "ux0:data/VitaDB/ss%d.png", shot_idx++);
-					sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
+					sprintf(shot_links[shot_num++], "https://www.rinnegatamante.eu/vitadb/%s", s);
 					if (end) {
 						end[0] = ';';
 						s = end + 1;
 					} else {
 						break;
 					}
+				}
+				while (shot_idx < shot_num) {
+					download_file(shot_links[shot_idx], "Downloading screenshot", false, shot_idx + 1, shot_num);
+					sprintf(shot_links[shot_idx], "ux0:data/VitaDB/ss%d.png", shot_idx);
+					sceIoRename(TEMP_DOWNLOAD_NAME, shot_links[shot_idx++]);
 				}
 			}
 			show_screenshots = 2;
