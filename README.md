@@ -35,7 +35,7 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 - Fixed a bug causing background to flicker during popups (example: during downloads).
 - Replaced Sony CDN links with archive.org links for PSM Runtimes. Now the libshacccg.suprx auto-installer will work again.
 - Fixed progressbar during PSM Runtimes download to not properly update in realtime.
-- Made so that multi-downloads (esample: missing icons download) will properly show total count and updated count during the process.
+- Made so that multi-downloads (example: missing icons download) will properly show total count and updated count during the process.
 - Restored erroneously removed message box during ShaRKF00D extraction during libshacccg.suprx auto-installer process.
 - Replaced zip/vpk usage with psarc files. These will be faster to extract resulting in faster installation process for apps.
 
