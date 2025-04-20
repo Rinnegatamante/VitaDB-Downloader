@@ -42,7 +42,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#define VERSION "2.1"
+#define VERSION "2.2"
 
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6

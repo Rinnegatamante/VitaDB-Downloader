@@ -31,6 +31,14 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 
 ## Changelog
 
+### v.2.2
+- Fixed a bug causing background to flicker during popups (example: during downloads).
+- Replaced Sony CDN links with archive.org links for PSM Runtimes. Now the libshacccg.suprx auto-installer will work again.
+- Fixed progressbar during PSM Runtimes download to not properly update in realtime.
+- Made so that multi-downloads (esample: missing icons download) will properly show total count and updated count during the process.
+- Restored erroneously removed message box during ShaRKF00D extraction during libshacccg.suprx auto-installer process.
+- Replaced zip/vpk usage with psarc files. These will be faster to extract resulting in faster installation process for apps.
+
 ### v.2.1
 - Fixed a bug causing the background image to get flipped during some applications installations.
 - Fixed a bug causing trophies and icons to still get recovered using old backend.
