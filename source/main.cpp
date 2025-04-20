@@ -2608,6 +2608,8 @@ extract_libshacccg:
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 					}
 				}
+				if (!anti_burn_in_set_up)
+					anti_burn_in_set_up = prepare_anti_burn_in();
 				// Check if enough storage is left for the install
 				char *dummy;
 				uint64_t sz = strtoull(to_download->size, &dummy, 10);
@@ -2912,8 +2914,8 @@ skip_install:
 				recursive_rmdir("ux0:/data/VitaDB/vpk");
 			}
 		} else { // VitaDB Downloader auto-updater
-			download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=877", "Downloading update");
-			extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
+			download_file("https://www.rinnegatamante.eu/vitadb/get_psarc_url.php?id=877", "Downloading update");
+			extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
 			sceIoRemove(TEMP_DOWNLOAD_NAME);
 			SceUID f = sceIoOpen("ux0:app/VITADBDLD/hash.vdb", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
 			sceIoWrite(f, to_download->hash, 32);
