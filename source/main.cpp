@@ -1,6 +1,6 @@
 /*
  * This file is part of VitaDB Downloader
- * Copyright 2022 Rinnegatamante
+ * Copyright 2025 Rinnegatamante
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published
@@ -37,6 +37,7 @@
 #include "utils.h"
 #include "dialogs.h"
 #include "network.h"
+#include "fios.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -395,6 +396,9 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 			ptr = extractValue(has_trophies, ptr, "trophies", nullptr);
 			node->trophies = atoi(has_trophies);
 			ptr = extractValue(node->data_link, ptr, "data", nullptr);
+			if (strlen(node->data_link) > 5) {
+				strcat(node->data_link, ".psarc");
+			}
 			sprintf(node->name, "%s %s", name, version);
 			if (is_psp) {
 				node->next = psp_apps;
@@ -560,50 +564,59 @@ void early_extract_file(char *file, char *dir) {
 	sceMsgDialogTerm();
 }
 
-enum {
-    VDB_ENTRY_TYPE_FILE,
-    VDB_ENTRY_TYPE_FOLDER
-};
-
-typedef struct {
-    char name[512];
-    uint8_t type;
-    uint32_t size;
-} vdb_entry;
-
-bool extract_vdb_file(char *file, char *dir, bool cancelable = false) {
-	SceUID f = sceIoOpen(file, SCE_O_RDONLY, 0777);
-	vdb_entry en;
-	while (sceIoRead(f, &en, sizeof(en))) {
-		char path[512];
-		sprintf(path, "%s/%s", dir, en.name);
-		if (en.type == VDB_ENTRY_TYPE_FOLDER) {
+SceFiosBuffer psarc_buf;
+bool extract_psarc_dir(int dir, char *out_dir, bool cancelable) {
+	char path[512];
+	SceFiosDirEntry entry;
+	while (sceFiosDHReadSync(NULL, dir, &entry) >= 0) {
+		sprintf(path, "%s/%s", out_dir, &entry.fullPath[entry.offsetToName]);
+		if (entry.statFlags & SCE_FIOS_STAT_DIRECTORY) {
 			sceIoMkdir(path, 0777);
+			int subdir;
+			sceFiosDHOpenSync(NULL, &subdir, entry.fullPath, psarc_buf);
+			if (!extract_psarc_dir(subdir, path, cancelable)) {
+				sceFiosDHCloseSync(NULL, dir);
+				return false;
+			}
 		} else {
+			int f;
+			sceFiosFHOpenSync(NULL, &f, entry.fullPath, NULL);
 			SceUID f2 = sceIoOpen(path, SCE_O_CREAT | SCE_O_WRONLY | SCE_O_TRUNC, 0777);
-			size_t left = en.size;
+			size_t left = entry.fileSize;
 			while (left) {
 				size_t read_size = MIN(READ_BUFFER_SIZE, left);
-				sceIoRead(f, read_buffer, read_size);
+				sceFiosFHReadSync(NULL, f, read_buffer, read_size);
 				sceIoWrite(f2, read_buffer, read_size);
 				left -= read_size;
-				DrawDearchiverDialog(en.size - left, en.size, en.name);
+				DrawDearchiverDialog(entry.fileSize - left, entry.fileSize, entry.fullPath);
 				if (cancelable) {
 					SceCtrlData pad;
 					sceCtrlPeekBufferPositive(0, &pad, 1);
 					if (pad.buttons & SCE_CTRL_CANCEL) {
-						sceIoClose(f);
+						sceFiosFHCloseSync(NULL, f);
 						sceIoClose(f2);
+						sceFiosDHCloseSync(NULL, dir);						
 						return false;
 					}
 				}
 			}
+			sceFiosFHCloseSync(NULL, f);
 			sceIoClose(f2);
 		}
 	}
-	
-	ImGui::GetIO().MouseDrawCursor = false;
+	sceFiosDHCloseSync(NULL, dir);
 	return true;
+}
+
+bool extract_psarc_file(char *file, char *out_dir, bool cancelable = false) {
+	sceClibMemset(&psarc_buf, 0, sizeof(SceFiosBuffer));
+	sceFiosMountPsarc(file);
+	int dir;
+	sceFiosDHOpenSync(NULL, &dir, "/files", psarc_buf);
+	ImGui::GetIO().MouseDrawCursor = false;
+	bool ret = extract_psarc_dir(dir, out_dir, cancelable);
+	sceFiosTerminate();
+	return ret;
 }
 
 bool extract_file(char *file, char *dir, bool indexing, bool cancelable = false) {
@@ -2594,7 +2607,7 @@ extract_libshacccg:
 						}
 						if (mode_idx == MODE_VITA_HBS) {
 							sceIoMkdir("ux0:vitadb_data_tmp", 0777);
-							if (!extract_file(TEMP_DOWNLOAD_NAME, "ux0:vitadb_data_tmp/", false, true)) {
+							if (!extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:vitadb_data_tmp/", true)) {
 								sceIoRemove(TEMP_DOWNLOAD_NAME);
 								recursive_rmdir("ux0:vitadb_data_tmp");
 								to_download = nullptr;
@@ -2621,7 +2634,7 @@ extract_libshacccg:
 					to_download = nullptr;
 					continue;
 				}
-				sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=%s", to_download->id);
+				sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/get_psarc_url.php?id=%s", to_download->id);
 				if (!download_file(download_link, (char *)(mode_idx == MODE_VITA_HBS ? "Downloading vpk" : "Downloading app"), true)) {
 					to_download = nullptr;
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -2630,7 +2643,7 @@ extract_libshacccg:
 					continue;
 				}
 				if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
-					extract_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false); // We don't want VitaDB Downloader update to be abortable to prevent corruption
+					extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false); // We don't want VitaDB Downloader update to be abortable to prevent corruption
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 					SceUID f = sceIoOpen("ux0:app/VITADBDLD/hash.vdb", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
 					sceIoWrite(f, to_download->hash, 32);
@@ -2641,7 +2654,7 @@ extract_libshacccg:
 					char tmp_path[256];
 					if (mode_idx == MODE_VITA_HBS) {
 						sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
-						bool extract_finished = extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false, true);
+						bool extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", true);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 						if (!extract_finished) {
 							if (downloading_data_files)
@@ -2659,7 +2672,7 @@ extract_libshacccg:
 					} else {
 						sprintf(tmp_path, "%spspemu/PSP/GAME/%s/", pspemu_dev, to_download->id);
 						sceIoMkdir(tmp_path, 0777);
-						bool extract_finished = extract_file(TEMP_DOWNLOAD_NAME, tmp_path, false, true);
+						bool extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, tmp_path, true);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 						if (!extract_finished) {
 							recursive_rmdir(tmp_path);

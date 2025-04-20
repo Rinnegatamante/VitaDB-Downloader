@@ -1,6 +1,6 @@
 /*
  * This file is part of VitaDB Downloader
- * Copyright 2022 Rinnegatamante
+ * Copyright 2025 Rinnegatamante
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published
@@ -217,7 +217,7 @@ void DrawDearchiverDialog(float file_extracted_bytes, float file_total_bytes, ch
 	ImGui_ImplVitaGL_NewFrame();
 	
 	char msg1[256], msg2[256];
-	sprintf(msg1, "%s", "Extracting fast archive...");
+	sprintf(msg1, "%s", "Extracting PSARC...");
 	sprintf(msg2, "%s (%.2f %s / %.2f %s)", filename, format_size(file_extracted_bytes), format_size_str(file_extracted_bytes), format_size(file_total_bytes), format_size_str(file_total_bytes));
 	ImVec2 pos1 = ImGui::CalcTextSize(msg1);
 	ImVec2 pos2 = ImGui::CalcTextSize(msg2);

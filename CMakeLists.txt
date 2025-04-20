@@ -33,6 +33,7 @@ add_executable(VitaDB
   source/unzip.c
   source/sha1.c
   source/md5.c
+  source/fios.c
 )
 
 add_dependencies(VitaDB vitadb.skprx vitadb.suprx vdb_daemon.suprx)
@@ -69,6 +70,7 @@ target_link_libraries(VitaDB
   SceCtrl_stub
   SceCommonDialog_stub
   SceDisplay_stub
+  SceFios2_stub
   SceKernelDmacMgr_stub
   SceGxm_stub
   SceNet_stub

@@ -1,6 +1,6 @@
 /*
  * This file is part of VitaDB Downloader
- * Copyright 2022 Rinnegatamante
+ * Copyright 2025 Rinnegatamante
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published
