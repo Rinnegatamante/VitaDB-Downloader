@@ -135,34 +135,6 @@ AppSelection *to_download = nullptr;
 AppSelection *to_uninstall = nullptr;
 TrophySelection *trophies = nullptr;
 
-void prevent_burn_in() {
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrthof(0, 960, 544, 0, 0, 1);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-	float vtx[4 * 2] = {
-		0, 544,
-		960, 544,
-		0,   0,
-		960,   0
-	};
-	float txcoord[4 * 2] = {
-		0,   0,
-		1,   0,
-		0,   1,
-		1,   1
-	};
-	// Workaround to prevent message dialog "burn in" on background
-	for (int i = 0; i < 15; i++) {
-		glEnableClientState(GL_VERTEX_ARRAY);
-		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-		glVertexPointer(2, GL_FLOAT, 0, vtx);
-		glTexCoordPointer(2, GL_FLOAT, 0, txcoord);
-		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-		vglSwapBuffers(GL_FALSE);
-	}
-}
 
 char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 	char label[32];
@@ -170,7 +142,7 @@ char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
 	//printf("label: %s\n", label);
 	char *ptr = strstr(src, label) + strlen(label);
 	//printf("ptr is: %X\n", ptr);
-	if (ptr == strlen(label))
+	if ((uintptr_t)ptr == strlen(label))
 		return nullptr;
 	char *end2 = strstr(ptr, (val[0] == 'l' || val[0] == 'c') ? "\"," : "\"");
 	if (dst == nullptr) {
@@ -319,7 +291,7 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 
 	// Burning on screen the parsing text dialog
 	for (int i = 0; i < 3; i++) {
-		DrawTextDialog("Parsing apps list", true, !is_psp);
+		draw_text_dialog("Parsing apps list", true, !is_psp);
 	}
 	f = sceIoOpen(file, SCE_O_RDONLY, 0777);
 	if (f >= 0) {
@@ -443,7 +415,7 @@ void AppendThemeDatabase(const char *file) {
 	sceIoMkdir("ux0:data/VitaDB/themes", 0777);
 	// Burning on screen the parsing text dialog
 	for (int i = 0; i < 3; i++) {
-		DrawTextDialog("Parsing themes list", true, false);
+		draw_text_dialog("Parsing themes list", true, false);
 	}
 	SceUID f = sceIoOpen(file, SCE_O_RDONLY, 0777);
 	if (f >= 0) {
@@ -565,7 +537,7 @@ void early_extract_file(char *file, char *dir) {
 }
 
 SceFiosBuffer psarc_buf;
-bool extract_psarc_dir(int dir, char *out_dir, bool cancelable) {
+bool extract_psarc_dir(int dir, char *out_dir, bool cancelable, GLuint bg_tex = 0) {
 	char path[512];
 	SceFiosDirEntry entry;
 	while (sceFiosDHReadSync(NULL, dir, &entry) >= 0) {
@@ -588,7 +560,7 @@ bool extract_psarc_dir(int dir, char *out_dir, bool cancelable) {
 				sceFiosFHReadSync(NULL, f, read_buffer, read_size);
 				sceIoWrite(f2, read_buffer, read_size);
 				left -= read_size;
-				DrawDearchiverDialog(entry.fileSize - left, entry.fileSize, entry.fullPath);
+				draw_dearchiver_dialog(entry.fileSize - left, entry.fileSize, entry.fullPath, bg_tex);
 				if (cancelable) {
 					SceCtrlData pad;
 					sceCtrlPeekBufferPositive(0, &pad, 1);
@@ -608,13 +580,13 @@ bool extract_psarc_dir(int dir, char *out_dir, bool cancelable) {
 	return true;
 }
 
-bool extract_psarc_file(char *file, char *out_dir, bool cancelable = false) {
+bool extract_psarc_file(char *file, char *out_dir, bool cancelable = false, GLuint bg_tex = 0) {
 	sceClibMemset(&psarc_buf, 0, sizeof(SceFiosBuffer));
 	sceFiosMountPsarc(file);
 	int dir;
 	sceFiosDHOpenSync(NULL, &dir, "/files", psarc_buf);
 	ImGui::GetIO().MouseDrawCursor = false;
-	bool ret = extract_psarc_dir(dir, out_dir, cancelable);
+	bool ret = extract_psarc_dir(dir, out_dir, cancelable, bg_tex);
 	sceFiosTerminate();
 	return ret;
 }
@@ -662,7 +634,7 @@ bool extract_file(char *file, char *dir, bool indexing, bool cancelable = false)
 					curr_extracted_bytes += rbytes;
 					curr_file_bytes += rbytes;
 				}
-				DrawExtractorDialog(zip_idx + 1, curr_file_bytes, curr_extracted_bytes, file_info.uncompressed_size, total_extracted_bytes, fname, num_files);
+				draw_extractor_dialog(zip_idx + 1, curr_file_bytes, curr_extracted_bytes, file_info.uncompressed_size, total_extracted_bytes, fname, num_files);
 				if (cancelable) {
 					SceCtrlData pad;
 					sceCtrlPeekBufferPositive(0, &pad, 1);
@@ -716,7 +688,7 @@ void LoadPreview(AppSelection *game) {
 	free(icon_data);
 }
 
-bool PrepareAntiBurnIn() {
+bool prepare_anti_burn_in() {
 	uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
 	glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
 	if (!previous_frame)
@@ -1235,7 +1207,7 @@ void install_theme(ThemeSelection *g) {
 	char fname[256];
 	// Burning on screen the parsing text dialog
 	for (int i = 0; i < 3; i++) {
-		DrawTextDialog("Installing theme", true, false);
+		draw_text_dialog("Installing theme", true, false);
 	}
 	
 	// Deleting old theme files
@@ -1321,7 +1293,7 @@ void install_theme_from_shuffle(bool boot) {
 	
 	if (!boot) {
 		for (int i = 0; i < 3; i++) {
-			DrawTextDialog("Installing random theme", true, false);
+			draw_text_dialog("Installing random theme", true, false);
 		}
 	}
 	
@@ -1444,7 +1416,9 @@ int main(int argc, char *argv[]) {
 	}
 	
 	// Initializing sceCommonDialog
-	sceAppUtilInit(&(SceAppUtilInitParam){}, &(SceAppUtilBootParam){});
+	SceAppUtilInitParam init_params = {};
+	SceAppUtilBootParam init_boot_params = {};
+	sceAppUtilInit(&init_params, &init_boot_params);
 	SceCommonDialogConfigParam cmnDlgCfgParam;
 	sceCommonDialogConfigParamInit(&cmnDlgCfgParam);
 	sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG, (int *)&cmnDlgCfgParam.language);
@@ -1579,6 +1553,7 @@ extract_libshacccg:
 	// Initializing vitaGL
 	AppSelection *hovered = nullptr;
 	vglInitExtended(0, 960, 544, 0x1800000, SCE_GXM_MULTISAMPLE_NONE);
+	prepare_simple_drawer();
 
 	// Apply theme shuffling
 	if (sceIoGetstat("ux0:/data/VitaDB/shuffle.cfg", &st) >= 0)
@@ -1627,11 +1602,9 @@ extract_libshacccg:
 		if (!strstr((const char *)&generic_mem_buffer[20 * 1024 * 1024], "ux0:data/VitaDB/vdb_daemon.suprx")) {
 			init_interactive_msg_dialog("VitaDB Downloader features a functionality that allows the homebrew to check automatically, every hour and at every console bootup, if an update for an installed homebrew is available. A plugin is required to enable this feature, do you want to install it?");
 			while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+				draw_simple_texture(previous_frame);
 				vglSwapBuffers(GL_TRUE);
 			}
-			glColor4f(0, 0, 0, 1);
-			prevent_burn_in();
-			glColor4f(1, 1, 1, 1);
 			SceMsgDialogResult msg_res;
 			memset(&msg_res, 0, sizeof(SceMsgDialogResult));
 			sceMsgDialogGetResult(&msg_res);
@@ -1670,7 +1643,7 @@ extract_libshacccg:
 	} else if (sceIoGetstat("ux0:/data/VitaDB/icons/0b", &st) < 0) {
 		// Checking if old icons system is being used and upgrade it
 		for (int i = 0; i < 3; i++) {
-			DrawTextDialog("Upgrading icons system, please wait...", true, false);
+			draw_text_dialog("Upgrading icons system, please wait...", true, false);
 		}
 		recursive_rmdir("ux0:data/VitaDB/icons");
 		download_file("https://www.rinnegatamante.eu/vitadb/icons_zip.php", "Downloading apps icons");
@@ -1687,7 +1660,7 @@ extract_libshacccg:
 			SceUID thd = sceKernelCreateThread("Apps List Downloader", &appListThread, 0x10000100, 0x100000, 0, 0, NULL);
 			sceKernelStartThread(thd, 0, NULL);
 			do {
-				DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading apps list", 1, true);
+				draw_downloader_dialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading apps list", 1, true);
 				res = sceKernelGetThreadInfo(thd, &info);
 			} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 		}
@@ -2396,12 +2369,12 @@ extract_libshacccg:
 		// Queued app uninstall
 		if (to_uninstall) {
 			if (!anti_burn_in_set_up)
-				anti_burn_in_set_up = PrepareAntiBurnIn();
+				anti_burn_in_set_up = prepare_anti_burn_in();
 			init_interactive_msg_dialog("Do you really wish to uninstall this app?");
 			while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+				draw_simple_texture(previous_frame);
 				vglSwapBuffers(GL_TRUE);
 			}
-			prevent_burn_in();
 			SceMsgDialogResult msg_res;
 			memset(&msg_res, 0, sizeof(SceMsgDialogResult));
 			sceMsgDialogGetResult(&msg_res);
@@ -2415,7 +2388,7 @@ extract_libshacccg:
 						int ret = scePromoterUtilityGetState(&state);
 						if (ret < 0)
 							break;
-						DrawTextDialog("Uninstalling the app", true, false);
+						draw_text_dialog("Uninstalling the app", true, false);
 						vglSwapBuffers(GL_TRUE);
 					} while (state);
 					scePromoterUtilTerm();
@@ -2432,9 +2405,11 @@ extract_libshacccg:
 		// Queued app download
 		if (to_download) {
 			if (mode_idx == MODE_THEMES) {
+				if (!anti_burn_in_set_up)
+						anti_burn_in_set_up = prepare_anti_burn_in();
 				ThemeSelection *node = (ThemeSelection *)to_download;
 				sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/blob/main/themes/%s/theme.zip?raw=true", node->name);
-				download_file(download_link, "Downloading theme");
+				download_file(download_link, "Downloading theme", false, -1, -1, previous_frame);
 				sprintf(download_link, "ux0:data/VitaDB/themes/%s/", node->name);
 				sceIoMkdir(download_link, 0777);
 				extract_file(TEMP_DOWNLOAD_NAME, download_link, false);
@@ -2444,9 +2419,10 @@ extract_libshacccg:
 			} else {
 				if (to_download->requirements && ((!strstr(to_download->requirements, "libshacccg.suprx")) || strlen(to_download->requirements) != strlen("- libshacccg.suprx"))) {
 					if (!anti_burn_in_set_up)
-						anti_burn_in_set_up = PrepareAntiBurnIn();
+						anti_burn_in_set_up = prepare_anti_burn_in();
 					init_interactive_msg_dialog("This homebrew has extra requirements in order to work properly:\n%s\n\nDo you wish to install it still?", to_download->requirements);
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+						draw_simple_texture(previous_frame);
 						vglSwapBuffers(GL_TRUE);
 					}
 					SceMsgDialogResult msg_res;
@@ -2454,7 +2430,6 @@ extract_libshacccg:
 					sceMsgDialogGetResult(&msg_res);
 					sceMsgDialogTerm();
 					if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
-						prevent_burn_in();
 						if (strstr(to_download->requirements, "kubridge.skprx")) {
 							if (kubridge_state != KUBRIDGE_MISSING) {
 								char cur_hash[40];
@@ -2464,15 +2439,15 @@ extract_libshacccg:
 								if (strncmp(cur_hash, (const char *)generic_mem_buffer, 32)) {
 									init_interactive_msg_dialog("VitaDB Downloader detected an outdated version of kubridge.skprx. Do you wish to update it?\n\nNOTE: A console restart is required for kubridge.skprx update to complete.");
 									while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+										draw_simple_texture(previous_frame);
 										vglSwapBuffers(GL_TRUE);
 									}
-									prevent_burn_in();
 									SceMsgDialogResult msg_res;
 									memset(&msg_res, 0, sizeof(SceMsgDialogResult));
 									sceMsgDialogGetResult(&msg_res);
 									sceMsgDialogTerm();
 									if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
-										download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=611", "Downloading kubridge.skprx");
+										download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=611", "Downloading kubridge.skprx", false, -1, -1, previous_frame);
 										if (kubridge_state == KUBRIDGE_UR0) {
 											copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
 											sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -2485,15 +2460,15 @@ extract_libshacccg:
 							} else {
 								init_interactive_msg_dialog("This homebrew requires kubridge.skprx but it's not installed on this console. Do you wish to install it as well?\n\nNOTE: A console restart is required for kubridge.skprx installation to complete.");
 								while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+									draw_simple_texture(previous_frame);
 									vglSwapBuffers(GL_TRUE);
 								}
-								prevent_burn_in();
 								SceMsgDialogResult msg_res;
 								memset(&msg_res, 0, sizeof(SceMsgDialogResult));
 								sceMsgDialogGetResult(&msg_res);
 								sceMsgDialogTerm();
 								if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
-									download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=611", "Downloading kubridge.skprx");
+									download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=611", "Downloading kubridge.skprx", false, -1, -1, previous_frame);
 									if (use_ur0_config) {
 										copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
 										sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -2550,7 +2525,7 @@ extract_libshacccg:
 							}
 						}
 						if (!anti_burn_in_set_up)
-							anti_burn_in_set_up = PrepareAntiBurnIn();
+							anti_burn_in_set_up = prepare_anti_burn_in();
 						char clash_text[512];
 						if (installed_clasher)
 							sprintf(clash_text, "This homebrew has a TitleID that clashes with other homebrews. Installing it will automatically uninstall any homebrew you have installed with the same TitleID.\nVitaDB Downloader detected this app as the installed one with clashing TitleID:\n%s\nDo you want to proceed?", installed_clasher->name);
@@ -2558,9 +2533,9 @@ extract_libshacccg:
 							sprintf(clash_text, "This homebrew has a TitleID that clashes with other homebrews. Installing it will automatically uninstall any homebrew you have installed with the same TitleID.\nDo you want to proceed?");
 						init_interactive_msg_dialog(clash_text);
 						while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+							draw_simple_texture(previous_frame);
 							vglSwapBuffers(GL_TRUE);
 						}
-						prevent_burn_in();
 						SceMsgDialogResult msg_res;
 						memset(&msg_res, 0, sizeof(SceMsgDialogResult));
 						sceMsgDialogGetResult(&msg_res);
@@ -2575,12 +2550,12 @@ extract_libshacccg:
 				bool downloading_data_files = false;
 				if (strlen(to_download->data_link) > 5) {
 					if (!anti_burn_in_set_up)
-						anti_burn_in_set_up = PrepareAntiBurnIn();
+						anti_burn_in_set_up = prepare_anti_burn_in();
 					init_interactive_msg_dialog("This homebrew also has data files. Do you wish to install them as well?");
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+						draw_simple_texture(previous_frame);
 						vglSwapBuffers(GL_TRUE);
 					}
-					prevent_burn_in();
 					SceMsgDialogResult msg_res;
 					memset(&msg_res, 0, sizeof(SceMsgDialogResult));
 					sceMsgDialogGetResult(&msg_res);
@@ -2594,20 +2569,21 @@ extract_libshacccg:
 						if (free_space < (sz + sz2) * 2) {
 							init_msg_dialog("Not enough free storage to install this application. Installation aborted.");
 							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+								draw_simple_texture(previous_frame);
 								vglSwapBuffers(GL_TRUE);
 							}
 							to_download = nullptr;
 							sceMsgDialogTerm();
 							continue;
 						}
-						if (!download_file(to_download->data_link, "Downloading data files", true)) {
+						if (!download_file(to_download->data_link, "Downloading data files", true, -1, -1, previous_frame)) {
 							to_download = nullptr;
 							sceIoRemove(TEMP_DOWNLOAD_NAME);
 							continue;
 						}
 						if (mode_idx == MODE_VITA_HBS) {
 							sceIoMkdir("ux0:vitadb_data_tmp", 0777);
-							if (!extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:vitadb_data_tmp/", true)) {
+							if (!extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:vitadb_data_tmp/", true, previous_frame)) {
 								sceIoRemove(TEMP_DOWNLOAD_NAME);
 								recursive_rmdir("ux0:vitadb_data_tmp");
 								to_download = nullptr;
@@ -2628,6 +2604,7 @@ extract_libshacccg:
 				if (free_space < sz * 2) {
 					init_msg_dialog("Not enough free storage to install this application. Installation aborted.");
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+						draw_simple_texture(previous_frame);
 						vglSwapBuffers(GL_TRUE);
 					}
 					sceMsgDialogTerm();
@@ -2635,7 +2612,7 @@ extract_libshacccg:
 					continue;
 				}
 				sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/get_psarc_url.php?id=%s", to_download->id);
-				if (!download_file(download_link, (char *)(mode_idx == MODE_VITA_HBS ? "Downloading vpk" : "Downloading app"), true)) {
+				if (!download_file(download_link, (char *)(mode_idx == MODE_VITA_HBS ? "Downloading vpk" : "Downloading app"), true, -1, -1, previous_frame)) {
 					to_download = nullptr;
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 					if (downloading_data_files)
@@ -2643,7 +2620,7 @@ extract_libshacccg:
 					continue;
 				}
 				if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
-					extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false); // We don't want VitaDB Downloader update to be abortable to prevent corruption
+					extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false, previous_frame); // We don't want VitaDB Downloader update to be abortable to prevent corruption
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 					SceUID f = sceIoOpen("ux0:app/VITADBDLD/hash.vdb", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
 					sceIoWrite(f, to_download->hash, 32);
@@ -2654,7 +2631,7 @@ extract_libshacccg:
 					char tmp_path[256];
 					if (mode_idx == MODE_VITA_HBS) {
 						sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
-						bool extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", true);
+						bool extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", true, previous_frame);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 						if (!extract_finished) {
 							if (downloading_data_files)
@@ -2672,7 +2649,7 @@ extract_libshacccg:
 					} else {
 						sprintf(tmp_path, "%spspemu/PSP/GAME/%s/", pspemu_dev, to_download->id);
 						sceIoMkdir(tmp_path, 0777);
-						bool extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, tmp_path, true);
+						bool extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, tmp_path, true, previous_frame);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 						if (!extract_finished) {
 							recursive_rmdir(tmp_path);
@@ -2693,13 +2670,14 @@ extract_libshacccg:
 							int ret = scePromoterUtilityGetState(&state);
 							if (ret < 0)
 								break;
-							DrawTextDialog("Installing the app", true, false);
+							draw_text_dialog("Installing the app", true, false);
 							vglSwapBuffers(GL_TRUE);
 						} while (state);
 						scePromoterUtilTerm();
 						if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st) >= 0) {
 							init_msg_dialog("The installation process failed.");
 							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+								draw_simple_texture(previous_frame);
 								vglSwapBuffers(GL_TRUE);
 							}
 							sceMsgDialogTerm();
@@ -2720,14 +2698,17 @@ extract_libshacccg:
 skip_install:		
 		// Ime dialog active
 		if (is_ime_active) {
+			if (!anti_burn_in_set_up)
+				anti_burn_in_set_up = prepare_anti_burn_in();
 			while (sceImeDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+				draw_simple_texture(previous_frame);
 				vglSwapBuffers(GL_TRUE);
 			}
 			SceImeDialogResult res;
 			sceClibMemset(&res, 0, sizeof(SceImeDialogResult));
 			sceImeDialogGetResult(&res);
 			if (res.button == SCE_IME_DIALOG_BUTTON_ENTER) {
-				getDialogTextResult(app_name_filter);
+				get_dialog_text_result(app_name_filter);
 			}
 			sceImeDialogTerm();
 			is_ime_active = false;
@@ -2735,11 +2716,13 @@ skip_install:
 		
 		// Queued trophies download
 		if (show_trophies == 1) {
+			if (!anti_burn_in_set_up)
+				anti_burn_in_set_up = prepare_anti_burn_in();
 			char dl_url[512];
 			sprintf(dl_url, "ux0:data/VitaDB/trophies/%s", hovered->titleid);
 			sceIoMkdir(dl_url, 0777);
 			sprintf(dl_url, "https://www.rinnegatamante.eu/vitadb/get_trophies_for_app.php?id=%s", hovered->titleid);
-			download_file(dl_url, "Downloading trophies data");
+			download_file(dl_url, "Downloading trophies data", false, -1, -1, previous_frame);
 			SceUID f = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_RDONLY, 0777);
 			size_t sz = sceIoLseek(f, 0, SCE_SEEK_END);
 			sceIoLseek(f, 0, SCE_SEEK_SET);
@@ -2793,6 +2776,8 @@ skip_install:
 		
 		// Queued screenshots download
 		if (show_screenshots == 1) {
+			if (!anti_burn_in_set_up)
+				anti_burn_in_set_up = prepare_anti_burn_in();
 			sceIoRemove("ux0:data/VitaDB/ss0.png");
 			sceIoRemove("ux0:data/VitaDB/ss1.png");
 			sceIoRemove("ux0:data/VitaDB/ss2.png");
@@ -2803,7 +2788,7 @@ skip_install:
 			if (mode_idx == MODE_THEMES) {
 				ThemeSelection *node = (ThemeSelection *)hovered;
 				sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/raw/main/themes/%s/preview.png", node->name);				
-				download_file(download_link, "Downloading screenshot");
+				download_file(download_link, "Downloading screenshot", false, -1, -1, previous_frame);
 				sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/ss0.png");
 			} else {
 				char *s = hovered->screenshots;
@@ -2823,7 +2808,7 @@ skip_install:
 					}
 				}
 				while (shot_idx < shot_num) {
-					download_file(shot_links[shot_idx], "Downloading screenshot", false, shot_idx + 1, shot_num);
+					download_file(shot_links[shot_idx], "Downloading screenshot", false, shot_idx + 1, shot_num, previous_frame);
 					sprintf(shot_links[shot_idx], "ux0:data/VitaDB/ss%d.png", shot_idx);
 					sceIoRename(TEMP_DOWNLOAD_NAME, shot_links[shot_idx++]);
 				}
@@ -2840,12 +2825,14 @@ skip_install:
 		
 		// Queued themes database download
 		if (mode_idx == MODE_THEMES && !themes) {
+			if (!anti_burn_in_set_up)
+				anti_burn_in_set_up = prepare_anti_burn_in();
 			if (sceIoGetstat("ux0:/data/VitaDB/previews", &st) < 0) {
-				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/previews.zip", "Downloading themes previews");
+				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/previews.zip", "Downloading themes previews", false, -1, -1, previous_frame);
 				extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/", false);
 			}
 			
-			download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/themes.json", "Downloading themes list");
+			download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/themes.json", "Downloading themes list", false, -1, -1, previous_frame);
 			sceIoRemove("ux0:data/VitaDB/themes.json");
 			sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/themes.json");
 			AppendThemeDatabase("ux0:data/VitaDB/themes.json");
@@ -2853,10 +2840,12 @@ skip_install:
 		
 		// PSP database update required
 		if (mode_idx == MODE_PSP_HBS && !psp_apps) {
+			if (!anti_burn_in_set_up)
+				anti_burn_in_set_up = prepare_anti_burn_in();
 			SceUID thd = sceKernelCreateThread("Apps List Downloader", &appPspListThread, 0x10000100, 0x100000, 0, 0, NULL);
 			sceKernelStartThread(thd, 0, NULL);
 			do {
-				DrawDownloaderDialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading PSP apps list", 1, true);
+				draw_downloader_dialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading PSP apps list", 1, true, previous_frame);
 				res = sceKernelGetThreadInfo(thd, &info);
 			} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 			AppendAppDatabase("ux0:data/VitaDB/psp_apps.json", true);
@@ -2890,13 +2879,14 @@ skip_install:
 				int ret = scePromoterUtilityGetState(&state);
 				if (ret < 0)
 					break;
-				DrawTextDialog("Installing the update", true, false);
+				draw_text_dialog("Installing the update", true, false);
 				vglSwapBuffers(GL_TRUE);
 			} while (state);
 			scePromoterUtilTerm();
 			if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st) >= 0) {
 				init_msg_dialog("The installation process failed.");
 				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+					draw_simple_texture(previous_frame);
 					vglSwapBuffers(GL_TRUE);
 				}
 				sceMsgDialogTerm();

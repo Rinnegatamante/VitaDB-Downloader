@@ -31,7 +31,26 @@
 #include "utils.h"
 #include "md5.h"
 
+#include "shaders/simple_shader_f.h"
+#include "shaders/simple_shader_v.h"
+
+GLuint simple_shaders[2], simple_prog;
+
 #define SCE_ERROR_ERRNO_EEXIST 0x80010011
+
+float shader_pos[8] = {
+	-1.0f, 1.0f,
+	-1.0f, -1.0f,
+	 1.0f, 1.0f,
+	 1.0f, -1.0f
+};
+
+float shader_texcoord[8] = {
+	0.0f, 1.0f,
+	0.0f, 0.0f,
+	1.0f, 1.0f,
+	1.0f, 0.0f
+};
 
 char pspemu_dev[8];
 
@@ -270,4 +289,33 @@ void ImageRound(ImTextureID user_texture_id, const ImVec2 &size) {
 
 	window->DrawList->PopTextureID();
 }
+}
+
+void prepare_simple_drawer() {
+	simple_shaders[0] = glCreateShader(GL_VERTEX_SHADER);
+	glShaderBinary(1, &simple_shaders[0], 0, shader_v, size_shader_v);
+
+	simple_shaders[1] = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderBinary(1, &simple_shaders[1], 0, shader_f, size_shader_f);
+
+	simple_prog = glCreateProgram();
+	glAttachShader(simple_prog, simple_shaders[0]);
+	glAttachShader(simple_prog, simple_shaders[1]);
+	glBindAttribLocation(simple_prog, 0, "inPos");
+	glBindAttribLocation(simple_prog, 1, "inTex");
+	glLinkProgram(simple_prog);
+	glUniform1i(glGetUniformLocation(simple_prog, "tex"), 0);
+}
+
+void draw_simple_texture(GLuint tex) {
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glUseProgram(simple_prog);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, &shader_pos[0]);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, &shader_texcoord[0]);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glUseProgram(0);
 }

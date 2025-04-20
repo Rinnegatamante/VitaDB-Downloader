@@ -44,6 +44,9 @@ uint64_t get_total_storage();
 char *unescape(char *src);
 void calculate_md5(SceUID fd, char *hash);
 
+void prepare_simple_drawer();
+void draw_simple_texture(GLuint tex);
+
 namespace ImGui {
 void ImageRound(ImTextureID user_texture_id, const ImVec2 &size);
 }

@@ -155,7 +155,7 @@ int init_progressbar_dialog(const char *fmt, ...) {
 
 static uint16_t dialog_res_text[SCE_IME_DIALOG_MAX_TEXT_LENGTH + 1];
 bool is_ime_active = false;
-void getDialogTextResult(char *text) {
+void get_dialog_text_result(char *text) {
 	// Converting text from UTF16 to UTF8
 	std::u16string utf16_str = (char16_t*)dialog_res_text;
 	std::string utf8_str = std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.to_bytes(utf16_str.data());
@@ -185,7 +185,7 @@ void init_interactive_ime_dialog(const char *msg, const char *start_text) {
 	is_ime_active = true;
 }
 
-void DrawExtractorDialog(int index, float file_extracted_bytes, float extracted_bytes, float file_total_bytes, float total_bytes, char *filename, int num_files) {
+void draw_extractor_dialog(int index, float file_extracted_bytes, float extracted_bytes, float file_total_bytes, float total_bytes, char *filename, int num_files) {
 	ImGui_ImplVitaGL_NewFrame();
 	
 	char msg1[256], msg2[256];
@@ -213,7 +213,12 @@ void DrawExtractorDialog(int index, float file_extracted_bytes, float extracted_
 	sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
 }
 
-void DrawDearchiverDialog(float file_extracted_bytes, float file_total_bytes, char *filename) {
+void draw_dearchiver_dialog(float file_extracted_bytes, float file_total_bytes, char *filename, GLuint bg_tex) {
+	sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
+	
+	if (bg_tex)
+		draw_simple_texture(bg_tex);
+	
 	ImGui_ImplVitaGL_NewFrame();
 	
 	char msg1[256], msg2[256];
@@ -241,8 +246,11 @@ void DrawDearchiverDialog(float file_extracted_bytes, float file_total_bytes, ch
 	sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
 }
 
-void DrawDownloaderDialog(int index, float downloaded_bytes, float total_bytes, char *text, int passes, bool self_contained) {
+void draw_downloader_dialog(int index, float downloaded_bytes, float total_bytes, char *text, int passes, bool self_contained, GLuint bg_tex) {
 	sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
+	
+	if (bg_tex)
+		draw_simple_texture(bg_tex);
 	
 	if (self_contained)
 		ImGui_ImplVitaGL_NewFrame();
@@ -281,7 +289,7 @@ void DrawDownloaderDialog(int index, float downloaded_bytes, float total_bytes, 
 	}
 }
 
-void DrawTextDialog(char *text, bool self_contained, bool clear_screen) {
+void draw_text_dialog(char *text, bool self_contained, bool clear_screen) {
 	sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
 	
 	if (clear_screen)
