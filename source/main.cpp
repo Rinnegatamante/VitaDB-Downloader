@@ -368,7 +368,7 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 			ptr = extractValue(has_trophies, ptr, "trophies", nullptr);
 			node->trophies = atoi(has_trophies);
 			ptr = extractValue(node->data_link, ptr, "data", nullptr);
-			if (strlen(node->data_link) > 5) {
+			if (strlen(node->data_link) > 5 && strstr(node->data_link, "www.rinnegatamante.eu")) { // Redirect to PSARCs any data files hosted on VitaDB webhost
 				strcat(node->data_link, ".psarc");
 			}
 			sprintf(node->name, "%s %s", name, version);
@@ -2583,7 +2583,17 @@ extract_libshacccg:
 						}
 						if (mode_idx == MODE_VITA_HBS) {
 							sceIoMkdir("ux0:vitadb_data_tmp", 0777);
-							if (!extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:vitadb_data_tmp/", true, previous_frame)) {
+							// Some Vita homebrews are not hosted on VitaDB webhost, thus lacking PSARC, so we need to check what is what we got
+							uint32_t header;
+							SceUID f = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_RDONLY, 0777);
+							sceIoRead(f, &header, 4);
+							sceIoClose(f);
+							bool extract_finished;
+							if (header == 0x52415350) // PSARC
+								extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:vitadb_data_tmp/", true, previous_frame);
+							else // ZIP
+								extract_finished = extract_file(TEMP_DOWNLOAD_NAME, "ux0:vitadb_data_tmp/", false, true);
+							if (!extract_finished) {
 								sceIoRemove(TEMP_DOWNLOAD_NAME);
 								recursive_rmdir("ux0:vitadb_data_tmp");
 								to_download = nullptr;
@@ -2630,8 +2640,17 @@ extract_libshacccg:
 					SceUID f;
 					char tmp_path[256];
 					if (mode_idx == MODE_VITA_HBS) {
+						// Some Vita homebrews are not hosted on VitaDB webhost, thus lacking PSARC, so we need to check what is what we got
+						uint32_t header;
+						f = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_RDONLY, 0777);
+						sceIoRead(f, &header, 4);
+						sceIoClose(f);
 						sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
-						bool extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", true, previous_frame);
+						bool extract_finished;
+						if (header == 0x52415350) // PSARC
+							extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", true, previous_frame);
+						else // ZIP
+							extract_finished = extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false, true);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 						if (!extract_finished) {
 							if (downloading_data_files)
