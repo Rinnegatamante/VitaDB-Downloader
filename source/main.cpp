@@ -2297,9 +2297,7 @@ extract_libshacccg:
 		glViewport(0, 0, static_cast<int>(ImGui::GetIO().DisplaySize.x), static_cast<int>(ImGui::GetIO().DisplaySize.y));
 		ImGui::Render();
 		ImGui_ImplVitaGL_RenderDrawData(ImGui::GetDrawData());
-		
-		// 560, 29
-		
+
 		if (wants_bubble_icon) {
 			float bubble_verts[] = {
 				0.166667f, 0.422794f,
