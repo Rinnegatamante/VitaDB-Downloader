@@ -47,6 +47,9 @@ void calculate_md5(SceUID fd, char *hash);
 void prepare_simple_drawer();
 void draw_simple_texture(GLuint tex);
 
+void prepare_bubble_drawer();
+GLuint draw_bubble_icon(GLuint tex);
+
 namespace ImGui {
 void ImageRound(ImTextureID user_texture_id, const ImVec2 &size);
 }

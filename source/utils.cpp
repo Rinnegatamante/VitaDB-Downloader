@@ -33,8 +33,13 @@
 
 #include "shaders/simple_shader_f.h"
 #include "shaders/simple_shader_v.h"
+#include "shaders/bubble_shader_v.h"
+#include "shaders/bubble_shader_f.h"
 
-GLuint simple_shaders[2], simple_prog;
+GLuint bubble_fbo, bubble_fbo_tex;
+GLuint bubble_prog;
+GLuint simple_prog;
+GLint bubble_time_unif;
 
 #define SCE_ERROR_ERRNO_EEXIST 0x80010011
 
@@ -271,40 +276,46 @@ void calculate_md5(SceUID f, char *hash) {
 		md5_buf[9], md5_buf[10], md5_buf[11], md5_buf[12], md5_buf[13], md5_buf[14], md5_buf[15]);
 }
 
-#define CIRCLE_SEGMENTS_NUM 30
-namespace ImGui {
-void ImageRound(ImTextureID user_texture_id, const ImVec2 &size) {
-	ImGuiWindow *window = ImGui::GetCurrentWindow();
-	ImRect bb(window->DC.CursorPos, ImVec2(window->DC.CursorPos.x + size.x, window->DC.CursorPos.y + size.y));
-	ImGui::ItemSize(bb);
-	if (!ImGui::ItemAdd(bb, 0))
-		return;
-	
-	window->DrawList->PushTextureID(user_texture_id);
-
-	int vert_start_idx = window->DrawList->VtxBuffer.Size;
-	window->DrawList->AddCircleFilled(ImVec2(bb.Min.x + size.x / 2.f, bb.Min.y + size.y / 2.f), size.x / 2.f, 0xFFFFFFFF, CIRCLE_SEGMENTS_NUM);
-	int vert_end_idx = window->DrawList->VtxBuffer.Size;
-	ImGui::ShadeVertsLinearUV(window->DrawList->VtxBuffer.Data + vert_start_idx, window->DrawList->VtxBuffer.Data + vert_end_idx, bb.Min, bb.Max, ImVec2(0, 0), ImVec2(1, 1), true);
-
-	window->DrawList->PopTextureID();
-}
-}
-
 void prepare_simple_drawer() {
-	simple_shaders[0] = glCreateShader(GL_VERTEX_SHADER);
-	glShaderBinary(1, &simple_shaders[0], 0, shader_v, size_shader_v);
-
-	simple_shaders[1] = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderBinary(1, &simple_shaders[1], 0, shader_f, size_shader_f);
+	GLuint vshad = glCreateShader(GL_VERTEX_SHADER);
+	GLuint fshad = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderBinary(1, &vshad, 0, shader_v, size_shader_v);
+	glShaderBinary(1, &fshad, 0, shader_f, size_shader_f);
 
 	simple_prog = glCreateProgram();
-	glAttachShader(simple_prog, simple_shaders[0]);
-	glAttachShader(simple_prog, simple_shaders[1]);
+	glAttachShader(simple_prog, vshad);
+	glAttachShader(simple_prog, fshad);
 	glBindAttribLocation(simple_prog, 0, "inPos");
 	glBindAttribLocation(simple_prog, 1, "inTex");
 	glLinkProgram(simple_prog);
 	glUniform1i(glGetUniformLocation(simple_prog, "tex"), 0);
+	glDeleteShader(vshad);
+	glDeleteShader(fshad);
+}
+
+void prepare_bubble_drawer() {
+	GLuint vshad = glCreateShader(GL_VERTEX_SHADER);
+	GLuint fshad = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderBinary(1, &vshad, 0, bubble_shader_v, size_bubble_shader_v);
+	glShaderBinary(1, &fshad, 0, bubble_shader_f, size_bubble_shader_f);
+	
+	bubble_prog = glCreateProgram();
+	glAttachShader(bubble_prog, vshad);
+	glAttachShader(bubble_prog, fshad);
+	glBindAttribLocation(bubble_prog, 0, "aPos");
+	glBindAttribLocation(bubble_prog, 1, "aTex");
+	glLinkProgram(bubble_prog);
+	glUniform1i(glGetUniformLocation(bubble_prog, "u_texture"), 0);
+	bubble_time_unif = glGetUniformLocation(bubble_prog, "u_time");
+	glDeleteShader(vshad);
+	glDeleteShader(fshad);
+	
+	glGenFramebuffers(1, &bubble_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, bubble_fbo);
+	glGenTextures(1, &bubble_fbo_tex);
+	glTextureImage2D(bubble_fbo_tex, GL_TEXTURE_2D, 0, GL_RGBA, 128, 128, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, bubble_fbo_tex, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void draw_simple_texture(GLuint tex) {
@@ -318,4 +329,25 @@ void draw_simple_texture(GLuint tex) {
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, &shader_texcoord[0]);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 	glUseProgram(0);
+}
+
+GLuint draw_bubble_icon(GLuint tex) {
+	glDisable(GL_SCISSOR_TEST);
+	glBindFramebuffer(GL_FRAMEBUFFER, bubble_fbo);
+	glViewport(0, 0, 128, 128);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glUseProgram(bubble_prog);
+	float time = (float)(sceKernelGetProcessTimeLow()) / 1000000.0f;
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glUniform1f(bubble_time_unif, time);
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), shader_pos);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), shader_texcoord);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glUseProgram(0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, 960, 544);
+	glEnable(GL_SCISSOR_TEST);
+	return bubble_fbo_tex;
 }

@@ -39,9 +39,6 @@
 #include "network.h"
 #include "fios.h"
 
-#include "shaders/bubble_shader_v.h"
-#include "shaders/bubble_shader_f.h"
-
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -53,8 +50,6 @@
 #define PREVIEW_HEIGHT (mode_idx == MODE_THEMES ? 159.0f : (mode_idx == MODE_VITA_HBS ? 128.0f : 80.0f))
 #define PREVIEW_WIDTH  (mode_idx == MODE_THEMES ? 280.0f : (mode_idx == MODE_VITA_HBS ? 128.0f : 144.0f))
 
-GLuint bubble_shad;
-GLint bubble_timer;
 int _newlib_heap_size_user = 200 * 1024 * 1024;
 int filter_idx = 0;
 int cur_ss_idx;
@@ -1559,28 +1554,13 @@ extract_libshacccg:
 	AppSelection *hovered = nullptr;
 	vglInitExtended(0, 960, 544, 0x1800000, SCE_GXM_MULTISAMPLE_NONE);
 	prepare_simple_drawer();
+	prepare_bubble_drawer();
 
 	// Apply theme shuffling
 	if (sceIoGetstat("ux0:/data/VitaDB/shuffle.cfg", &st) >= 0)
 		install_theme_from_shuffle(true);
 	LoadBackground();
-	
-	// Load bubble shaders
-	GLuint bshad_v = glCreateShader(GL_VERTEX_SHADER);
-	GLuint bshad_f = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderBinary(1, &bshad_v, 0, bubble_shader_v, size_bubble_shader_v);
-	glShaderBinary(1, &bshad_f, 0, bubble_shader_f, size_bubble_shader_f);
-	GLuint bubble_shad = glCreateProgram();
-	glAttachShader(bubble_shad, bshad_v);
-	glAttachShader(bubble_shad, bshad_f);
-	glBindAttribLocation(bubble_shad, 0, "aPos");
-	glBindAttribLocation(bubble_shad, 1, "aTex");
-	glLinkProgram(bubble_shad);
-	glDeleteShader(bshad_v);
-	glDeleteShader(bshad_f);
-	glUniform1i(glGetUniformLocation(bubble_shad, "u_texture"), 0);
-	bubble_timer = glGetUniformLocation(bubble_shad, "u_time");
-	
+
 	// Load trophy icon
 	int w, h;
 	uint8_t *trp_data = stbi_load("app0:trophy.png", &w, &h, NULL, 4);
@@ -2015,7 +1995,6 @@ extract_libshacccg:
 		ImGui::SetNextWindowPos(ImVec2(553, 21), ImGuiSetCond_Always);
 		ImGui::SetNextWindowSize(ImVec2(407, 523), ImGuiSetCond_Always);
 		ImGui::Begin("Info Window", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
-		bool wants_bubble_icon = false;
 		if (hovered) {
 			if (mode_idx == MODE_THEMES) {
 				LoadPreview(hovered);
@@ -2057,11 +2036,12 @@ extract_libshacccg:
 				LoadPreview(hovered);
 				ImGui::SetCursorPos(ImVec2(preview_x + PREVIEW_PADDING, preview_y + PREVIEW_PADDING));
 				if (mode_idx == MODE_VITA_HBS) {
-					wants_bubble_icon = true;
+					ImGui::Image((void*)draw_bubble_icon(preview_icon), ImVec2(preview_width, preview_height));
 					ImGui::SetCursorPosY(100);
 					ImGui::SetCursorPosX(140);
-				} else
+				} else {
 					ImGui::Image((void*)preview_icon, ImVec2(preview_width, preview_height));
+				}
 				ImGui::TextColored(TextLabel, "Size:");
 				if (mode_idx == MODE_VITA_HBS) {
 					ImGui::SetCursorPosY(116);
@@ -2297,39 +2277,6 @@ extract_libshacccg:
 		glViewport(0, 0, static_cast<int>(ImGui::GetIO().DisplaySize.x), static_cast<int>(ImGui::GetIO().DisplaySize.y));
 		ImGui::Render();
 		ImGui_ImplVitaGL_RenderDrawData(ImGui::GetDrawData());
-
-		if (wants_bubble_icon) {
-			float bubble_verts[] = {
-				0.166667f, 0.422794f,
-				0.166667f + 0.2666666f, 0.422794f,
-				0.166667f,  0.422794f + 0.4705882f,
-				0.166667f + 0.2666666f,  0.422794f + 0.4705882f
-			};
-			float bubble_tcoords[] = {
-				0.0f, 1.0f,
-				1.0f, 1.0f,
-				0.0f, 0.0f,
-				1.0f, 0.0f
-			};
-			uint16_t bubble_indices[] = {
-				0, 1, 2,
-				1, 3, 2
-			};
-			glUseProgram(bubble_shad);
-			float time = (float)(sceKernelGetProcessTimeLow()) / 1000000.0f;
-			glBindTexture(GL_TEXTURE_2D, preview_icon);
-			glUniform1f(bubble_timer, time);
-			glDisable(GL_DEPTH_TEST);
-			glDisable(GL_SCISSOR_TEST);
-			glEnableVertexAttribArray(0);
-			glEnableVertexAttribArray(1);
-			glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), bubble_verts);
-			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), bubble_tcoords);
-			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, bubble_indices);
-			glDisableVertexAttribArray(1);
-			glDisableVertexAttribArray(0);
-			glUseProgram(0);
-		}
 		
 		vglSwapBuffers(GL_FALSE);
 		
