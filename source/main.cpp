@@ -1705,7 +1705,7 @@ extract_libshacccg:
 		}
 		
 		if (bg_image || has_animated_bg) {
-			if (show_trailer == 2) {
+			if (show_trailer == 2 && has_animated_bg) {
 				glClear(GL_COLOR_BUFFER_BIT);
 			} else {
 				DrawBackground();
