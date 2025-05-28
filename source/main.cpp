@@ -2273,7 +2273,11 @@ extract_libshacccg:
 			LoadScreenshot();
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
-			ImGui::Begin("Screenshots Viewer (Left/Right to change current screenshot, Start or Circle to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+			if (SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE) {
+				ImGui::Begin("Screenshots Viewer (Left/Right to change current screenshot, Start or Circle to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+			} else {
+				ImGui::Begin("Screenshots Viewer (Left/Right to change current screenshot, Start or Cross to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+			}
 			ImGui::Image((void*)preview_shot, ImVec2(800 - 19, 453 - 19));
 			ImGui::End();
 		}
@@ -2281,7 +2285,11 @@ extract_libshacccg:
 		if (show_trailer == 2) {
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
-			ImGui::Begin("Trailer Viewer (Circle to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+			if (SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE) {
+				ImGui::Begin("Trailer Viewer (Circle to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+			} else {
+				ImGui::Begin("Trailer Viewer (Cross to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);				
+			}
 			int vid_w, vid_h;
 			GLuint vid_frame = video_get_frame(&vid_w, &vid_h);
 			if (vid_frame != 0xDEADBEEF)
@@ -2291,7 +2299,7 @@ extract_libshacccg:
 		
 		if (show_changelog) {
 			char titlebar[256];
-			sprintf(titlebar, "%s Changelog (Circle to close)", hovered->name);
+			sprintf(titlebar, "%s Changelog (%s to close)", hovered->name, SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE ? "Circle" : "Cross");
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
 			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
@@ -2301,7 +2309,7 @@ extract_libshacccg:
 		
 		if (show_requirements) {
 			char titlebar[256];
-			sprintf(titlebar, "%s Requirements (Circle to close)", hovered->name);
+			sprintf(titlebar, "%s Requirements (%s to close)", hovered->name, SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE ? "Circle" : "Cross");
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
 			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
@@ -2311,7 +2319,7 @@ extract_libshacccg:
 		
 		if (show_trophies == 2) {
 			char titlebar[256];
-			sprintf(titlebar, "%s Trophies (Circle to close)", hovered->name);
+			sprintf(titlebar, "%s Trophies (%s to close)", hovered->name, SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE ? "Circle" : "Cross");
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
 			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
