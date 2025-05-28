@@ -92,6 +92,8 @@ struct AppSelection {
 	char date[12];
 	char titleid[10];
 	char screenshots[512];
+	char source_page[192];
+	char release_page[192];
 	char trailer[64];
 	char *desc;
 	char downloads[16];
@@ -336,6 +338,8 @@ void AppendAppDatabase(const char *file, bool is_psp) {
 			ptr = extractValue(node->desc, ptr, "long_description", &node->desc);
 			node->desc = unescape(node->desc);
 			ptr = extractValue(node->downloads, ptr, "downloads", nullptr);
+			ptr = extractValue(node->source_page, ptr, "source", nullptr);
+			ptr = extractValue(node->release_page, ptr, "release_page", nullptr);
 			ptr = extractValue(node->trailer, ptr, "trailer", nullptr);
 			ptr = extractValue(node->size, ptr, "size", nullptr);
 			ptr = extractValue(node->data_size, ptr, "data_size", nullptr);
@@ -2168,6 +2172,10 @@ extract_libshacccg:
 				num_items++;
 			if (strlen(hovered->trailer) > 5)
 				num_items++;
+			if (strlen(hovered->source_page) > 5)
+				num_items++;
+			if (strlen(hovered->release_page) > 5)
+				num_items++;
 			int h = 29 + 25 * num_items;
 			int y = 272 - h / 2;
 			ImGui::SetNextWindowPos(ImVec2(280, y), ImGuiSetCond_Always);
@@ -2230,6 +2238,28 @@ extract_libshacccg:
 			if (strlen(hovered->trailer) > 5) {
 				if (ImGui::Button("View Trailer", ImVec2(-1.0f, 0.0f))) {
 					show_trailer = 1;
+				}
+			}
+			if (strlen(hovered->source_page) > 5) {
+				if (ImGui::Button("View Sourcecode Page", ImVec2(-1.0f, 0.0f))) {
+					SceAppUtilWebBrowserParam webparam;
+					char url[512];
+					sprintf(url, "http://www.rinnegatamante.eu/vitadb/get_page.php?id=%s&type=src", hovered->id);
+					webparam.str = url;
+					webparam.strlen = strlen(url);
+					webparam.launchMode = 1;
+					sceAppUtilLaunchWebBrowser(&webparam);
+				}
+			}
+			if (strlen(hovered->release_page) > 5) {
+				if (ImGui::Button("View Release Page", ImVec2(-1.0f, 0.0f))) {
+					SceAppUtilWebBrowserParam webparam;
+					char url[512];
+					sprintf(url, "http://www.rinnegatamante.eu/vitadb/get_page.php?id=%s&type=rel", hovered->id);
+					webparam.str = url;
+					webparam.strlen = strlen(url);
+					webparam.launchMode = 1;
+					sceAppUtilLaunchWebBrowser(&webparam);
 				}
 			}
 			if (ImGui::Button("View Changelog", ImVec2(-1.0f, 0.0f))) {
