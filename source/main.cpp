@@ -44,6 +44,13 @@
 
 #define VERSION "2.2"
 
+#define TEMP_DATA_DIR "ux0:/vdb_data"
+#define TEMP_DATA_PATH TEMP_DATA_DIR "/"
+#define TEMP_INSTALL_DIR "ux0:/vdb_vpk"
+#define TEMP_INSTALL_PATH TEMP_INSTALL_DIR "/"
+#define AUX_HASH_FILE TEMP_INSTALL_DIR "/aux_hash.vdb"
+#define HASH_FILE TEMP_INSTALL_DIR "/hash.vdb"
+
 #define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
 #define PREVIEW_PADDING_THEME 60
@@ -546,13 +553,22 @@ SceFiosBuffer psarc_buf;
 bool extract_psarc_dir(int dir, char *out_dir, bool cancelable, GLuint bg_tex = 0) {
 	char path[512];
 	SceFiosDirEntry entry;
+	int ret;
 	while (sceFiosDHReadSync(NULL, dir, &entry) >= 0) {
 		sprintf(path, "%s/%s", out_dir, &entry.fullPath[entry.offsetToName]);
 		if (entry.statFlags & SCE_FIOS_STAT_DIRECTORY) {
 			sceIoMkdir(path, 0777);
 			int subdir;
-			sceFiosDHOpenSync(NULL, &subdir, entry.fullPath, psarc_buf);
-			if (!extract_psarc_dir(subdir, path, cancelable)) {
+			if (sceFiosDHOpenSync(NULL, &subdir, entry.fullPath, psarc_buf) < 0) {
+				// Workaround for RenPy psarcs bugging out Fios dearchiver
+				if (!strcmp(&entry.fullPath[entry.offsetToName], "renpy")) {
+					strcat(path, "/common");
+					strcat(entry.fullPath, "/common");
+					sceIoMkdir(path, 0777);
+					sceFiosDHOpenSync(NULL, &subdir, entry.fullPath, psarc_buf);
+				}
+			}
+			if (!extract_psarc_dir(subdir, path, cancelable, bg_tex)) {
 				sceFiosDHCloseSync(NULL, dir);
 				return false;
 			}
@@ -1465,13 +1481,13 @@ extract_libshacccg:
 			sceIoRemove("ux0:/data/Runtime1.00.pkg");
 			sceIoRemove("ux0:/data/Runtime2.01.pkg");
 			early_download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=567", "Downloading SharkF00D");
-			sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
-			early_extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/");
+			sceIoMkdir(TEMP_INSTALL_DIR, 0777);
+			early_extract_file(TEMP_DOWNLOAD_NAME, TEMP_INSTALL_PATH);
 			sceIoRemove(TEMP_DOWNLOAD_NAME);
-			makeHeadBin("ux0:data/VitaDB/vpk");
+			makeHeadBin(TEMP_INSTALL_DIR);
 			init_warning("Installing SharkF00D");
 			scePromoterUtilInit();
-			scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
+			scePromoterUtilityPromotePkg(TEMP_INSTALL_DIR, 0);
 			int state = 0;
 			do {
 				vglSwapBuffers(GL_TRUE);
@@ -1545,10 +1561,10 @@ extract_libshacccg:
 	Mix_AllocateChannels(4);
 	
 	// Removing any failed app installation leftover
-	if (sceIoGetstat("ux0:data/VitaDB/vpk", &st) >= 0)
-		recursive_rmdir("ux0:data/VitaDB/vpk");
-	if (sceIoGetstat("ux0:vitadb_data_tmp", &st) >= 0)
-		recursive_rmdir("ux0:vitadb_data_tmp");
+	if (sceIoGetstat(TEMP_INSTALL_DIR, &st) >= 0)
+		recursive_rmdir(TEMP_INSTALL_DIR);
+	if (sceIoGetstat(TEMP_DATA_DIR, &st) >= 0)
+		recursive_rmdir(TEMP_DATA_DIR);
 	
 	// Initializing sceAppUtil
 	SceAppUtilInitParam appUtilParam;
@@ -2658,7 +2674,7 @@ extract_libshacccg:
 							continue;
 						}
 						if (mode_idx == MODE_VITA_HBS) {
-							sceIoMkdir("ux0:vitadb_data_tmp", 0777);
+							sceIoMkdir(TEMP_DATA_DIR, 0777);
 							// Some Vita homebrews are not hosted on VitaDB webhost, thus lacking PSARC, so we need to check what is what we got
 							uint32_t header;
 							SceUID f = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_RDONLY, 0777);
@@ -2666,12 +2682,12 @@ extract_libshacccg:
 							sceIoClose(f);
 							bool extract_finished;
 							if (header == 0x52415350) // PSARC
-								extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:vitadb_data_tmp/", true, previous_frame);
+								extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, TEMP_DATA_DIR, true, previous_frame);
 							else // ZIP
-								extract_finished = extract_file(TEMP_DOWNLOAD_NAME, "ux0:vitadb_data_tmp/", false, true);
+								extract_finished = extract_file(TEMP_DOWNLOAD_NAME, TEMP_DATA_PATH, false, true);
 							if (!extract_finished) {
 								sceIoRemove(TEMP_DOWNLOAD_NAME);
-								recursive_rmdir("ux0:vitadb_data_tmp");
+								recursive_rmdir(TEMP_DATA_DIR);
 								to_download = nullptr;
 								continue;
 							}
@@ -2704,11 +2720,11 @@ extract_libshacccg:
 					to_download = nullptr;
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 					if (downloading_data_files)
-						recursive_rmdir("ux0:vitadb_data_tmp");
+						recursive_rmdir(TEMP_DATA_DIR);
 					continue;
 				}
 				if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
-					extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false, previous_frame); // We don't want VitaDB Downloader update to be abortable to prevent corruption
+					extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD", false, previous_frame); // We don't want VitaDB Downloader update to be abortable to prevent corruption
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 					SceUID f = sceIoOpen("ux0:app/VITADBDLD/hash.vdb", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
 					sceIoWrite(f, to_download->hash, 32);
@@ -2723,28 +2739,28 @@ extract_libshacccg:
 						f = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_RDONLY, 0777);
 						sceIoRead(f, &header, 4);
 						sceIoClose(f);
-						sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
+						sceIoMkdir(TEMP_INSTALL_DIR, 0777);
 						bool extract_finished;
 						if (header == 0x52415350) // PSARC
-							extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", true, previous_frame);
+							extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, TEMP_INSTALL_DIR, true, previous_frame);
 						else // ZIP
-							extract_finished = extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false, true);
+							extract_finished = extract_file(TEMP_DOWNLOAD_NAME, TEMP_INSTALL_PATH, false, true);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 						if (!extract_finished) {
 							if (downloading_data_files)
-								recursive_rmdir("ux0:vitadb_data_tmp");
-							recursive_rmdir("ux0:/data/VitaDB/vpk");
+								recursive_rmdir(TEMP_DATA_DIR);
+							recursive_rmdir(TEMP_INSTALL_DIR);
 							to_download = nullptr;
 							continue;
 						}
 						if (strlen(to_download->aux_hash) > 0) {
-							f = sceIoOpen("ux0:data/VitaDB/vpk/aux_hash.vdb", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+							f = sceIoOpen(AUX_HASH_FILE, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 							sceIoWrite(f, to_download->aux_hash, 32);
 							sceIoClose(f);
 						}
-						f = sceIoOpen("ux0:data/VitaDB/vpk/hash.vdb", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+						f = sceIoOpen(HASH_FILE, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 					} else {
-						sprintf(tmp_path, "%spspemu/PSP/GAME/%s/", pspemu_dev, to_download->id);
+						sprintf(tmp_path, "%spspemu/PSP/GAME/%s", pspemu_dev, to_download->id);
 						sceIoMkdir(tmp_path, 0777);
 						bool extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, tmp_path, true, previous_frame);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -2759,9 +2775,9 @@ extract_libshacccg:
 					sceIoWrite(f, to_download->hash, 32);
 					sceIoClose(f);
 					if (mode_idx == MODE_VITA_HBS) {
-						makeHeadBin("ux0:data/VitaDB/vpk");
+						makeHeadBin(TEMP_INSTALL_DIR);
 						scePromoterUtilInit();
-						scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
+						scePromoterUtilityPromotePkg(TEMP_INSTALL_DIR, 0);
 						int state = 0;
 						do {
 							int ret = scePromoterUtilityGetState(&state);
@@ -2771,20 +2787,20 @@ extract_libshacccg:
 							vglSwapBuffers(GL_TRUE);
 						} while (state);
 						scePromoterUtilTerm();
-						if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st) >= 0) {
+						if (sceIoGetstat(TEMP_INSTALL_DIR, &st) >= 0) {
 							init_msg_dialog("The installation process failed.");
 							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 								draw_simple_texture(previous_frame);
 								vglSwapBuffers(GL_TRUE);
 							}
 							sceMsgDialogTerm();
-							recursive_rmdir("ux0:/data/VitaDB/vpk");
+							recursive_rmdir(TEMP_INSTALL_DIR);
 							if (downloading_data_files)
-								recursive_rmdir("ux0:vitadb_data_tmp");
+								recursive_rmdir(TEMP_DATA_DIR);
 						} else {
 							to_download->state = APP_UPDATED;
 							if (downloading_data_files)
-								move_path("ux0:vitadb_data_tmp", "ux0:data");
+								move_path(TEMP_DATA_DIR, "ux0:data");
 						}
 					} else
 						to_download->state = APP_UPDATED;
@@ -2981,20 +2997,20 @@ skip_install:
 			sprintf(hb_url, "https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=%s", boot_params);
 			sprintf(hb_message, "Downloading %s", to_download->name);
 			download_file(hb_url, hb_message);
-			sceIoMkdir("ux0:data/VitaDB/vpk", 0777);
-			extract_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/vpk/", false);
+			sceIoMkdir(TEMP_INSTALL_DIR, 0777);
+			extract_file(TEMP_DOWNLOAD_NAME, TEMP_INSTALL_PATH, false);
 			sceIoRemove(TEMP_DOWNLOAD_NAME);
 			if (strlen(to_download->aux_hash) > 0) {
-				f = sceIoOpen("ux0:data/VitaDB/vpk/aux_hash.vdb", SCE_O_CREAT | SCE_O_TRUNC | SCE_O_WRONLY, 0777);
+				f = sceIoOpen(AUX_HASH_FILE, SCE_O_CREAT | SCE_O_TRUNC | SCE_O_WRONLY, 0777);
 				sceIoWrite(f, to_download->aux_hash, 32);
 				sceIoClose(f);
 			}
-			f = sceIoOpen("ux0:data/VitaDB/vpk/hash.vdb", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+			f = sceIoOpen(HASH_FILE, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 			sceIoWrite(f, to_download->hash, 32);
 			sceIoClose(f);
-			makeHeadBin("ux0:data/VitaDB/vpk");
+			makeHeadBin(TEMP_INSTALL_DIR);
 			scePromoterUtilInit();
-			scePromoterUtilityPromotePkg("ux0:data/VitaDB/vpk", 0);
+			scePromoterUtilityPromotePkg(TEMP_INSTALL_DIR, 0);
 			int state = 0;
 			do {
 				int ret = scePromoterUtilityGetState(&state);
@@ -3004,18 +3020,18 @@ skip_install:
 				vglSwapBuffers(GL_TRUE);
 			} while (state);
 			scePromoterUtilTerm();
-			if (sceIoGetstat("ux0:/data/VitaDB/vpk", &st) >= 0) {
+			if (sceIoGetstat(TEMP_INSTALL_DIR, &st) >= 0) {
 				init_msg_dialog("The installation process failed.");
 				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 					draw_simple_texture(previous_frame);
 					vglSwapBuffers(GL_TRUE);
 				}
 				sceMsgDialogTerm();
-				recursive_rmdir("ux0:/data/VitaDB/vpk");
+				recursive_rmdir(TEMP_INSTALL_DIR);
 			}
 		} else { // VitaDB Downloader auto-updater
 			download_file("https://www.rinnegatamante.eu/vitadb/get_psarc_url.php?id=877", "Downloading update");
-			extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD/", false);
+			extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD", false);
 			sceIoRemove(TEMP_DOWNLOAD_NAME);
 			SceUID f = sceIoOpen("ux0:app/VITADBDLD/hash.vdb", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
 			sceIoWrite(f, to_download->hash, 32);
