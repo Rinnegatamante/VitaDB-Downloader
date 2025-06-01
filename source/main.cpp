@@ -2142,7 +2142,9 @@ extract_libshacccg:
 				ImGui::SetCursorPosX(mode_idx == MODE_VITA_HBS ? 140 : 156);
 				ImGui::Text(hovered->author);
 				ImGui::SetCursorPosY(454);
-				if (strlen(hovered->screenshots) > 5) {
+				if (strlen(hovered->trailer) > 5) {
+					ImGui::TextColored(TextLabel, "Press Start to view the trailer");
+				} else if (strlen(hovered->screenshots) > 5) {
 					ImGui::TextColored(TextLabel, "Press Start to view screenshots");
 				}
 				ImGui::SetCursorPosY(470);
@@ -2302,9 +2304,9 @@ extract_libshacccg:
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
 			if (SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE) {
-				ImGui::Begin("Trailer Viewer (Circle to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+				ImGui::Begin("Trailer Viewer (Start or Circle to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 			} else {
-				ImGui::Begin("Trailer Viewer (Cross to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);				
+				ImGui::Begin("Trailer Viewer (Start or Cross to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);				
 			}
 			int vid_w, vid_h;
 			GLuint vid_frame = video_get_frame(&vid_w, &vid_h);
@@ -2376,8 +2378,26 @@ extract_libshacccg:
 			else
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_str) / sizeof(sort_modes_str[0]));
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES) && !show_trailer && !show_changelog && !show_requirements && !show_trophies) {
-			show_screenshots = show_screenshots ? 0 : 1;
+		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES || strlen(hovered->trailer) > 5) && !show_changelog && !show_requirements && !show_trophies) {
+			if (mode_idx == MODE_THEMES) {
+				show_screenshots = show_screenshots ? 0 : 1;
+			} else if (strlen(hovered->trailer) > 5) {
+				if (show_screenshots) {
+					show_screenshots = 0;
+				} else {
+					show_trailer = show_trailer ? 0 : 1;
+					if (!show_trailer) {
+						video_close();
+						if (has_animated_bg) {
+							LoadBackground();
+						}
+						audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
+						sceKernelStartThread(audio_thd, 0, NULL);
+					}
+				}
+			} else {
+				show_screenshots = show_screenshots ? 0 : 1;
+			}
 		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && !show_trailer && !show_screenshots && !show_changelog && !show_requirements && !show_trophies) {
 			if (mode_idx == MODE_THEMES) {
 				shuffle_themes = !shuffle_themes;
