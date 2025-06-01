@@ -27,6 +27,8 @@ static GLuint bubble_prog;
 static GLuint simple_prog;
 static GLint bubble_time_unif;
 
+static GLuint previous_frame;
+
 void prepare_simple_drawer() {
 	GLuint vshad = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fshad = glCreateShader(GL_FRAGMENT_SHADER);
@@ -101,4 +103,15 @@ GLuint draw_bubble_icon(GLuint tex) {
 	glViewport(0, 0, 960, 544);
 	glEnable(GL_SCISSOR_TEST);
 	return bubble_fbo_tex;
+}
+
+GLuint capture_previous_frame() {
+	uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
+	glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
+	if (!previous_frame)
+		glGenTextures(1, &previous_frame);
+	glBindTexture(GL_TEXTURE_2D, previous_frame);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
+	vglFree(scr_data);
+	return previous_frame;
 }

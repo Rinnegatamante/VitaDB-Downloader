@@ -47,6 +47,14 @@
 #define PREVIEW_HEIGHT (mode_idx == MODE_THEMES ? 159.0f : (mode_idx == MODE_VITA_HBS ? 128.0f : 80.0f))
 #define PREVIEW_WIDTH  (mode_idx == MODE_THEMES ? 280.0f : (mode_idx == MODE_VITA_HBS ? 128.0f : 144.0f))
 
+#define close_trailer() \
+	video_close(); \
+	if (has_animated_bg) { \
+		LoadBackground(); \
+	} \
+	audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL); \
+	sceKernelStartThread(audio_thd, 0, NULL);
+
 int _newlib_heap_size_user = 200 * 1024 * 1024;
 int filter_idx = 0;
 int cur_ss_idx;
@@ -60,6 +68,8 @@ bool shuffle_themes = false;
 int SCE_CTRL_CANCEL = SCE_CTRL_CROSS;
 bool update_detected = false;
 
+#define SCE_CTRL_CANCEL_LITERAL (SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE ? "Circle" : "Cross")
+
 enum {
 	KUBRIDGE_MISSING,
 	KUBRIDGE_UX0,
@@ -71,24 +81,29 @@ const char *modes[] = {
 	"PSP Homebrews",
 	"Themes"
 };
-int mode_idx = 0;
+int mode_idx = VITA_EXECUTABLE;
 
 static AppSelection *old_hovered = NULL;
-ThemeSelection *themes = nullptr;
-AppSelection *apps = nullptr;
-AppSelection *psp_apps = nullptr;
-AppSelection *to_download = nullptr;
 static AppSelection *to_uninstall = nullptr;
-TrophySelection *trophies = nullptr;
+AppSelection *to_download = nullptr;
+
+GLuint anti_burn_in_texture;
+
+enum {
+	FEATURE_OFF,
+	FEATURE_LOADING,
+	FEATURE_ON
+};
+
+int screenshots_feature = FEATURE_OFF;
+int trailer_feature = FEATURE_OFF;
+int trophies_feature = FEATURE_OFF;
 
 
 SceUID trophy_thd;
 static int preview_width, preview_height, preview_x, preview_y;
 GLuint preview_icon = 0, preview_shot = 0, previous_frame = 0, bg_image = 0, trp_icon = 0, empty_icon = 0;
-int show_screenshots = 0; // 0 = off, 1 = download, 2 = show
-int show_trailer = 0; // 0 = 0ff, 1 = prepare, 2 = show
-int show_trophies = 0; // 0 = off, 1 = download, 2 = show
-void LoadPreview(AppSelection *game) {
+void load_preview(AppSelection *game) {
 	if (old_hovered == game)
 		return;
 	old_hovered = game;
@@ -110,17 +125,6 @@ void LoadPreview(AppSelection *game) {
 	preview_x = (PREVIEW_WIDTH - preview_width) / 2;
 	preview_y = (PREVIEW_HEIGHT - preview_height) / 2;
 	free(icon_data);
-}
-
-bool prepare_anti_burn_in() {
-	uint8_t *scr_data = (uint8_t *)vglMalloc(960 * 544 * 4);
-	glReadPixels(0, 0, 960, 544, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
-	if (!previous_frame)
-		glGenTextures(1, &previous_frame);
-	glBindTexture(GL_TEXTURE_2D, previous_frame);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 960, 544, 0, GL_RGBA, GL_UNSIGNED_BYTE, scr_data);
-	vglFree(scr_data);
-	return true;
 }
 
 void LoadScreenshot() {
@@ -975,7 +979,7 @@ extract_libshacccg:
 		}
 		
 		if (bg_image || has_animated_bg) {
-			if (show_trailer == 2 && has_animated_bg) {
+			if (trailer_feature == FEATURE_ON && has_animated_bg) {
 				glClear(GL_COLOR_BUFFER_BIT);
 			} else {
 				DrawBackground();
@@ -1276,7 +1280,7 @@ extract_libshacccg:
 		ImGui::Begin("Info Window", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
 		if (hovered) {
 			if (mode_idx == MODE_THEMES) {
-				LoadPreview(hovered);
+				load_preview(hovered);
 				ImGui::SetCursorPos(ImVec2(preview_x + PREVIEW_PADDING_THEME, preview_y + PREVIEW_PADDING));
 				ImGui::Image((void*)preview_icon, ImVec2(preview_width, preview_height));
 				ThemeSelection *node = (ThemeSelection *)hovered;
@@ -1312,7 +1316,7 @@ extract_libshacccg:
 				ImGui::SetCursorPosY(438);
 				ImGui::TextColored(TextLabel, "Press Start to view screenshots");
 			} else {
-				LoadPreview(hovered);
+				load_preview(hovered);
 				ImGui::SetCursorPos(ImVec2(preview_x + PREVIEW_PADDING, preview_y + PREVIEW_PADDING));
 				if (mode_idx == MODE_VITA_HBS) {
 					ImGui::Image((void*)draw_bubble_icon(preview_icon), ImVec2(preview_width, preview_height));
@@ -1490,7 +1494,7 @@ extract_libshacccg:
 			}
 			if (hovered->trophies) {
 				if (ImGui::Button("View Available Trophies", ImVec2(-1.0f, 0.0f))) {
-					show_trophies = 1;
+					trophies_feature = FEATURE_LOADING;
 				}
 			}
 			if (hovered->requirements) {
@@ -1500,12 +1504,12 @@ extract_libshacccg:
 			}
 			if (strlen(hovered->screenshots) > 5) {
 				if (ImGui::Button("View Screenshots", ImVec2(-1.0f, 0.0f))) {
-					show_screenshots = 1;
+					screenshots_feature = FEATURE_LOADING;
 				}
 			}
 			if (strlen(hovered->trailer) > 5) {
 				if (ImGui::Button("View Trailer", ImVec2(-1.0f, 0.0f))) {
-					show_trailer = 1;
+					trailer_feature = FEATURE_LOADING;
 				}
 			}
 			if (strlen(hovered->source_page) > 5) {
@@ -1537,7 +1541,7 @@ extract_libshacccg:
 			ImGui::End();
 		}
 		
-		if (show_screenshots == 2) {
+		if (screenshots_feature == FEATURE_ON) {
 			LoadScreenshot();
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
@@ -1550,7 +1554,7 @@ extract_libshacccg:
 			ImGui::End();
 		}
 		
-		if (show_trailer == 2) {
+		if (trailer_feature == FEATURE_ON) {
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
 			if (SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE) {
@@ -1567,7 +1571,7 @@ extract_libshacccg:
 		
 		if (show_changelog) {
 			char titlebar[256];
-			sprintf(titlebar, "%s Changelog (%s to close)", hovered->name, SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE ? "Circle" : "Cross");
+			sprintf(titlebar, "%s Changelog (%s to close)", hovered->name, SCE_CTRL_CANCEL_LITERAL);
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
 			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
@@ -1577,7 +1581,7 @@ extract_libshacccg:
 		
 		if (show_requirements) {
 			char titlebar[256];
-			sprintf(titlebar, "%s Requirements (%s to close)", hovered->name, SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE ? "Circle" : "Cross");
+			sprintf(titlebar, "%s Requirements (%s to close)", hovered->name, SCE_CTRL_CANCEL_LITERAL);
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
 			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
@@ -1585,9 +1589,9 @@ extract_libshacccg:
 			ImGui::End();
 		}
 		
-		if (show_trophies == 2) {
+		if (trophies_feature == FEATURE_ON) {
 			char titlebar[256];
-			sprintf(titlebar, "%s Trophies (%s to close)", hovered->name, SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE ? "Circle" : "Cross");
+			sprintf(titlebar, "%s Trophies (%s to close)", hovered->name, SCE_CTRL_CANCEL_LITERAL);
 			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
 			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
@@ -1615,40 +1619,35 @@ extract_libshacccg:
 		
 		// Extra controls handling
 		sceCtrlPeekBufferPositive(0, &pad, 1);
-		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !show_trailer && !show_screenshots && !show_changelog && !show_requirements && !show_trophies && !extra_menu_invoked) {
+		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !trophies_feature && !extra_menu_invoked) {
 			calculate_right_len = true;
 			old_sort_idx = -1;
 			sort_idx = 0;
 			filter_idx = 0;
 			mode_idx = (mode_idx + 1) % MODES_NUM;
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !show_trailer && !show_screenshots && !show_changelog && !show_requirements && !show_trophies && !extra_menu_invoked) {
+		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !trophies_feature && !extra_menu_invoked) {
 			if (mode_idx == MODE_THEMES)
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_themes_str) / sizeof(sort_modes_themes_str[0]));
 			else
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_apps_str) / sizeof(sort_modes_apps_str[0]));
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES || strlen(hovered->trailer) > 5) && !show_changelog && !show_requirements && !show_trophies) {
+		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES || strlen(hovered->trailer) > 5) && !show_changelog && !show_requirements && !trophies_feature) {
 			if (mode_idx == MODE_THEMES) {
-				show_screenshots = show_screenshots ? 0 : 1;
+				screenshots_feature = screenshots_feature ? FEATURE_OFF : FEATURE_LOADING;
 			} else if (strlen(hovered->trailer) > 5) {
-				if (show_screenshots) {
-					show_screenshots = 0;
+				if (screenshots_feature) {
+					screenshots_feature = FEATURE_OFF;
 				} else {
-					show_trailer = show_trailer ? 0 : 1;
-					if (!show_trailer) {
-						video_close();
-						if (has_animated_bg) {
-							LoadBackground();
-						}
-						audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
-						sceKernelStartThread(audio_thd, 0, NULL);
+					trailer_feature = trailer_feature ? FEATURE_OFF : FEATURE_LOADING;
+					if (!trailer_feature) {
+						close_trailer();
 					}
 				}
 			} else {
-				show_screenshots = show_screenshots ? 0 : 1;
+				screenshots_feature = screenshots_feature ? 0 : 1;
 			}
-		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && !show_trailer && !show_screenshots && !show_changelog && !show_requirements && !show_trophies) {
+		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !trophies_feature) {
 			if (mode_idx == MODE_THEMES) {
 				shuffle_themes = !shuffle_themes;
 				ThemeSelection *g = themes;
@@ -1669,16 +1668,16 @@ extract_libshacccg:
 					sceIoRemove("ux0:data/VitaDB/shuffle.cfg");
 			} else if (hovered)
 				extra_menu_invoked = !extra_menu_invoked;
-		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && !show_trailer && !show_changelog && !show_requirements && !show_trophies && (!extra_menu_invoked || show_screenshots)) {
-			if (show_screenshots)
+		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && !trailer_feature && !show_changelog && !show_requirements && !trophies_feature && (!extra_menu_invoked || screenshots_feature)) {
+			if (screenshots_feature)
 				cur_ss_idx--;
 			else {
 				fast_decrement = true;
 				decrement_stack_idx = 0;
 				decremented_app = nullptr;
 			}
-		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT) && !show_trailer && !show_changelog && !show_requirements && !show_trophies && (!extra_menu_invoked || show_screenshots)) {
-			if (show_screenshots)
+		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT) && !trailer_feature && !show_changelog && !show_requirements && !trophies_feature && (!extra_menu_invoked || screenshots_feature)) {
+			if (screenshots_feature)
 				cur_ss_idx++;
 			else
 				fast_increment = true;
@@ -1688,11 +1687,11 @@ extract_libshacccg:
 				free(changelog);
 			} else if (show_requirements) {
 				show_requirements = false;
-			} else if (show_trophies) {
+			} else if (trophies_feature) {
 				early_stop_trp_icon_upload = 1;
 				sceKernelWaitThreadEnd(trophy_thd, NULL, NULL);
 				early_stop_trp_icon_upload = 0;
-				show_trophies = 0;
+				trophies_feature = FEATURE_OFF;
 				while (trophies) {
 					TrophySelection *t = trophies;
 					free(t->desc);
@@ -1701,24 +1700,19 @@ extract_libshacccg:
 					trophies = trophies->next;
 					free(t);
 				}
-			} else if (show_screenshots) {
-				show_screenshots = 0;
-			} else if (show_trailer) {
-				video_close();
-				if (has_animated_bg) {
-					LoadBackground();
-				}
-				audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL);
-				sceKernelStartThread(audio_thd, 0, NULL);
-				show_trailer = 0;
+			} else if (screenshots_feature) {
+				screenshots_feature = FEATURE_OFF;
+			} else if (trailer_feature) {
+				close_trailer();
+				trailer_feature = FEATURE_OFF;
 			} else if (extra_menu_invoked) {
 				extra_menu_invoked = false;
 			} else
 				go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !show_trailer && !show_screenshots && !show_requirements && !show_trophies && !show_changelog && !extra_menu_invoked) {
+		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !trailer_feature && !screenshots_feature && !show_requirements && !trophies_feature && !show_changelog && !extra_menu_invoked) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !show_trailer && !show_screenshots && !show_requirements && !show_trophies && !show_changelog && !extra_menu_invoked) {
+		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !trailer_feature && !screenshots_feature && !show_requirements && !trophies_feature && !show_changelog && !extra_menu_invoked) {
 			if (mode_idx == MODE_THEMES)
 				filter_idx = (filter_idx + 1) % (sizeof(filter_themes_modes) / sizeof(*filter_themes_modes));
 			else
@@ -1728,10 +1722,15 @@ extract_libshacccg:
 		oldpad = pad.buttons;
 		bool anti_burn_in_set_up = false;
 		
+		#define setup_anti_burn_in() \
+			if (!anti_burn_in_set_up) { \
+				anti_burn_in_texture = capture_previous_frame(); \
+				anti_burn_in_set_up = true; \
+			}
+		
 		// Queued app uninstall
 		if (to_uninstall) {
-			if (!anti_burn_in_set_up)
-				anti_burn_in_set_up = prepare_anti_burn_in();
+			setup_anti_burn_in();
 			init_interactive_msg_dialog("Do you really wish to uninstall this app?");
 			while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 				draw_simple_texture(previous_frame);
@@ -1767,8 +1766,7 @@ extract_libshacccg:
 		// Queued app download
 		if (to_download) {
 			if (mode_idx == MODE_THEMES) {
-				if (!anti_burn_in_set_up)
-						anti_burn_in_set_up = prepare_anti_burn_in();
+				setup_anti_burn_in();
 				ThemeSelection *node = (ThemeSelection *)to_download;
 				sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/blob/main/themes/%s/theme.zip?raw=true", node->name);
 				download_file(download_link, "Downloading theme", false, -1, -1, previous_frame);
@@ -1780,8 +1778,7 @@ extract_libshacccg:
 				to_download = nullptr;
 			} else {
 				if (to_download->requirements && ((!strstr(to_download->requirements, "libshacccg.suprx")) || strlen(to_download->requirements) != strlen("- libshacccg.suprx"))) {
-					if (!anti_burn_in_set_up)
-						anti_burn_in_set_up = prepare_anti_burn_in();
+					setup_anti_burn_in();
 					init_interactive_msg_dialog("This homebrew has extra requirements in order to work properly:\n%s\n\nDo you wish to install it still?", to_download->requirements);
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 						draw_simple_texture(previous_frame);
@@ -1886,8 +1883,7 @@ extract_libshacccg:
 								chk = chk->next_clash;
 							}
 						}
-						if (!anti_burn_in_set_up)
-							anti_burn_in_set_up = prepare_anti_burn_in();
+						setup_anti_burn_in();
 						char clash_text[512];
 						if (installed_clasher)
 							sprintf(clash_text, "This homebrew has a TitleID that clashes with other homebrews. Installing it will automatically uninstall any homebrew you have installed with the same TitleID.\nVitaDB Downloader detected this app as the installed one with clashing TitleID:\n%s\nDo you want to proceed?", installed_clasher->name);
@@ -1911,8 +1907,7 @@ extract_libshacccg:
 				
 				bool downloading_data_files = false;
 				if (strlen(to_download->data_link) > 5) {
-					if (!anti_burn_in_set_up)
-						anti_burn_in_set_up = prepare_anti_burn_in();
+					setup_anti_burn_in();
 					init_interactive_msg_dialog("This homebrew also has data files. Do you wish to install them as well?");
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 						draw_simple_texture(previous_frame);
@@ -1970,8 +1965,7 @@ extract_libshacccg:
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 					}
 				}
-				if (!anti_burn_in_set_up)
-					anti_burn_in_set_up = prepare_anti_burn_in();
+				setup_anti_burn_in();
 				// Check if enough storage is left for the install
 				char *dummy;
 				uint64_t sz = strtoull(to_download->size, &dummy, 10);
@@ -2081,8 +2075,7 @@ extract_libshacccg:
 skip_install:		
 		// Ime dialog active
 		if (is_ime_active) {
-			if (!anti_burn_in_set_up)
-				anti_burn_in_set_up = prepare_anti_burn_in();
+			setup_anti_burn_in();
 			while (sceImeDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
 				draw_simple_texture(previous_frame);
 				vglSwapBuffers(GL_TRUE);
@@ -2098,9 +2091,8 @@ skip_install:
 		}
 		
 		// Queued trophies download
-		if (show_trophies == 1) {
-			if (!anti_burn_in_set_up)
-				anti_burn_in_set_up = prepare_anti_burn_in();
+		if (trophies_feature == FEATURE_LOADING) {
+			setup_anti_burn_in();
 			char dl_url[512];
 			sprintf(dl_url, "ux0:data/VitaDB/trophies/%s", hovered->titleid);
 			sceIoMkdir(dl_url, 0777);
@@ -2154,11 +2146,11 @@ skip_install:
 			trophy_thd = sceKernelCreateThread("Trophies Loader", &trophy_loader, 0x10000100, 0x100000, 0, 0, NULL);
 			sceKernelStartThread(trophy_thd, 0, NULL);
 			free(trp_data);
-			show_trophies = 2;
+			trophies_feature = FEATURE_ON;
 		}
 		
 		// Queued trailer request
-		if (show_trailer == 1) {
+		if (trailer_feature == FEATURE_LOADING) {
 			if (has_animated_bg) {
 				video_close();
 			}
@@ -2178,13 +2170,12 @@ skip_install:
 			char trailer_url[256];
 			sprintf(trailer_url, "https://www.rinnegatamante.eu/vitadb/videos/%s.mp4", hovered->trailer);
 			video_open(trailer_url);
-			show_trailer = 2;
+			trailer_feature = FEATURE_ON;
 		}
 		
 		// Queued screenshots download
-		if (show_screenshots == 1) {
-			if (!anti_burn_in_set_up)
-				anti_burn_in_set_up = prepare_anti_burn_in();
+		if (screenshots_feature == FEATURE_LOADING) {
+			setup_anti_burn_in();
 			sceIoRemove("ux0:data/VitaDB/ss0.png");
 			sceIoRemove("ux0:data/VitaDB/ss1.png");
 			sceIoRemove("ux0:data/VitaDB/ss2.png");
@@ -2220,7 +2211,7 @@ skip_install:
 					sceIoRename(TEMP_DOWNLOAD_NAME, shot_links[shot_idx++]);
 				}
 			}
-			show_screenshots = 2;
+			screenshots_feature = FEATURE_ON;
 		}
 		
 		// Queued theme to install
@@ -2232,8 +2223,7 @@ skip_install:
 		
 		// Queued themes database download
 		if (mode_idx == MODE_THEMES && !themes) {
-			if (!anti_burn_in_set_up)
-				anti_burn_in_set_up = prepare_anti_burn_in();
+			setup_anti_burn_in();
 			if (sceIoGetstat("ux0:/data/VitaDB/previews", &st) < 0) {
 				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/previews.zip", "Downloading themes previews", false, -1, -1, previous_frame);
 				extract_zip_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/", false);
@@ -2247,8 +2237,7 @@ skip_install:
 		
 		// PSP database update required
 		if (mode_idx == MODE_PSP_HBS && !psp_apps) {
-			if (!anti_burn_in_set_up)
-				anti_burn_in_set_up = prepare_anti_burn_in();
+			setup_anti_burn_in();
 			SceUID thd = sceKernelCreateThread("Apps List Downloader", &appPspListThread, 0x10000100, 0x100000, 0, 0, NULL);
 			sceKernelStartThread(thd, 0, NULL);
 			do {

@@ -29,6 +29,11 @@
 #include "network.h"
 #include "utils.h"
 
+ThemeSelection *themes = nullptr;
+AppSelection *apps = nullptr;
+AppSelection *psp_apps = nullptr;
+TrophySelection *trophies = nullptr;
+
 static SceUID clash_thd;
 
 extern char boot_params[1024];

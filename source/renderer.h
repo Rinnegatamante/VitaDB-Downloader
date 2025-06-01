@@ -25,4 +25,6 @@ void prepare_bubble_drawer();
 void draw_simple_texture(GLuint tex);
 GLuint draw_bubble_icon(GLuint tex);
 
+GLuint capture_previous_frame();
+
 #endif
