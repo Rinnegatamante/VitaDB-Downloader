@@ -33,6 +33,7 @@ add_executable(VitaDB
   source/network.cpp
   source/player.cpp
   source/promoter.cpp
+  source/renderer.cpp
   source/sha1.c
   source/unzip.c
   source/utils.cpp

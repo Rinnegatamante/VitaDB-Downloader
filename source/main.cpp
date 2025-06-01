@@ -37,6 +37,7 @@
 #include "dialogs.h"
 #include "network.h"
 #include "database.h"
+#include "renderer.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -208,21 +209,20 @@ void PrepareTrophy(const char *tid, const char *name, int index, int count) {
 	}
 }
 
-const char *sort_modes_str[] = {
-	"Most Recent",
-	"Oldest",
-	"Most Downloaded",
-	"Least Downloaded",
-	"Alphabetical (A-Z)",
-	"Alphabetical (Z-A)",
-	"Smallest",
-	"Largest"
+enum {
+	FILTER_APPS_ALL,
+	FILTER_APPS_GAME,
+	FILTER_APPS_PORT,
+	FILTER_APPS_UTILITY,
+	FILTER_APPS_EMULATOR,
+	FILTER_APPS_FREEWARE,
+	FILTER_APPS_NOT_INSTALLED,
+	FILTER_APPS_OUTDATED,
+	FILTER_APPS_INSTALLED,
+	FILTER_APPS_TROPHY
 };
-const char *sort_modes_themes_str[] = {
-	"Alphabetical (A-Z)",
-	"Alphabetical (Z-A)"
-};
-const char *filter_modes[] = {
+
+const char *filter_apps_modes[] = {
 	"All Apps",
 	"Original Games",
 	"Game Ports",
@@ -234,6 +234,13 @@ const char *filter_modes[] = {
 	"Installed Apps",
 	"Apps with Trophies",
 };
+
+enum {
+	FILTER_THEMES_ALL,
+	FILTER_THEMES_DOWNLOADED,
+	FILTER_THEMES_NOT_DOWNLOADED
+};
+
 const char *filter_themes_modes[] = {
 	"All Themes",
 	"Downloaded Themes",
@@ -274,11 +281,11 @@ bool filterApps(AppSelection *p) {
 
 bool filterThemes(ThemeSelection *p) {
 	switch (filter_idx) {
-	case 1:
+	case FILTER_THEMES_DOWNLOADED:
 		if (p->state != APP_UPDATED)
 			return true;
 		break;
-	case 2:
+	case FILTER_THEMES_NOT_DOWNLOADED:
 		if (p->state != APP_UNTRACKED)
 			return true;
 		break;
@@ -982,7 +989,7 @@ extract_libshacccg:
 			if (mode_idx == MODE_THEMES)
 				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d themes with '%s' filter", VERSION, filtered_entries, filter_themes_modes[filter_idx]);
 			else
-				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d results with '%s' filter", VERSION, filtered_entries, filter_modes[filter_idx]);
+				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d results with '%s' filter", VERSION, filtered_entries, filter_apps_modes[filter_idx]);
 			ImGui::Text(title);
 			if (calculate_right_len) {
 				calculate_right_len = false;
@@ -1039,10 +1046,10 @@ extract_libshacccg:
 				ImGui::EndCombo();
 			}
 		} else {
-			if (ImGui::BeginCombo("##combo", filter_modes[filter_idx])) {
-				for (int n = 0; n < sizeof(filter_modes) / sizeof(*filter_modes); n++) {
+			if (ImGui::BeginCombo("##combo", filter_apps_modes[filter_idx])) {
+				for (int n = 0; n < sizeof(filter_apps_modes) / sizeof(*filter_apps_modes); n++) {
 					bool is_selected = filter_idx == n;
-					if (ImGui::Selectable(filter_modes[n], is_selected))
+					if (ImGui::Selectable(filter_apps_modes[n], is_selected))
 						filter_idx = n;
 					if (is_selected)
 						ImGui::SetItemDefaultFocus();
@@ -1075,10 +1082,10 @@ extract_libshacccg:
 				ImGui::EndCombo();
 			}
 		} else {
-			if (ImGui::BeginCombo("##combo2", sort_modes_str[sort_idx])) {
-				for (int n = 0; n < sizeof(sort_modes_str) / sizeof(*sort_modes_str); n++) {
+			if (ImGui::BeginCombo("##combo2", sort_modes_apps_str[sort_idx])) {
+				for (int n = 0; n < sizeof(sort_modes_apps_str) / sizeof(*sort_modes_apps_str); n++) {
 					bool is_selected = sort_idx == n;
-					if (ImGui::Selectable(sort_modes_str[n], is_selected))
+					if (ImGui::Selectable(sort_modes_apps_str[n], is_selected))
 						sort_idx = n;
 					if (is_selected)
 						ImGui::SetItemDefaultFocus();
@@ -1403,7 +1410,7 @@ extract_libshacccg:
 			ImGui::Text("Current sorting mode: %s", sort_modes_themes_str[sort_idx]);
 		} else {
 			ImGui::SetCursorPosY(486);
-			ImGui::Text("Current sorting mode: %s", sort_modes_str[sort_idx]);
+			ImGui::Text("Current sorting mode: %s", sort_modes_apps_str[sort_idx]);
 		}
 		ImGui::SetCursorPosY(502);
 		uint64_t total_space = get_total_storage();
@@ -1619,7 +1626,7 @@ extract_libshacccg:
 			if (mode_idx == MODE_THEMES)
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_themes_str) / sizeof(sort_modes_themes_str[0]));
 			else
-				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_str) / sizeof(sort_modes_str[0]));
+				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_apps_str) / sizeof(sort_modes_apps_str[0]));
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES || strlen(hovered->trailer) > 5) && !show_changelog && !show_requirements && !show_trophies) {
 			if (mode_idx == MODE_THEMES) {
@@ -1715,7 +1722,7 @@ extract_libshacccg:
 			if (mode_idx == MODE_THEMES)
 				filter_idx = (filter_idx + 1) % (sizeof(filter_themes_modes) / sizeof(*filter_themes_modes));
 			else
-				filter_idx = (filter_idx + 1) % (sizeof(filter_modes) / sizeof(*filter_modes));
+				filter_idx = (filter_idx + 1) % (sizeof(filter_apps_modes) / sizeof(*filter_apps_modes));
 			go_to_top = true;
 		}
 		oldpad = pad.buttons;

@@ -36,10 +36,14 @@ enum {
 	SORT_APPS_LARGEST
 };
 
+extern const char *sort_modes_apps_str[8];
+
 enum {
 	SORT_THEMES_A_Z,
 	SORT_THEMES_Z_A
 };
+
+extern const char *sort_modes_themes_str[2];
 
 enum {
 	VITA_EXECUTABLE,
@@ -95,8 +99,6 @@ struct ThemeSelection {
 	bool shuffle;
 	ThemeSelection *next;
 };
-
-extern const char *aux_main_files[];
 
 extern ThemeSelection *themes;
 extern AppSelection *apps;

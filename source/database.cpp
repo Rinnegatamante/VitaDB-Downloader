@@ -34,9 +34,23 @@ static SceUID clash_thd;
 extern char boot_params[1024];
 extern AppSelection *to_download;
 
+const char *sort_modes_apps_str[8] = {
+	"Most Recent",
+	"Oldest",
+	"Most Downloaded",
+	"Least Downloaded",
+	"Alphabetical (A-Z)",
+	"Alphabetical (Z-A)",
+	"Smallest",
+	"Largest"
+};
 
+const char *sort_modes_themes_str[2] = {
+	"Alphabetical (A-Z)",
+	"Alphabetical (Z-A)"
+};
 
-const char *aux_main_files[] = {
+static const char *aux_main_files[5] = {
 	"Media/sharedassets0.assets.resS", // Unity
 	"games/game.win", // GameMaker Studio
 	"index.lua", // LuaPlayer Plus Vita
