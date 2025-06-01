@@ -50,7 +50,7 @@
 #define close_trailer() \
 	video_close(); \
 	if (has_animated_bg) { \
-		LoadBackground(); \
+		load_background(); \
 	} \
 	audio_thd = sceKernelCreateThread("Audio Playback", &musicThread, 0x10000100, 0x100000, 0, 0, NULL); \
 	sceKernelStartThread(audio_thd, 0, NULL);
@@ -117,8 +117,7 @@ void load_preview(AppSelection *game) {
 	uint8_t *icon_data = stbi_load(banner_path, &preview_width, &preview_height, NULL, 4);
 	if (!preview_icon)
 		glGenTextures(1, &preview_icon);
-	glBindTexture(GL_TEXTURE_2D, preview_icon);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, preview_width, preview_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+	glTextureImage2D(preview_icon, GL_TEXTURE_2D, 0, GL_RGBA, preview_width, preview_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
 	float scale = MIN(PREVIEW_WIDTH / (float)preview_width, PREVIEW_HEIGHT / (float)preview_height);
 	preview_width = scale * (float)preview_width;
 	preview_height = scale * (float)preview_height;
@@ -157,13 +156,12 @@ void LoadScreenshot() {
 	}
 	if (!preview_shot)
 		glGenTextures(1, &preview_shot);
-	glBindTexture(GL_TEXTURE_2D, preview_shot);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, shot_data);
+	glTextureImage2D(preview_shot, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, shot_data);
 	free(shot_data);
 }
 
 bool has_animated_bg = false;
-void LoadBackground() {
+void load_background() {
 	int w, h;
 	
 	SceIoStat st;
@@ -175,8 +173,7 @@ void LoadBackground() {
 		uint8_t *bg_data = stbi_load("ux0:data/VitaDB/bg.png", &w, &h, NULL, 4);
 		if (bg_data) {
 			glGenTextures(1, &bg_image);
-			glBindTexture(GL_TEXTURE_2D, bg_image);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, bg_data);
+			glTextureImage2D(bg_image, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, bg_data);
 			free(bg_data);
 		}
 	}
@@ -328,7 +325,7 @@ static int musicThread(unsigned int args, void *arg) {
 }
 
 float *bg_attributes = nullptr;
-void DrawBackground() {
+void draw_background() {
 	if (!bg_attributes)
 		bg_attributes = (float*)malloc(sizeof(float) * 22);
 
@@ -530,7 +527,7 @@ void install_theme(ThemeSelection *g) {
 	default:
 		break;
 	}
-	LoadBackground();
+	load_background();
 	
 	// Set new color scheme
 	sprintf(fname, "ux0:data/VitaDB/themes/%s/theme.ini", g->name);
@@ -615,7 +612,7 @@ void install_theme_from_shuffle(bool boot) {
 			copy_file(fname, "ux0:data/VitaDB/bg.mp4");
 	}
 	if (!boot)
-		LoadBackground();
+		load_background();
 
 	// Set new color scheme
 	sprintf(fname, "ux0:data/VitaDB/themes/%s/theme.ini", name);
@@ -651,6 +648,10 @@ typedef struct {
 #include <lz4.h>
 
 int main(int argc, char *argv[]) {
+#if 1
+	sceSysmoduleLoadModule(SCE_SYSMODULE_RAZOR_CAPTURE);
+#endif
+	
 	// Check if an on demand update has been requested
 	sceAppMgrGetAppParam(boot_params);
 	if (strlen(boot_params) > 0) {
@@ -836,14 +837,13 @@ extract_libshacccg:
 	// Apply theme shuffling
 	if (sceIoGetstat("ux0:/data/VitaDB/shuffle.cfg", &st) >= 0)
 		install_theme_from_shuffle(true);
-	LoadBackground();
+	load_background();
 
 	// Load trophy icon
 	int w, h;
 	uint8_t *trp_data = stbi_load("app0:trophy.png", &w, &h, NULL, 4);
 	glGenTextures(1, &trp_icon);
-	glBindTexture(GL_TEXTURE_2D, trp_icon);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, trp_data);
+	glTextureImage2D(trp_icon, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, trp_data);
 	free(trp_data);
 	glGenTextures(1, &empty_icon);
 
@@ -982,7 +982,7 @@ extract_libshacccg:
 			if (trailer_feature == FEATURE_ON && has_animated_bg) {
 				glClear(GL_COLOR_BUFFER_BIT);
 			} else {
-				DrawBackground();
+				draw_background();
 			}
 		}
 		
