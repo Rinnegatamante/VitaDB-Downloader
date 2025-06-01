@@ -25,16 +25,17 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-optimize-sibling-calls -fpermissive
 add_executable(VitaDB
   source/database.cpp
   source/dialogs.cpp
+  source/extractor.cpp
+  source/fios.c
+  source/ioapi.c
   source/main.cpp
+  source/md5.c
   source/network.cpp
   source/player.cpp
   source/promoter.cpp
-  source/utils.cpp
-  source/ioapi.c
-  source/unzip.c
   source/sha1.c
-  source/md5.c
-  source/fios.c
+  source/unzip.c
+  source/utils.cpp
 )
 
 add_dependencies(VitaDB vitadb.skprx vitadb.suprx vdb_daemon.suprx)
