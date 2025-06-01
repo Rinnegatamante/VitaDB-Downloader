@@ -198,7 +198,6 @@ void video_open(const char *path) {
 		glBindTexture(GL_TEXTURE_2D, movie_frame[i]);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 8, 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		movie_tex[i] = vglGetGxmTexture(GL_TEXTURE_2D);
-		vglFree(vglGetTexDataPointer(GL_TEXTURE_2D));
 	}
 	
 	// Check if the supplied path is a remote video
