@@ -1,6 +1,18 @@
 #ifndef __bubble_shader_v__
 #define __bubble_shader_v__
 
+/*
+	void main(
+		float2 aPos,
+		float2 aTex,
+		float4 out gl_Position : POSITION,
+		float2 out vUV : TEXCOORD0
+	) {
+		vUV = aTex;
+		gl_Position = float4(aPos, 0.0, 1.0);
+	}
+*/
+
 static unsigned int size_bubble_shader_v = 276;
 static unsigned char bubble_shader_v[] __attribute__((aligned(16))) = {
 	0x47, 0x58, 0x50, 0x00, 0x01, 0x05, 0x50, 0x03, 0x12, 0x01, 0x00, 0x00, 0x42, 0x50, 0xa3, 0x18, 

@@ -1,6 +1,40 @@
 #ifndef __bubble_shader_f__
 #define __bubble_shader_f__
 
+/*
+	uniform float u_time;
+	uniform sampler2D u_texture;
+	float4 main(float2 vUV : TEXCOORD0) {
+		float flatten = 0.95;
+		float2 wobble = 0.02 * float2(
+			sin(u_time * 0.7),
+			cos(u_time * 0.6)
+		);
+		float2 centeredUV = vUV * 2.0 - 1.0;
+		centeredUV *= 128.0f / 128.0f;
+		float dist = length(centeredUV);
+		float mask = smoothstep(0.97, 0.95, dist);
+		float z = sqrt(1.0 - ((centeredUV.x * centeredUV.x) + (centeredUV.y * centeredUV.y) / (flatten * flatten))) * 1.1;
+		float3 normal = normalize(float3(centeredUV.x, centeredUV.y / flatten, z));
+		float2 texCoord = normal.xy * 0.5 + 0.5;
+		float4 texColor = tex2D(u_texture, texCoord + wobble);
+		float3 lightPos = float3(wobble, 3.0);
+		float3 lightDir = normalize(lightPos - float3(centeredUV, -1.5));
+		float3 viewDir = normalize(float3(float2(2.0, 3.0) + wobble * 30.0, 0.0));
+		float3 ambient = 0.1 * texColor.rgb;
+		float diff = max(dot(normal, lightDir), 0.0);
+		diff = clamp((diff + 0.4) / 1.4, 0.0, 1.0); // soften falloff
+		float3 diffuse = diff * texColor.rgb;
+		float3 reflectDir = reflect(-lightDir, normal);
+		float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+		float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
+		spec *= lerp(1.0, 0.5, fresnel);
+		float3 specular = float3(1.0) * spec * 0.5;
+		float3 finalColor = ambient + diffuse + specular;
+		finalColor *= mask;
+		return float4(finalColor, mask);
+	}
+*/
 static unsigned int size_bubble_shader_f = 1400;
 static unsigned char bubble_shader_f[] __attribute__((aligned(16))) = {
 	0x47, 0x58, 0x50, 0x00, 0x01, 0x05, 0x50, 0x03, 0x75, 0x05, 0x00, 0x00, 0xb8, 0x63, 0xc8, 0x4b, 
