@@ -19,6 +19,17 @@
 #ifndef _UTILS_H
 #define _UTILS_H
 
+#define VERSION "2.2"
+
+#define TEMP_DATA_DIR "ux0:/vdb_data"
+#define TEMP_DATA_PATH TEMP_DATA_DIR "/"
+#define TEMP_INSTALL_DIR "ux0:/vdb_vpk"
+#define TEMP_INSTALL_PATH TEMP_INSTALL_DIR "/"
+#define AUX_HASH_FILE TEMP_INSTALL_DIR "/aux_hash.vdb"
+#define HASH_FILE TEMP_INSTALL_DIR "/hash.vdb"
+
+#define MIN(x, y) (x) < (y) ? (x) : (y)
+
 enum{
 	MODE_VITA_HBS,
 	MODE_PSP_HBS,
@@ -49,9 +60,5 @@ void draw_simple_texture(GLuint tex);
 
 void prepare_bubble_drawer();
 GLuint draw_bubble_icon(GLuint tex);
-
-namespace ImGui {
-void ImageRound(ImTextureID user_texture_id, const ImVec2 &size);
-}
 
 #endif

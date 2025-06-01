@@ -27,7 +27,6 @@
 #include <bzlib.h>
 #include <stdio.h>
 #include <malloc.h>
-#include <string>
 #include <taihen.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
@@ -38,20 +37,11 @@
 #include "dialogs.h"
 #include "network.h"
 #include "fios.h"
+#include "database.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#define VERSION "2.2"
-
-#define TEMP_DATA_DIR "ux0:/vdb_data"
-#define TEMP_DATA_PATH TEMP_DATA_DIR "/"
-#define TEMP_INSTALL_DIR "ux0:/vdb_vpk"
-#define TEMP_INSTALL_PATH TEMP_INSTALL_DIR "/"
-#define AUX_HASH_FILE TEMP_INSTALL_DIR "/aux_hash.vdb"
-#define HASH_FILE TEMP_INSTALL_DIR "/hash.vdb"
-
-#define MIN(x, y) (x) < (y) ? (x) : (y)
 #define PREVIEW_PADDING 6
 #define PREVIEW_PADDING_THEME 60
 #define PREVIEW_HEIGHT (mode_idx == MODE_THEMES ? 159.0f : (mode_idx == MODE_VITA_HBS ? 128.0f : 80.0f))
@@ -68,66 +58,12 @@ SceUID audio_thd = -1;
 void *audio_buffer = nullptr;
 bool shuffle_themes = false;
 int SCE_CTRL_CANCEL = SCE_CTRL_CROSS;
-
-enum {
-	APP_UNTRACKED,
-	APP_OUTDATED,
-	APP_UPDATED
-};
+bool update_detected = false;
 
 enum {
 	KUBRIDGE_MISSING,
 	KUBRIDGE_UX0,
 	KUBRIDGE_UR0
-};
-
-struct TrophySelection {
-	char name[64];
-	char *desc;
-	char icon_name[32];
-	char titleid[10];
-	GLuint icon;
-	TrophySelection *next;
-};
-
-struct AppSelection {
-	char name[192];
-	char icon[128];
-	char author[128];
-	char type[4];
-	char id[8];
-	char date[12];
-	char titleid[10];
-	char screenshots[512];
-	char source_page[192];
-	char release_page[192];
-	char trailer[64];
-	char *desc;
-	char downloads[16];
-	char size[16];
-	char data_size[16];
-	char hash[34];
-	char aux_hash[34];
-	char *requirements;
-	char data_link[128];
-	int state;
-	bool trophies;
-	AppSelection *next_clash;
-	AppSelection *prev_clash;
-	AppSelection *next;
-};
-
-struct ThemeSelection {
-	char name[192];
-	char author[64];
-	char *desc;
-	char credits[128];
-	char bg_type[2];
-	char has_music[2];
-	char has_font[2];
-	int state;
-	bool shuffle;
-	ThemeSelection *next;
 };
 
 const char *modes[] = {
@@ -142,354 +78,8 @@ ThemeSelection *themes = nullptr;
 AppSelection *apps = nullptr;
 AppSelection *psp_apps = nullptr;
 AppSelection *to_download = nullptr;
-AppSelection *to_uninstall = nullptr;
+static AppSelection *to_uninstall = nullptr;
 TrophySelection *trophies = nullptr;
-
-
-char *extractValue(char *dst, char *src, char *val, char **new_ptr) {
-	char label[32];
-	sprintf(label, "\"%s\": \"", val);
-	//printf("label: %s\n", label);
-	char *ptr = strstr(src, label) + strlen(label);
-	//printf("ptr is: %X\n", ptr);
-	if ((uintptr_t)ptr == strlen(label))
-		return nullptr;
-	char *end2 = strstr(ptr, (val[0] == 'l' || val[0] == 'c') ? "\"," : "\"");
-	if (dst == nullptr) {
-		if (end2 - ptr > 0) {
-			dst = (char *)malloc(end2 - ptr + 1);
-			*new_ptr = dst;
-		} else {
-			*new_ptr = nullptr;
-			return end2 + 1;
-		}
-	}
-	//printf("size: %d\n", end2 - ptr);
-	memcpy(dst, ptr, end2 - ptr);
-	dst[end2 - ptr] = 0;
-	return end2 + 1;
-}
-
-char *GetChangelog(const char *file, char *id) {
-	char *res = nullptr;
-	SceUID f = sceIoOpen(file, SCE_O_RDONLY, 0777);
-	if (f >= 0) {
-		size_t len = sceIoLseek(f, 0, SCE_SEEK_END);
-		sceIoLseek(f, 0, SCE_SEEK_SET);
-		char *buffer = (char*)malloc(len + 1);
-		sceIoRead(f, buffer, len);
-		buffer[len] = 0;
-		char *ptr = buffer;
-		char *end, *end2;
-		char cur_id[8];
-		do {
-			ptr = extractValue(cur_id, ptr, "id", nullptr);
-			if (!strncmp(cur_id, id, 3)) {
-				ptr = extractValue(res, ptr, "changelog", &res);
-				if (res)
-					res = unescape(res);
-				break;
-			}
-		} while (ptr);
-		sceIoClose(f);
-		free(buffer);
-	}
-	return res;
-}
-
-char *aux_main_files[] = {
-	"Media/sharedassets0.assets.resS", // Unity
-	"games/game.win", // GameMaker Studio
-	"index.lua", // LuaPlayer Plus Vita
-	"game.apk", // YoYo Loader
-	"game_data/game.pck" // Godot
-};
-
-enum {
-	VITA_EXECUTABLE,
-	PSP_EXECUTABLE,
-	AUXILIARY_FILE
-};
-
-bool checksum_match(char *hash_fname, char *fname, AppSelection *node, uint8_t type) {
-	char cur_hash[40], aux_fname[256];
-	SceUID f = sceIoOpen(hash_fname, SCE_O_RDONLY, 0777);
-	if (f >= 0) {
-		sceIoRead(f, cur_hash, 32);
-		cur_hash[32] = 0;
-		sceIoClose(f);
-		if (strncmp(cur_hash, type != AUXILIARY_FILE ? node->hash : node->aux_hash, 32))
-			node->state = APP_OUTDATED;
-		else
-			node->state = APP_UPDATED;
-		return true;
-	} else {
-		if (type != AUXILIARY_FILE)
-			f = sceIoOpen(fname, SCE_O_RDONLY, 0777);
-		else {
-			for (int i = 0; i < sizeof(aux_main_files) / sizeof(*aux_main_files); i++) {
-				sprintf(aux_fname, "ux0:app/%s/%s", node->titleid, aux_main_files[i]);
-				//printf("attempting with %s\n", aux_fname);
-				f = sceIoOpen(aux_fname, SCE_O_RDONLY, 0777);
-				if (f >= 0)
-					break;
-			}
-		}
-		if (f >= 0) {
-			calculate_md5(f, cur_hash);
-			if (strncmp(cur_hash, type != AUXILIARY_FILE ? node->hash : node->aux_hash, 32))
-				node->state = APP_OUTDATED;
-			else
-				node->state = APP_UPDATED;
-			switch (type) {
-			case VITA_EXECUTABLE:
-				sprintf(aux_fname, "ux0:app/%s/hash.vdb", node->titleid);
-				break;
-			case PSP_EXECUTABLE:
-				sprintf(aux_fname, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, node->id);
-				break;
-			case AUXILIARY_FILE:
-				sprintf(aux_fname, "ux0:app/%s/aux_hash.vdb", node->titleid);
-				break;
-			default:
-				printf("Fatal Error!!!!\n");
-				break;
-			}
-			f = sceIoOpen(aux_fname, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
-			sceIoWrite(f, cur_hash, 32);
-			sceIoClose(f);
-			return true;
-		} else
-			node->state = APP_UNTRACKED;
-		return false;
-	}
-}
-
-SceUID clash_thd;
-static int clashThread(unsigned int args, void *arg) {
-	AppSelection *app = apps;
-	while (app) {
-		AppSelection *chk = app->next;
-		while (chk) {
-			if (!strcmp(chk->titleid, app->titleid)) {
-				app->next_clash = chk;
-				chk->prev_clash = app;
-				break;
-			}
-			chk = chk->next;
-		}
-		app = app->next;
-	}
-	printf("clash thread ended\n");
-	return sceKernelExitDeleteThread(0);
-}
-
-bool update_detected = false;
-void AppendAppDatabase(const char *file, bool is_psp) {
-	// Read icons database
-	SceUID f = sceIoOpen("ux0:data/VitaDB/icons.db", SCE_O_RDONLY, 0777);
-	//printf("f is %x\n", f);
-	size_t icons_db_size = sceIoRead(f, generic_mem_buffer, MEM_BUFFER_SIZE);
-	//printf("icons_db_size is %x\n", icons_db_size);
-	char *icons_db = (char *)vglMalloc(icons_db_size + 1);
-	sceClibMemcpy(icons_db, generic_mem_buffer, icons_db_size);
-	icons_db[icons_db_size] = 0;
-	sceIoClose(f);
-	
-	uint32_t missing_icons_num = 0;
-	AppSelection *missing_icons[2048];
-
-	// Burning on screen the parsing text dialog
-	for (int i = 0; i < 3; i++) {
-		draw_text_dialog("Parsing apps list", true, !is_psp);
-	}
-	f = sceIoOpen(file, SCE_O_RDONLY, 0777);
-	if (f >= 0) {
-		size_t len = sceIoLseek(f, 0, SCE_SEEK_END);
-		sceIoLseek(f, 0, SCE_SEEK_SET);
-		char *buffer = (char*)malloc(len + 1);
-		sceIoRead(f, buffer, len);
-		sceIoClose(f);
-		buffer[len] = 0;
-		char *ptr = buffer;
-		char *end, *end2;
-		do {
-			char name[128], version[64], fname[128], fname2[128], has_trophies[4];
-			ptr = extractValue(name, ptr, "name", nullptr);
-			//printf("parsing %s\n", name);
-			if (!ptr)
-				break;
-			AppSelection *node = (AppSelection*)malloc(sizeof(AppSelection));
-			node->desc = nullptr;
-			node->requirements = nullptr;
-			node->next_clash = nullptr;
-			node->prev_clash = nullptr;
-			ptr = extractValue(node->icon, ptr, "icon", nullptr);
-			if (!strstr(icons_db, node->icon)) {
-				missing_icons[missing_icons_num++] = node;
-				//printf("%s is missing [%s]\n", node->icon, name);
-			}
-			ptr = extractValue(version, ptr, "version", nullptr);
-			ptr = extractValue(node->author, ptr, "author", nullptr);
-			ptr = extractValue(node->type, ptr, "type", nullptr);
-			ptr = extractValue(node->id, ptr, "id", nullptr);
-			if (!strncmp(node->id, "877", 3) && strlen(boot_params) == 0) { // VitaDB Downloader, check if newer than running version
-				if (strncmp(&version[2], VERSION, 3)) {
-					update_detected = true;
-					to_download = node;
-				}
-			}
-			ptr = extractValue(node->date, ptr, "date", nullptr);
-			ptr = extractValue(node->titleid, ptr, "titleid", nullptr);
-			ptr = extractValue(node->screenshots, ptr, "screenshots", nullptr);
-			ptr = extractValue(node->desc, ptr, "long_description", &node->desc);
-			node->desc = unescape(node->desc);
-			ptr = extractValue(node->downloads, ptr, "downloads", nullptr);
-			ptr = extractValue(node->source_page, ptr, "source", nullptr);
-			ptr = extractValue(node->release_page, ptr, "release_page", nullptr);
-			ptr = extractValue(node->trailer, ptr, "trailer", nullptr);
-			ptr = extractValue(node->size, ptr, "size", nullptr);
-			ptr = extractValue(node->data_size, ptr, "data_size", nullptr);
-			ptr = extractValue(node->hash, ptr, "hash", nullptr);
-			//printf("db hash %s\n", node->hash);
-			if (is_psp) {
-				int type_num;
-				sscanf(node->type, "%d", &type_num);
-				type_num -= 10;
-				sprintf(node->type, "%d", type_num);
-				sprintf(fname, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, node->id);
-				sprintf(fname2, "%spspemu/PSP/GAME/%s/EBOOT.PBP", pspemu_dev, node->id);
-			} else {
-				ptr = extractValue(node->aux_hash, ptr, "hash2", nullptr);
-				//printf("aux db hash %s\n", node->aux_hash);
-				sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
-				sprintf(fname2, "ux0:app/%s/eboot.bin", node->titleid);
-			}
-			if (checksum_match(fname, fname2, node, is_psp ? PSP_EXECUTABLE : VITA_EXECUTABLE)) {
-				if (!is_psp && strlen(node->aux_hash) > 0) {
-					sprintf(fname, "ux0:app/%s/aux_hash.vdb", node->titleid);
-					for (int i = 0; i < sizeof(aux_main_files) / sizeof(*aux_main_files); i++) {
-						if (checksum_match(fname, NULL, node, AUXILIARY_FILE))
-							break;
-					}
-				}
-			}
-			//printf("hash part done\n");
-			ptr = extractValue(node->requirements, ptr, "requirements", &node->requirements);
-			if (node->requirements)
-				node->requirements = unescape(node->requirements);
-			ptr = extractValue(has_trophies, ptr, "trophies", nullptr);
-			node->trophies = atoi(has_trophies);
-			ptr = extractValue(node->data_link, ptr, "data", nullptr);
-			if (strlen(node->data_link) > 5 && strstr(node->data_link, "www.rinnegatamante.eu")) { // Redirect to PSARCs any data files hosted on VitaDB webhost
-				strcat(node->data_link, ".psarc");
-			}
-			sprintf(node->name, "%s %s", name, version);
-			if (is_psp) {
-				node->next = psp_apps;
-				psp_apps = node;
-			} else {
-				if (node->state == APP_OUTDATED) {
-					if (strlen(boot_params) > 0 && !strcmp(boot_params, node->id))
-						to_download = node;
-				}
-				node->next = apps;
-				apps = node;
-			}
-		} while (ptr);
-		free(buffer);
-		
-		if (!is_psp) {
-			// Populate TitleID clashes
-			clash_thd = sceKernelCreateThread("Clasher Thread", &clashThread, 0x10000100, 0x100000, 0, 0, NULL);
-			sceKernelStartThread(clash_thd, 0, NULL);
-		}
-		
-		// Downloading missing icons
-		if (!update_detected) {
-			for (int i = 0; i < missing_icons_num; i++) {
-				sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/icons/%s", missing_icons[i]->icon);
-				download_file(download_link, "Downloading missing icons", false, i + 1, missing_icons_num);
-				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c", missing_icons[i]->icon[0], missing_icons[i]->icon[1]);
-				sceIoMkdir(download_link, 0777);
-				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c/%s", missing_icons[i]->icon[0], missing_icons[i]->icon[1], missing_icons[i]->icon);
-				sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
-				FILE *f = fopen("ux0:data/VitaDB/icons.db", "a");
-				fprintf(f, "%s\n", download_link);
-				fclose(f);
-			}
-		}
-	}
-	vglFree(icons_db);
-	//printf("finished parsing\n");
-}
-
-void AppendThemeDatabase(const char *file) {
-	sceIoMkdir("ux0:data/VitaDB/themes", 0777);
-	// Burning on screen the parsing text dialog
-	for (int i = 0; i < 3; i++) {
-		draw_text_dialog("Parsing themes list", true, false);
-	}
-	SceUID f = sceIoOpen(file, SCE_O_RDONLY, 0777);
-	if (f >= 0) {
-		uint32_t missing_previews_num = 0;
-		ThemeSelection *missing_previews[2048];
-		
-		size_t len = sceIoLseek(f, 0, SCE_SEEK_END);
-		sceIoLseek(f, 0, SCE_SEEK_SET);
-		char *buffer = (char*)malloc(len + 1);
-		sceIoRead(f, buffer, len);
-		buffer[len] = 0;
-		char *ptr = buffer;
-		char *end, *end2;
-		do {
-			char name[128], fname[256];
-			SceIoStat st;
-			ptr = extractValue(name, ptr, "name", nullptr);
-			//printf("parsing %s\n", name);
-			if (!ptr)
-				break;
-			ThemeSelection *node = (ThemeSelection*)malloc(sizeof(ThemeSelection));
-			sprintf(fname, "ux0:data/VitaDB/previews/%s.png", name);
-			if (sceIoGetstat(fname, &st) < 0)
-				missing_previews[missing_previews_num++] = node;
-			node->desc = nullptr;
-			node->shuffle = false;
-			strcpy(node->name, name);
-			sprintf(fname, "ux0:data/VitaDB/themes/%s/theme.ini", node->name);
-			
-			if (sceIoGetstat(fname, &st) >= 0)
-				node->state = APP_UPDATED;
-			else
-				node->state = APP_UNTRACKED;
-			ptr = extractValue(node->author, ptr, "author", nullptr);
-			//printf("%s\n", node->author);
-			ptr = extractValue(node->desc, ptr, "description", &node->desc);
-			//printf("%s\n", node->desc);
-			ptr = extractValue(node->credits, ptr, "credits", nullptr);
-			//printf("%s\n", node->credits);
-			ptr = extractValue(node->bg_type, ptr, "bg_type", nullptr);
-			//printf("%s\n", node->bg_type);
-			ptr = extractValue(node->has_music, ptr, "has_music", nullptr);
-			//printf("%s\n", node->has_music);
-			ptr = extractValue(node->has_font, ptr, "has_font", nullptr);
-			//printf("%s\n", node->has_font);
-			node->next = themes;
-			themes = node;
-		} while (ptr);
-		sceIoClose(f);
-		free(buffer);
-		
-		// Downloading missing previews
-		for (int i = 0; i < missing_previews_num; i++) {
-			sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/raw/main/previews/%s.png", missing_previews[i]->name);
-			download_file(download_link, "Downloading missing previews", false, i + 1, missing_previews_num);
-			sprintf(download_link, "ux0:data/VitaDB/previews/%s.png", missing_previews[i]->name);
-			sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
-		}
-	}
-	//printf("finished parsing\n");
-}
 
 #define READ_BUFFER_SIZE (128 * 1024)
 static char fname[512], ext_fname[512], *read_buffer;
@@ -808,20 +398,6 @@ void PrepareTrophy(const char *tid, const char *name, int index, int count) {
 	}
 }
 
-inline void swap_apps(AppSelection *prev, AppSelection *cur, AppSelection *next) {
-	if (prev)
-		prev->next = next;
-	cur->next = next->next;
-	next->next = cur;
-}
-
-inline void swap_themes(ThemeSelection *prev, ThemeSelection *cur, ThemeSelection *next) {
-	if (prev)
-		prev->next = next;
-	cur->next = next->next;
-	next->next = cur;
-}
-
 const char *sort_modes_str[] = {
 	"Most Recent",
 	"Oldest",
@@ -853,155 +429,9 @@ const char *filter_themes_modes[] = {
 	"Downloaded Themes",
 	"Not Downloaded Themes"
 };
+
 int sort_idx = 0;
 int old_sort_idx = -1;
-
-void sort_themelist(ThemeSelection **start) {
-	// Checking for empty list
-	if (start == NULL) 
-		return; 
-	
-	bool swapped; 
-  
-	do {
-		ThemeSelection *ptr1 = *start; 
-		ThemeSelection *lptr = NULL; 
-		swapped = false; 
-
-		int64_t d1, d2;
-		while (ptr1->next) {
-			bool last_swapped = false;
-			ThemeSelection *old_next = ptr1->next;
-			switch (sort_idx) {
-			case 0: // A-Z
-				if (strcasecmp(ptr1->name, ptr1->next->name) > 0) {
-					swap_themes(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case 1: // Z-A
-				if (strcasecmp(ptr1->name, ptr1->next->name) < 0) {
-					swap_themes(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			default:
-				break;
-			}
-			if (!last_swapped) {
-				lptr = ptr1;
-				ptr1 = ptr1->next; 
-			} else {
-				if (*start == ptr1)
-					*start = old_next;
-				lptr = old_next;
-			}
-		} 
-	} while (swapped); 
-}
-
-void sort_applist(AppSelection **start) {
-	// Ensuring clasher titleids check finished
-	sceKernelWaitThreadEnd(clash_thd, NULL, NULL);
-	printf("sort_applist called\n");
-
-	// Checking for empty list
-	if (start == NULL) 
-		return; 
-	
-	bool swapped; 
-  
-	do {
-		AppSelection *lptr = NULL; 
-		AppSelection *ptr1 = *start; 
-		swapped = false; 
-		
-		int64_t d1, d2;
-		char *dummy;
-		while (ptr1->next) {
-			bool last_swapped = false;
-			AppSelection *old_next = ptr1->next;
-			switch (sort_idx) {
-			case 0: // Most Recent
-				if (strcasecmp(ptr1->date, ptr1->next->date) < 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case 1: // Oldest
-				if (strcasecmp(ptr1->date, ptr1->next->date) > 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case 2: // Most Downloaded
-				d1 = strtoll(ptr1->downloads, &dummy, 10);
-				d2 = strtoll(ptr1->next->downloads, &dummy, 10);
-				if (d1 < d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case 3: // Least Downloaded
-				d1 = strtoll(ptr1->downloads, &dummy, 10);
-				d2 = strtoll(ptr1->next->downloads, &dummy, 10);
-				if (d1 > d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = 1;
-					last_swapped = true;
-				}
-				break;
-			case 4: // A-Z
-				if (strcasecmp(ptr1->name, ptr1->next->name) > 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case 5: // Z-A
-				if (strcasecmp(ptr1->name, ptr1->next->name) < 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case 6: // Smallest
-				d1 = strtoll(ptr1->size, &dummy, 10) + strtoll(ptr1->data_size, &dummy, 10);
-				d2 = strtoll(ptr1->next->size, &dummy, 10) + strtoll(ptr1->next->data_size, &dummy, 10);
-				if (d1 > d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case 7: // Largest
-				d1 = strtoll(ptr1->size, &dummy, 10) + strtoll(ptr1->data_size, &dummy, 10);
-				d2 = strtoll(ptr1->next->size, &dummy, 10) + strtoll(ptr1->next->data_size, &dummy, 10);
-				if (d1 < d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			default:
-				break;
-			}
-			if (!last_swapped) {
-				lptr = ptr1;
-				ptr1 = ptr1->next; 
-			} else {
-				if (*start == ptr1)
-					*start = old_next;
-				lptr = old_next;
-			}
-		} 
-	} while (swapped); 
-}
 
 bool filterApps(AppSelection *p) {
 	if (filter_idx) {
@@ -1688,9 +1118,9 @@ extract_libshacccg:
 				res = sceKernelGetThreadInfo(thd, &info);
 			} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 		}
-		AppendAppDatabase("ux0:data/VitaDB/apps.json", false);
+		populate_apps_database("ux0:data/VitaDB/apps.json", false);
 	} else {
-		AppendAppDatabase("ux0:data/vitadb.json", false);
+		populate_apps_database("ux0:data/vitadb.json", false);
 	}
 	
 	// Initializing remaining stuffs
@@ -1719,9 +1149,9 @@ extract_libshacccg:
 		if (old_sort_idx != sort_idx) {
 			old_sort_idx = sort_idx;
 			if (mode_idx == MODE_THEMES)
-				sort_themelist(&themes);
+				sort_themes_list(&themes, sort_idx);
 			else
-				sort_applist(mode_idx == MODE_VITA_HBS ? &apps : &psp_apps);
+				sort_apps_list(mode_idx == MODE_VITA_HBS ? &apps : &psp_apps, sort_idx);
 		}
 		
 		if (bg_image || has_animated_bg) {
@@ -2282,7 +1712,7 @@ extract_libshacccg:
 			}
 			if (ImGui::Button("View Changelog", ImVec2(-1.0f, 0.0f))) {
 				show_changelog = true;
-				changelog = GetChangelog("ux0:data/VitaDB/apps.json", hovered->id);
+				changelog = get_changelog("ux0:data/VitaDB/apps.json", hovered->id);
 			}
 			ImGui::End();
 		}
@@ -2992,7 +2422,7 @@ skip_install:
 			download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/themes.json", "Downloading themes list", false, -1, -1, previous_frame);
 			sceIoRemove("ux0:data/VitaDB/themes.json");
 			sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/themes.json");
-			AppendThemeDatabase("ux0:data/VitaDB/themes.json");
+			populate_themes_database("ux0:data/VitaDB/themes.json");
 		}
 		
 		// PSP database update required
@@ -3005,7 +2435,7 @@ skip_install:
 				draw_downloader_dialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading PSP apps list", 1, true, previous_frame);
 				res = sceKernelGetThreadInfo(thd, &info);
 			} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
-			AppendAppDatabase("ux0:data/VitaDB/psp_apps.json", true);
+			populate_apps_database("ux0:data/VitaDB/psp_apps.json", true);
 		}
 	}
 
