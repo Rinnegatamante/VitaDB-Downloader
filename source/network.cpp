@@ -72,7 +72,7 @@ static size_t write_video_cb(void *ptr, size_t size, size_t nmemb, void *stream)
 	if (is_cancelable) {
 		SceCtrlData pad;
 		sceCtrlPeekBufferPositive(0, &pad, 1);
-		if (pad.buttons & SCE_CTRL_CANCEL) {
+		if ((pad.buttons & SCE_CTRL_CANCEL) || (pad.buttons & SCE_CTRL_START)) {
 			is_canceled = true;
 			return 0;
 		}
