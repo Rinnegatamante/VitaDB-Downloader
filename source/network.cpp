@@ -281,7 +281,6 @@ int streamMemThread(unsigned int args, void *arg) {
 	}
 ABORT_DOWNLOAD:
 	downloaded_bytes = total_bytes;
-	generic_mem_buffer[downloaded_bytes] = 0;
 	curl_easy_cleanup(curl_handle);
 	return sceKernelExitDeleteThread(0);
 }
