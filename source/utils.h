@@ -23,7 +23,7 @@
 
 #define TEMP_DATA_DIR "ux0:/vdb_data"
 #define TEMP_DATA_PATH TEMP_DATA_DIR "/"
-#define TEMP_INSTALL_DIR "ux0:/vdb_vpk"
+#define TEMP_INSTALL_DIR "ux0:/data/vdb_vpk"
 #define TEMP_INSTALL_PATH TEMP_INSTALL_DIR "/"
 #define AUX_HASH_FILE TEMP_INSTALL_DIR "/aux_hash.vdb"
 #define HASH_FILE TEMP_INSTALL_DIR "/hash.vdb"

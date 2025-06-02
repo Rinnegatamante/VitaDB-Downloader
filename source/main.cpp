@@ -645,10 +645,8 @@ typedef struct {
 	uint32_t size;
 } entry;
 
-#include <lz4.h>
-
 int main(int argc, char *argv[]) {
-#if 1
+#if 0
 	sceSysmoduleLoadModule(SCE_SYSMODULE_RAZOR_CAPTURE);
 #endif
 	
