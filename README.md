@@ -4,7 +4,7 @@ VitaDB Downloader is the official PSVita/PSTV client for [VitaDB](https://www.ri
 ## Features
 - Searching by author/homebrew name.
 - Filtering apps by category.
-- Viewing of all available screenshots for apps.
+- Viewing of all available screenshots and video trailer for apps.
 - Sorting apps by different criteria (Most Recent, Oldest, Most Downloaded, Least Downloaded, Alphabetical, etc...)
 - Showing of several metadata for apps.
 - Download and installation of vpk+data files or vpk only at user discretion. (No more need to redownload data files everytime you want to update an homebrew for which data files are unchanged)
@@ -30,6 +30,14 @@ By default, a couple of homebrews are blacklisted from this process either cause
 It's also possible to add more blacklisted homebrews (for example, if you use a modded build which would be tagged as outdated by VitaDB Downloader). To do so, create the file `ux0:data/VitaDB/daemon_blacklist.txt` and add inside it a list of Title ID of the homebrews you want to blacklist in this format `ABCD12345;ABCD12346;ABCD12347`.
 
 ## Changelog
+
+### v.2.3
+- Fixed a bug causing renpy games to install with missing files.
+- Added the possibility to view Release Page and Sourcecode Page for homebrews (Available in the Manage submenu).
+- Added the possibility to view trailers for homebrews having one (Available in the Manage submenu or by pressing Start).
+- Made so that the PSVita homebrew icons are rendered with an animated 3D bubble effect simulating the look of the Livearea bubbles.
+- Made so that the titlebars for the subwindows properly respect console button assignation for Cancel/Confirm.
+- Fixed an issue causing memory corruption when swapping several times themes with animated backgrounds.
 
 ### v.2.2
 - Fixed a bug causing background to flicker during popups (example: during downloads).

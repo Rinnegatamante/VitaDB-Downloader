@@ -19,7 +19,7 @@
 #ifndef _UTILS_H
 #define _UTILS_H
 
-#define VERSION "2.2"
+#define VERSION "2.3"
 
 #define TEMP_DATA_DIR "ux0:/vdb_data"
 #define TEMP_DATA_PATH TEMP_DATA_DIR "/"
