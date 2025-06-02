@@ -102,7 +102,7 @@ int trophies_feature = FEATURE_OFF;
 
 SceUID trophy_thd;
 static int preview_width, preview_height, preview_x, preview_y;
-GLuint preview_icon = 0, preview_shot = 0, previous_frame = 0, bg_image = 0, trp_icon = 0, empty_icon = 0;
+GLuint preview_icon = 0, preview_shot = 0, bg_image = 0, trp_icon = 0, empty_icon = 0;
 void load_preview(AppSelection *game) {
 	if (old_hovered == game)
 		return;
@@ -880,7 +880,7 @@ extract_libshacccg:
 		if (!strstr((const char *)&generic_mem_buffer[20 * 1024 * 1024], "ux0:data/VitaDB/vdb_daemon.suprx")) {
 			init_interactive_msg_dialog("VitaDB Downloader features a functionality that allows the homebrew to check automatically, every hour and at every console bootup, if an update for an installed homebrew is available. A plugin is required to enable this feature, do you want to install it?");
 			while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-				draw_simple_texture(previous_frame);
+				glClear(GL_COLOR_BUFFER_BIT);
 				vglSwapBuffers(GL_TRUE);
 			}
 			SceMsgDialogResult msg_res;
@@ -1733,7 +1733,7 @@ extract_libshacccg:
 			setup_anti_burn_in();
 			init_interactive_msg_dialog("Do you really wish to uninstall this app?");
 			while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-				draw_simple_texture(previous_frame);
+				draw_simple_texture(anti_burn_in_texture);
 				vglSwapBuffers(GL_TRUE);
 			}
 			SceMsgDialogResult msg_res;
@@ -1769,7 +1769,7 @@ extract_libshacccg:
 				setup_anti_burn_in();
 				ThemeSelection *node = (ThemeSelection *)to_download;
 				sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/blob/main/themes/%s/theme.zip?raw=true", node->name);
-				download_file(download_link, "Downloading theme", false, -1, -1, previous_frame);
+				download_file(download_link, "Downloading theme", false, -1, -1, anti_burn_in_texture);
 				sprintf(download_link, "ux0:data/VitaDB/themes/%s/", node->name);
 				sceIoMkdir(download_link, 0777);
 				extract_zip_file(TEMP_DOWNLOAD_NAME, download_link, false);
@@ -1781,7 +1781,7 @@ extract_libshacccg:
 					setup_anti_burn_in();
 					init_interactive_msg_dialog("This homebrew has extra requirements in order to work properly:\n%s\n\nDo you wish to install it still?", to_download->requirements);
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-						draw_simple_texture(previous_frame);
+						draw_simple_texture(anti_burn_in_texture);
 						vglSwapBuffers(GL_TRUE);
 					}
 					SceMsgDialogResult msg_res;
@@ -1798,7 +1798,7 @@ extract_libshacccg:
 								if (strncmp(cur_hash, (const char *)generic_mem_buffer, 32)) {
 									init_interactive_msg_dialog("VitaDB Downloader detected an outdated version of kubridge.skprx. Do you wish to update it?\n\nNOTE: A console restart is required for kubridge.skprx update to complete.");
 									while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-										draw_simple_texture(previous_frame);
+										draw_simple_texture(anti_burn_in_texture);
 										vglSwapBuffers(GL_TRUE);
 									}
 									SceMsgDialogResult msg_res;
@@ -1806,7 +1806,7 @@ extract_libshacccg:
 									sceMsgDialogGetResult(&msg_res);
 									sceMsgDialogTerm();
 									if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
-										download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=611", "Downloading kubridge.skprx", false, -1, -1, previous_frame);
+										download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=611", "Downloading kubridge.skprx", false, -1, -1, anti_burn_in_texture);
 										if (kubridge_state == KUBRIDGE_UR0) {
 											copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
 											sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -1819,7 +1819,7 @@ extract_libshacccg:
 							} else {
 								init_interactive_msg_dialog("This homebrew requires kubridge.skprx but it's not installed on this console. Do you wish to install it as well?\n\nNOTE: A console restart is required for kubridge.skprx installation to complete.");
 								while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-									draw_simple_texture(previous_frame);
+									draw_simple_texture(anti_burn_in_texture);
 									vglSwapBuffers(GL_TRUE);
 								}
 								SceMsgDialogResult msg_res;
@@ -1827,7 +1827,7 @@ extract_libshacccg:
 								sceMsgDialogGetResult(&msg_res);
 								sceMsgDialogTerm();
 								if (msg_res.buttonId == SCE_MSG_DIALOG_BUTTON_ID_YES) {
-									download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=611", "Downloading kubridge.skprx", false, -1, -1, previous_frame);
+									download_file("https://www.rinnegatamante.eu/vitadb/get_hb_url.php?id=611", "Downloading kubridge.skprx", false, -1, -1, anti_burn_in_texture);
 									if (use_ur0_config) {
 										copy_file(TEMP_DOWNLOAD_NAME, "ur0:tai/kubridge.skprx");
 										sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -1891,7 +1891,7 @@ extract_libshacccg:
 							sprintf(clash_text, "This homebrew has a TitleID that clashes with other homebrews. Installing it will automatically uninstall any homebrew you have installed with the same TitleID.\nDo you want to proceed?");
 						init_interactive_msg_dialog(clash_text);
 						while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-							draw_simple_texture(previous_frame);
+							draw_simple_texture(anti_burn_in_texture);
 							vglSwapBuffers(GL_TRUE);
 						}
 						SceMsgDialogResult msg_res;
@@ -1910,7 +1910,7 @@ extract_libshacccg:
 					setup_anti_burn_in();
 					init_interactive_msg_dialog("This homebrew also has data files. Do you wish to install them as well?");
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-						draw_simple_texture(previous_frame);
+						draw_simple_texture(anti_burn_in_texture);
 						vglSwapBuffers(GL_TRUE);
 					}
 					SceMsgDialogResult msg_res;
@@ -1926,14 +1926,14 @@ extract_libshacccg:
 						if (free_space < (sz + sz2) * 2) {
 							init_msg_dialog("Not enough free storage to install this application. Installation aborted.");
 							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-								draw_simple_texture(previous_frame);
+								draw_simple_texture(anti_burn_in_texture);
 								vglSwapBuffers(GL_TRUE);
 							}
 							to_download = nullptr;
 							sceMsgDialogTerm();
 							continue;
 						}
-						if (!download_file(to_download->data_link, "Downloading data files", true, -1, -1, previous_frame)) {
+						if (!download_file(to_download->data_link, "Downloading data files", true, -1, -1, anti_burn_in_texture)) {
 							to_download = nullptr;
 							sceIoRemove(TEMP_DOWNLOAD_NAME);
 							continue;
@@ -1947,7 +1947,7 @@ extract_libshacccg:
 							sceIoClose(f);
 							bool extract_finished;
 							if (header == 0x52415350) // PSARC
-								extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, TEMP_DATA_DIR, true, previous_frame);
+								extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, TEMP_DATA_DIR, true, anti_burn_in_texture);
 							else // ZIP
 								extract_finished = extract_zip_file(TEMP_DOWNLOAD_NAME, TEMP_DATA_PATH, false, true);
 							if (!extract_finished) {
@@ -1972,7 +1972,7 @@ extract_libshacccg:
 				if (free_space < sz * 2) {
 					init_msg_dialog("Not enough free storage to install this application. Installation aborted.");
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-						draw_simple_texture(previous_frame);
+						draw_simple_texture(anti_burn_in_texture);
 						vglSwapBuffers(GL_TRUE);
 					}
 					sceMsgDialogTerm();
@@ -1980,7 +1980,7 @@ extract_libshacccg:
 					continue;
 				}
 				sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/get_psarc_url.php?id=%s", to_download->id);
-				if (!download_file(download_link, (char *)(mode_idx == MODE_VITA_HBS ? "Downloading vpk" : "Downloading app"), true, -1, -1, previous_frame)) {
+				if (!download_file(download_link, (char *)(mode_idx == MODE_VITA_HBS ? "Downloading vpk" : "Downloading app"), true, -1, -1, anti_burn_in_texture)) {
 					to_download = nullptr;
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 					if (downloading_data_files)
@@ -1988,7 +1988,7 @@ extract_libshacccg:
 					continue;
 				}
 				if (!strncmp(to_download->id, "877", 3)) { // Updating VitaDB Downloader
-					extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD", false, previous_frame); // We don't want VitaDB Downloader update to be abortable to prevent corruption
+					extract_psarc_file(TEMP_DOWNLOAD_NAME, "ux0:app/VITADBDLD", false, anti_burn_in_texture); // We don't want VitaDB Downloader update to be abortable to prevent corruption
 					sceIoRemove(TEMP_DOWNLOAD_NAME);
 					SceUID f = sceIoOpen("ux0:app/VITADBDLD/hash.vdb", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
 					sceIoWrite(f, to_download->hash, 32);
@@ -2006,7 +2006,7 @@ extract_libshacccg:
 						sceIoMkdir(TEMP_INSTALL_DIR, 0777);
 						bool extract_finished;
 						if (header == 0x52415350) // PSARC
-							extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, TEMP_INSTALL_DIR, true, previous_frame);
+							extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, TEMP_INSTALL_DIR, true, anti_burn_in_texture);
 						else // ZIP
 							extract_finished = extract_zip_file(TEMP_DOWNLOAD_NAME, TEMP_INSTALL_PATH, false, true);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
@@ -2026,7 +2026,7 @@ extract_libshacccg:
 					} else {
 						sprintf(tmp_path, "%spspemu/PSP/GAME/%s", pspemu_dev, to_download->id);
 						sceIoMkdir(tmp_path, 0777);
-						bool extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, tmp_path, true, previous_frame);
+						bool extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, tmp_path, true, anti_burn_in_texture);
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 						if (!extract_finished) {
 							recursive_rmdir(tmp_path);
@@ -2054,7 +2054,7 @@ extract_libshacccg:
 						if (sceIoGetstat(TEMP_INSTALL_DIR, &st) >= 0) {
 							init_msg_dialog("The installation process failed.");
 							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-								draw_simple_texture(previous_frame);
+								draw_simple_texture(anti_burn_in_texture);
 								vglSwapBuffers(GL_TRUE);
 							}
 							sceMsgDialogTerm();
@@ -2077,7 +2077,7 @@ skip_install:
 		if (is_ime_active) {
 			setup_anti_burn_in();
 			while (sceImeDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-				draw_simple_texture(previous_frame);
+				draw_simple_texture(anti_burn_in_texture);
 				vglSwapBuffers(GL_TRUE);
 			}
 			SceImeDialogResult res;
@@ -2097,7 +2097,7 @@ skip_install:
 			sprintf(dl_url, "ux0:data/VitaDB/trophies/%s", hovered->titleid);
 			sceIoMkdir(dl_url, 0777);
 			sprintf(dl_url, "https://www.rinnegatamante.eu/vitadb/get_trophies_for_app.php?id=%s", hovered->titleid);
-			download_file(dl_url, "Downloading trophies data", false, -1, -1, previous_frame);
+			download_file(dl_url, "Downloading trophies data", false, -1, -1, anti_burn_in_texture);
 			SceUID f = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_RDONLY, 0777);
 			size_t sz = sceIoLseek(f, 0, SCE_SEEK_END);
 			sceIoLseek(f, 0, SCE_SEEK_SET);
@@ -2186,7 +2186,7 @@ skip_install:
 			if (mode_idx == MODE_THEMES) {
 				ThemeSelection *node = (ThemeSelection *)hovered;
 				sprintf(download_link, "https://github.com/CatoTheYounger97/vitaDB_themes/raw/main/themes/%s/preview.png", node->name);				
-				download_file(download_link, "Downloading screenshot", false, -1, -1, previous_frame);
+				download_file(download_link, "Downloading screenshot", false, -1, -1, anti_burn_in_texture);
 				sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/ss0.png");
 			} else {
 				char *s = hovered->screenshots;
@@ -2206,7 +2206,7 @@ skip_install:
 					}
 				}
 				while (shot_idx < shot_num) {
-					download_file(shot_links[shot_idx], "Downloading screenshot", false, shot_idx + 1, shot_num, previous_frame);
+					download_file(shot_links[shot_idx], "Downloading screenshot", false, shot_idx + 1, shot_num, anti_burn_in_texture);
 					sprintf(shot_links[shot_idx], "ux0:data/VitaDB/ss%d.png", shot_idx);
 					sceIoRename(TEMP_DOWNLOAD_NAME, shot_links[shot_idx++]);
 				}
@@ -2225,11 +2225,11 @@ skip_install:
 		if (mode_idx == MODE_THEMES && !themes) {
 			setup_anti_burn_in();
 			if (sceIoGetstat("ux0:/data/VitaDB/previews", &st) < 0) {
-				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/previews.zip", "Downloading themes previews", false, -1, -1, previous_frame);
+				download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/previews.zip", "Downloading themes previews", false, -1, -1, anti_burn_in_texture);
 				extract_zip_file(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/", false);
 			}
 			
-			download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/themes.json", "Downloading themes list", false, -1, -1, previous_frame);
+			download_file("https://github.com/CatoTheYounger97/vitaDB_themes/releases/download/Nightly/themes.json", "Downloading themes list", false, -1, -1, anti_burn_in_texture);
 			sceIoRemove("ux0:data/VitaDB/themes.json");
 			sceIoRename(TEMP_DOWNLOAD_NAME, "ux0:data/VitaDB/themes.json");
 			populate_themes_database("ux0:data/VitaDB/themes.json");
@@ -2241,7 +2241,7 @@ skip_install:
 			SceUID thd = sceKernelCreateThread("Apps List Downloader", &appPspListThread, 0x10000100, 0x100000, 0, 0, NULL);
 			sceKernelStartThread(thd, 0, NULL);
 			do {
-				draw_downloader_dialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading PSP apps list", 1, true, previous_frame);
+				draw_downloader_dialog(downloader_pass, downloaded_bytes, total_bytes, "Downloading PSP apps list", 1, true, anti_burn_in_texture);
 				res = sceKernelGetThreadInfo(thd, &info);
 			} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 			populate_apps_database("ux0:data/VitaDB/psp_apps.json", true);
@@ -2282,7 +2282,7 @@ skip_install:
 			if (sceIoGetstat(TEMP_INSTALL_DIR, &st) >= 0) {
 				init_msg_dialog("The installation process failed.");
 				while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
-					draw_simple_texture(previous_frame);
+					draw_simple_texture(anti_burn_in_texture);
 					vglSwapBuffers(GL_TRUE);
 				}
 				sceMsgDialogTerm();
