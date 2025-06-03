@@ -38,6 +38,7 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 - Made so that the PSVita homebrew icons are rendered with an animated 3D bubble effect simulating the look of the Livearea bubbles.
 - Made so that the titlebars for the subwindows properly respect console button assignation for Cancel/Confirm.
 - Fixed an issue causing memory corruption when swapping several times themes with animated backgrounds.
+- Made so that vpks are installed from a lower depth folder. This can prevent edge cases where vpks with a lot of nested folders may fail to install correctly.
 
 ### v.2.2
 - Fixed a bug causing background to flicker during popups (example: during downloads).
