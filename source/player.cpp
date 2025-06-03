@@ -27,6 +27,12 @@
 #define FB_ALIGNMENT 0x40000
 #define ALIGN_MEM(x, align) (((x) + ((align) - 1)) & ~((align) - 1))
 
+extern "C" {
+#define SCE_AVPLAYER_STATE_READY (2)
+int sceAvPlayerStreamCount(SceAvPlayerHandle handle);
+int sceAvPlayerEnableStream(SceAvPlayerHandle handle, uint32_t stream_idx);
+};
+
 //#define DEBUG_PLAYER // Uncomment this to enable video player debugging
 
 extern int video_decoder_idx;
@@ -51,6 +57,7 @@ GLuint movie_frame[VIDEO_BUFFERS_NUM];
 uint8_t movie_frame_idx = 0;
 SceGxmTexture *movie_tex[VIDEO_BUFFERS_NUM];
 bool first_frame = true;
+uint64_t video_len = 0;
 
 static int audio_new;
 static int audio_port;
@@ -80,6 +87,28 @@ void *gpu_alloc(void *p, uint32_t align, uint32_t size) {
 void gpu_free(void *p, void *ptr) {
 	glFinish();
 	vglFree(ptr);
+}
+
+void video_events_handle(void* jumpback, int32_t event_type, int32_t src, void *data) {
+	if (event_type == SCE_AVPLAYER_STATE_READY) {
+		const int streams_num = sceAvPlayerStreamCount(movie_player);
+		if (streams_num > 0) {
+			for (int i = 0; i < streams_num; i++) {
+				SceAvPlayerStreamInfo stream_info;
+				sceAvPlayerGetStreamInfo(movie_player, i, &stream_info);
+				switch (stream_info.type) {
+				case SCE_AVPLAYER_VIDEO:
+					video_len = stream_info.duration;
+				case SCE_AVPLAYER_AUDIO:
+					sceAvPlayerEnableStream(movie_player, i);
+					break;
+				default:
+					break;
+				}
+			}
+		}
+		sceAvPlayerStart(movie_player);
+	}
 }
 
 int video_audio_thread(SceSize args, void *argp) {
@@ -192,6 +221,7 @@ void video_close() {
 }
 
 void video_open(const char *path) {
+	video_len = 0;
 	first_frame = true;
 	glGenTextures(VIDEO_BUFFERS_NUM, movie_frame);
 	for (int i = 0; i < VIDEO_BUFFERS_NUM; i++) {
@@ -216,7 +246,6 @@ void video_open(const char *path) {
 
 	playerInit.basePriority = 0xA0;
 	playerInit.numOutputVideoFrameBuffers = VIDEO_BUFFERS_NUM;
-	playerInit.autoStart = GL_TRUE;
 #if 0
 	playerInit.debugLevel = 3;
 #endif
@@ -228,6 +257,7 @@ void video_open(const char *path) {
 		playerInit.fileReplacement.close = video_stream_stop;
 		playerInit.fileReplacement.readOffset = video_stream_read;
 		playerInit.fileReplacement.size = video_stream_size;
+		playerInit.eventReplacement.eventCallback = video_events_handle;
 		
 		movie_player = sceAvPlayerInit(&playerInit);
 		sceAvPlayerAddSource(movie_player, "remote_stream.mp4"); // sceAvPlayer needs the source to end with ".mp4" for some reasons...
@@ -236,6 +266,7 @@ void video_open(const char *path) {
 		audio_thid = sceKernelCreateThread("video_audio_thread", video_audio_thread, 0x10000100 - 10, 0x4000, 0, 0, NULL);
 		sceKernelStartThread(audio_thid, 0, NULL);
 	} else {
+		playerInit.autoStart = GL_TRUE;
 		movie_player = sceAvPlayerInit(&playerInit);
 		sceAvPlayerAddSource(movie_player, path);
 		sceAvPlayerSetLooping(movie_player, 1);
@@ -267,4 +298,15 @@ GLuint video_get_frame(int *width, int *height) {
 	}
 	
 	return 0xDEADBEEF;
+}
+
+uint64_t video_get_current_time() {
+	if (player_state == PLAYER_ACTIVE && sceAvPlayerIsActive(movie_player)) {
+		return sceAvPlayerCurrentTime(movie_player);
+	}
+	return 0;
+}
+
+uint64_t video_get_total_time() {
+	return video_len;
 }

@@ -1553,8 +1553,8 @@ extract_libshacccg:
 		}
 		
 		if (trailer_feature == FEATURE_ON) {
-			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
-			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
+			ImGui::SetNextWindowPos(ImVec2(80, 45), ImGuiSetCond_Always);
+			ImGui::SetNextWindowSize(ImVec2(800, 485), ImGuiSetCond_Always);
 			if (SCE_CTRL_CANCEL == SCE_CTRL_CIRCLE) {
 				ImGui::Begin("Trailer Viewer (Start or Circle to close)", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 			} else {
@@ -1562,8 +1562,19 @@ extract_libshacccg:
 			}
 			int vid_w, vid_h;
 			GLuint vid_frame = video_get_frame(&vid_w, &vid_h);
-			if (vid_frame != 0xDEADBEEF)
+			if (vid_frame != 0xDEADBEEF) {
 				ImGui::Image((void*)vid_frame, ImVec2(800 - 19, 453 - 19));
+				char vid_timer[128];
+				uint64_t cur_time = video_get_current_time();
+				uint64_t total_time = video_get_total_time();
+				sprintf(vid_timer, "%02llu:%02llu / %02llu:%02llu", (cur_time / 1000) / 60, (cur_time / 1000) % 60, (total_time / 1000) / 60, (total_time / 1000) % 60);
+				ImGui::Text(vid_timer);
+				ImGui::SameLine();
+				ImGui::Text("  ");
+				ImGui::SameLine();
+				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (ImGui::CalcTextSize("0").y - 10) / 2);
+				ImGui::ProgressBar((float)cur_time / (float)total_time, ImVec2(-1.0, 10), "");
+			}
 			ImGui::End();
 		}
 		

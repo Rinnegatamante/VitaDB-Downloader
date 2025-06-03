@@ -22,5 +22,7 @@
 void video_open(const char *path);
 GLuint video_get_frame(int *width, int *height);
 void video_close();
+uint64_t video_get_current_time();
+uint64_t video_get_total_time();
 
 #endif
