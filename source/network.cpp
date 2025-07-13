@@ -182,10 +182,15 @@ int appListThread(unsigned int args, void *arg) {
 	fh = -1;
 
 	SceIoStat stat;
-	sceIoGetstat("ux0:data/VitaDB/apps.json", &stat);
-	total_bytes = stat.st_size;
+	if (sceIoGetstat("ux0:data/VitaDB/apps.json", &stat) >= 0) {
+		total_bytes = stat.st_size;
+	} else {
+		total_bytes = 12 * 1024;
+	}
 
-	startDownload("https://www.rinnegatamante.eu/vitadb/list_hbs_json.php");
+	while (downloaded_bytes < total_bytes) {
+		startDownload("https://www.rinnegatamante.eu/vitadb/list_hbs_json.php");
+	}
 
 	if (downloaded_bytes > 12 * 1024) {
 		fh = sceIoOpen("ux0:data/VitaDB/apps.json", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
@@ -204,10 +209,15 @@ int appPspListThread(unsigned int args, void *arg) {
 	fh = -1;
 
 	SceIoStat stat;
-	sceIoGetstat("ux0:data/VitaDB/psp_apps.json", &stat);
-	total_bytes = stat.st_size;
+	if (sceIoGetstat("ux0:data/VitaDB/psp_apps.json", &stat) >= 0) {
+		total_bytes = stat.st_size;
+	} else {
+		total_bytes = 12 * 1024;
+	}
 
-	startDownload("https://www.rinnegatamante.eu/vitadb/list_psp_hbs_json.php");
+	while (downloaded_bytes < total_bytes) {
+		startDownload("https://www.rinnegatamante.eu/vitadb/list_psp_hbs_json.php");
+	}
 
 	if (downloaded_bytes > 12 * 1024) {
 		fh = sceIoOpen("ux0:data/VitaDB/psp_apps.json", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
