@@ -36,6 +36,7 @@ int sceAvPlayerEnableStream(SceAvPlayerHandle handle, uint32_t stream_idx);
 //#define DEBUG_PLAYER // Uncomment this to enable video player debugging
 
 extern int video_decoder_idx;
+extern volatile bool is_canceled;
 
 enum {
 	PLAYER_INACTIVE,
@@ -65,6 +66,7 @@ static int audio_len;
 static int audio_freq;
 static int audio_mode;
 static SceUID audio_thid;
+SceUID video_stream_thid;
 
 static bool is_local = true;
 
@@ -170,6 +172,10 @@ int video_stream_read(void *argp, uint8_t *buffer, uint64_t pos, uint32_t len) {
 #ifdef DEBUG_PLAYER
 	sceClibPrintf("player.cpp: Called video_stream_read with pos: 0x%llX size: %u\n", pos, len);
 #endif
+
+	if (len > VIDEO_DECODER_BUFFER_SIZE) {
+		return 0;
+	}
 	
 	// Wait until downloader catches up with the decoder
 	while (pos + len > downloaded_bytes) {
@@ -211,8 +217,10 @@ void video_close() {
 	if (player_state == PLAYER_ACTIVE) {
 		sceAvPlayerStop(movie_player);
 		if (!is_local) {
+			is_canceled = true;
 			sceKernelWaitThreadEnd(audio_thid, NULL, NULL);
 			video_audio_shutdown();
+			sceKernelWaitThreadEnd(video_stream_thid, NULL, NULL);
 		}
 		sceAvPlayerClose(movie_player);
 		player_state = PLAYER_INACTIVE;

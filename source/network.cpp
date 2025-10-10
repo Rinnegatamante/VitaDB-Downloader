@@ -40,12 +40,17 @@ uint8_t *generic_mem_buffer = nullptr;
 static SceUID fh;
 char *bytes_string;
 extern int SCE_CTRL_CANCEL;
+extern SceUID video_stream_thid;
 
 volatile uint64_t video_buffer_bytes = 0;
 volatile int video_decoder_idx = 0;
 volatile int video_downloader_idx = 0;
 
 static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *stream) {
+	if (is_canceled) {
+		return 0;
+	}
+	
 	if (is_cancelable) {
 		SceCtrlData pad;
 		sceCtrlPeekBufferPositive(0, &pad, 1);
@@ -69,6 +74,10 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *stream) {
 }
 
 static size_t write_video_cb(void *ptr, size_t size, size_t nmemb, void *stream) {
+	if (is_canceled) {
+		return 0;
+	}
+	
 	if (is_cancelable) {
 		SceCtrlData pad;
 		sceCtrlPeekBufferPositive(0, &pad, 1);
@@ -87,7 +96,9 @@ static size_t write_video_cb(void *ptr, size_t size, size_t nmemb, void *stream)
 		// We wait until decoder has completely consumed at least a buffer prior to keep downloading new data
 		while (video_downloader_idx == video_decoder_idx) {
 			// If a request to stop current curl handle is found, we just intentionally cause curl to error out
-			if (is_cancelable) {
+			if (is_canceled) {
+				return 0;
+			} else if (is_cancelable) {
 				SceCtrlData pad;
 				sceCtrlPeekBufferPositive(0, &pad, 1);
 				if (pad.buttons & SCE_CTRL_CANCEL) {
@@ -100,6 +111,9 @@ static size_t write_video_cb(void *ptr, size_t size, size_t nmemb, void *stream)
 		
 		sceClibMemcpy(&generic_mem_buffer[video_downloader_idx * VIDEO_DECODER_BUFFER_SIZE], (uint8_t *)ptr + (VIDEO_DECODER_BUFFER_SIZE - video_buffer_bytes), nmemb - (VIDEO_DECODER_BUFFER_SIZE - video_buffer_bytes));
 		video_buffer_bytes = nmemb - (VIDEO_DECODER_BUFFER_SIZE - video_buffer_bytes);
+		if (nmemb > (VIDEO_DECODER_BUFFER_SIZE - video_buffer_bytes)) {
+			video_buffer_bytes = nmemb - (VIDEO_DECODER_BUFFER_SIZE - video_buffer_bytes);
+		}
 	} else {
 		sceClibMemcpy(&generic_mem_buffer[video_downloader_idx * VIDEO_DECODER_BUFFER_SIZE + video_buffer_bytes], ptr, nmemb);
 		video_buffer_bytes += nmemb;
@@ -394,7 +408,7 @@ void early_download_file(char *url, char *text) {
 void stream_video(char *url) {
 	is_canceled = false;
 	is_cancelable = true;
-	SceUID thd = sceKernelCreateThread("Video Streamer", &streamMemThread, 0x10000100, 0x100000, 0, 0, NULL);
+	video_stream_thid = sceKernelCreateThread("Video Streamer", &streamMemThread, 0x10000100, 0x100000, 0, 0, NULL);
 	sprintf((char *)generic_url, url);
-	sceKernelStartThread(thd, 0, NULL);
+	sceKernelStartThread(video_stream_thid, 0, NULL);
 }
