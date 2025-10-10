@@ -119,6 +119,10 @@ void check_updates(const char *file) {
 		sceIoRead(f, buffer, len);
 		sceIoClose(f);
 		buffer[len] = 0;
+		if (!strstr(buffer, "\"titleid\":")) {
+			taipool_free(buffer);
+			return;
+		}
 		char *ptr = buffer;
 		char *end, *end2;
 		do {
