@@ -930,6 +930,7 @@ extract_libshacccg:
 	
 	
 	// Downloading apps list
+	bool is_vitadb_online = true;
 	sceAppMgrUmount("app0:");
 	if (strlen(boot_params) == 0) {
 		if (!(pad.buttons & SCE_CTRL_RTRIGGER) || sceIoGetstat("ux0:data/VitaDB/apps.json", &st) < 0) {
@@ -940,9 +941,20 @@ extract_libshacccg:
 				res = sceKernelGetThreadInfo(thd, &info);
 			} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 		}
-		populate_apps_database("ux0:data/VitaDB/apps.json", false);
+		is_vitadb_online = populate_apps_database("ux0:data/VitaDB/apps.json", false);
 	} else {
-		populate_apps_database("ux0:data/vitadb.json", false);
+		is_vitadb_online = populate_apps_database("ux0:data/vitadb.json", false);
+	}
+	
+	if (!is_vitadb_online) {
+		init_msg_dialog("VitaDB is offline. Please try again later.");
+		int status = sceMsgDialogGetStatus();
+		do {
+			vglSwapBuffers(GL_TRUE);
+			status = sceMsgDialogGetStatus();
+		} while (status != SCE_COMMON_DIALOG_STATUS_FINISHED);
+		sceMsgDialogTerm();
+		sceKernelExitProcess(0);
 	}
 	
 	// Initializing remaining stuffs

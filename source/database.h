@@ -109,7 +109,7 @@ extern bool update_detected;
 
 char *get_changelog(const char *file, char *id);
 
-void populate_apps_database(const char *file, bool is_psp);
+bool populate_apps_database(const char *file, bool is_psp);
 void populate_themes_database(const char *file);
 
 void sort_apps_list(AppSelection **start, int sort_idx);

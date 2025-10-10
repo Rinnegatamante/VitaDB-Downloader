@@ -186,7 +186,7 @@ char *get_changelog(const char *file, char *id) {
 	return res;
 }
 
-void populate_apps_database(const char *file, bool is_psp) {
+bool populate_apps_database(const char *file, bool is_psp) {
 	// Read icons database
 	SceUID f = sceIoOpen("ux0:data/VitaDB/icons.db", SCE_O_RDONLY, 0777);
 	//printf("f is %x\n", f);
@@ -212,6 +212,9 @@ void populate_apps_database(const char *file, bool is_psp) {
 		sceIoRead(f, buffer, len);
 		sceIoClose(f);
 		buffer[len] = 0;
+		if (!strstr(buffer, "\"name\":")) {
+			return false;
+		}
 		char *ptr = buffer;
 		char *end, *end2;
 		do {
@@ -324,6 +327,7 @@ void populate_apps_database(const char *file, bool is_psp) {
 	}
 	vglFree(icons_db);
 	//printf("finished parsing\n");
+	return true;
 }
 
 static inline void swap_apps(AppSelection *prev, AppSelection *cur, AppSelection *next) {
