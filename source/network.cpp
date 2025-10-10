@@ -42,8 +42,8 @@ char *bytes_string;
 extern int SCE_CTRL_CANCEL;
 
 volatile uint64_t video_buffer_bytes = 0;
-int video_decoder_idx = 0;
-int video_downloader_idx = 0;
+volatile int video_decoder_idx = 0;
+volatile int video_downloader_idx = 0;
 
 static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *stream) {
 	if (is_cancelable) {

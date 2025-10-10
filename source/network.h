@@ -29,9 +29,6 @@ extern volatile uint64_t total_bytes;
 extern volatile uint64_t downloaded_bytes;
 extern volatile uint8_t downloader_pass;
 
-extern int video_decoder_idx;
-extern int video_downloader_idx;
-
 int appListThread(unsigned int args, void *arg);
 int appPspListThread(unsigned int args, void *arg);
 int downloadThread(unsigned int args, void *arg);
