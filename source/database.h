@@ -29,6 +29,12 @@ enum {
 };
 
 enum {
+	APP_WHITELISTED,
+	APP_BLACKLISTED,
+	APP_HARD_BLACKLISTED
+};
+
+enum {
 	SORT_APPS_NEWEST,
 	SORT_APPS_OLDEST,
 	SORT_APPS_MOST_DOWNLOADED,
@@ -85,7 +91,7 @@ struct AppSelection {
 	char data_link[128];
 	int state;
 	bool trophies;
-	bool blacklisted;
+	uint8_t blacklisted;
 	AppSelection *next_clash;
 	AppSelection *prev_clash;
 	AppSelection *next;

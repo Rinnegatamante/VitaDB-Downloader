@@ -35,6 +35,27 @@ AppSelection *psp_apps = nullptr;
 TrophySelection *trophies = nullptr;
 std::vector<std::string> daemon_blacklist;
 
+char *hardcoded_daemon_blacklist[] = {
+	"ABCD12345",
+	"DEDALOX64",
+	"RETROVITA",
+	"JULIUS001",
+	"DVLX00001",
+	"GMSV00001",
+	"MAIM00001",
+	"MLCL00003",
+	"OPENTITUS",
+	"REGEDIT01",
+	"SVMP00001",
+	"SWKK00001",
+	"VID000016",
+	"VITAPONG0",
+	"VSCU00001",
+	"YYOLOADER",
+	"NZZMBSPTB",
+	"XASH00001"
+};
+
 static SceUID clash_thd;
 
 extern char boot_params[1024];
@@ -271,11 +292,18 @@ bool populate_apps_database(const char *file, bool is_psp) {
 				sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
 				sprintf(fname2, "ux0:app/%s/eboot.bin", node->titleid);
 				
-				node->blacklisted = false;
-				for (auto &s : daemon_blacklist) {
-					if (s == node->titleid) {
-						node->blacklisted = true;
-						break;
+				node->blacklisted = APP_WHITELISTED;
+				for (int i = 0; i < sizeof(hardcoded_daemon_blacklist) / sizeof(*hardcoded_daemon_blacklist); i++) {
+					if (!strcmp(hardcoded_daemon_blacklist[i], node->titleid)) {
+						node->blacklisted = APP_HARD_BLACKLISTED;
+					}
+				}
+				if (node->blacklisted == APP_WHITELISTED) {
+					for (auto &s : daemon_blacklist) {
+						if (s == node->titleid) {
+							node->blacklisted = APP_BLACKLISTED;
+							break;
+						}
 					}
 				}
 			}

@@ -1382,10 +1382,10 @@ extract_libshacccg:
 					if (hovered->state != APP_UNTRACKED) {
 						ImGui::SetCursorPosY(132);
 						ImGui::SetCursorPosX(320);
-						if (hovered->blacklisted) {
-							ImGui::TextColored(TextOutdated, "Blacklisted");
-						} else {
+						if (hovered->blacklisted == APP_WHITELISTED) {
 							ImGui::TextColored(TextUpdated, "Whitelisted");
+						} else {
+							ImGui::TextColored(TextOutdated, "Blacklisted");
 						}
 					}
 				}
@@ -1460,6 +1460,8 @@ extract_libshacccg:
 				printf("Fatal error\n");
 				break;
 			}
+			if (hovered->blacklisted == APP_HARD_BLACKLISTED && hovered->state != APP_UNTRACKED) // Hardcoded blacklisted app can't be white/blacklisted
+				num_items--;
 			if (hovered->requirements)
 				num_items++;
 			if (strlen(hovered->screenshots) > 5)
@@ -1514,14 +1516,15 @@ extract_libshacccg:
 					hovered->state = APP_UPDATED;
 				}
 			}
-			if (mode_idx == MODE_VITA_HBS && hovered->state != APP_UNTRACKED) {
+			if (mode_idx == MODE_VITA_HBS && hovered->state != APP_UNTRACKED && hovered->blacklisted != APP_HARD_BLACKLISTED) {
 				if (ImGui::Button(hovered->blacklisted ? "Whitelist for Daemon Updates" : "Blacklist for Daemon Updates", ImVec2(-1.0f, 0.0f))) {
-					if (hovered->blacklisted) {
+					if (hovered->blacklisted == APP_BLACKLISTED) {
 						remove_daemon_blacklist(hovered->titleid);
+						hovered->blacklisted == APP_WHITELISTED;
 					} else {
 						insert_daemon_blacklist(hovered->titleid);
+						hovered->blacklisted == APP_BLACKLISTED;
 					}
-					hovered->blacklisted = !hovered->blacklisted;
 					AppSelection *clashes = hovered->prev_clash;
 					while (clashes) {
 						clashes->blacklisted = hovered->blacklisted;
