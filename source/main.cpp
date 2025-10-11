@@ -1374,10 +1374,20 @@ extract_libshacccg:
 					ImGui::TextColored(TextLabel, "TitleID:");
 					ImGui::SetCursorPosY(56);
 					ImGui::SetCursorPosX(320);
-					if (hovered->next_clash || hovered->prev_clash)
+					if (hovered->next_clash || hovered->prev_clash) {
 						ImGui::TextColored(TextOutdated, hovered->titleid);
-					else
+					} else {
 						ImGui::Text(hovered->titleid);
+					}
+					if (hovered->state != APP_UNTRACKED) {
+						ImGui::SetCursorPosY(132);
+						ImGui::SetCursorPosX(320);
+						if (hovered->blacklisted) {
+							ImGui::TextColored(TextOutdated, "Blacklisted");
+						} else {
+							ImGui::TextColored(TextUpdated, "Whitelisted");
+						}
+					}
 				}
 				ImGui::SetCursorPosY(38);
 				ImGui::SetCursorPosX(mode_idx == MODE_VITA_HBS ? 140 : 156);
