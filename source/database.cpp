@@ -59,6 +59,7 @@ static const char *aux_main_files[5] = {
 	"Media/sharedassets0.assets.resS", // Unity
 	"games/game.win", // GameMaker Studio
 	"index.lua", // LuaPlayer Plus Vita
+    "main.lua", // LifeLua
 	"game.apk", // YoYo Loader
 	"game_data/game.pck" // Godot
 };
