@@ -1621,6 +1621,9 @@ extract_libshacccg:
 				ImGui::SameLine();
 				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (ImGui::CalcTextSize("0").y - 10) / 2);
 				ImGui::ProgressBar((float)cur_time / (float)total_time, ImVec2(-1.0, 10), "");
+			} else if (video_is_finished()) {
+				trailer_feature = FEATURE_OFF;
+				close_trailer();
 			}
 			ImGui::End();
 		}

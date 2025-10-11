@@ -60,6 +60,7 @@ SceGxmTexture *movie_tex[VIDEO_BUFFERS_NUM];
 bool first_frame = true;
 uint64_t video_len = 0;
 
+static bool finished = false;
 static int audio_new;
 static int audio_port;
 static int audio_len;
@@ -229,6 +230,7 @@ void video_close() {
 }
 
 void video_open(const char *path) {
+	finished = false;
 	video_len = 0;
 	first_frame = true;
 	glGenTextures(VIDEO_BUFFERS_NUM, movie_frame);
@@ -302,6 +304,8 @@ GLuint video_get_frame(int *width, int *height) {
 				first_frame = false;
 			}
 			return first_frame ? 0xDEADBEEF : movie_frame[movie_frame_idx];
+		} else if (!first_frame) {
+			finished = true;
 		}
 	}
 	
@@ -317,4 +321,8 @@ uint64_t video_get_current_time() {
 
 uint64_t video_get_total_time() {
 	return video_len;
+}
+
+bool video_is_finished() {
+	return finished;
 }
