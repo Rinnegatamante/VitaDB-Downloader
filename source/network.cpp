@@ -130,6 +130,13 @@ static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata
 		sceClibPrintf("network.cpp: Detected total length of %llu bytes.\n", total_bytes);
 #endif
 	}
+	ptr = strcasestr(buffer, "Json-Length");
+		if (ptr != NULL) {
+		sscanf(ptr, "Json-Length: %llu", &total_bytes);
+#ifdef DEBUG_NET
+		sceClibPrintf("network.cpp: Detected total length of %llu bytes.\n", total_bytes);
+#endif
+	}
 	return nitems;
 }
 
@@ -190,6 +197,8 @@ static void startStream(const char *url) {
 }
 
 int appListThread(unsigned int args, void *arg) {
+	is_cancelable = false;
+	is_canceled = false;
 	curl_handle = curl_easy_init();
 	downloader_pass = 1;
 	downloaded_bytes = 0;
@@ -217,6 +226,8 @@ int appListThread(unsigned int args, void *arg) {
 }
 
 int appPspListThread(unsigned int args, void *arg) {
+	is_cancelable = false;
+	is_canceled = false;
 	curl_handle = curl_easy_init();
 	downloader_pass = 1;
 	downloaded_bytes = 0;
@@ -371,6 +382,8 @@ bool download_file(char *url, char *text, bool cancelable, int custom_index, int
 }
 
 void silent_download(char *url) {
+	is_canceled = false;
+	is_cancelable = false;
 	SceKernelThreadInfo info;
 	info.size = sizeof(SceKernelThreadInfo);
 	int res = 0;
@@ -383,6 +396,8 @@ void silent_download(char *url) {
 }
 
 void early_download_file(char *url, char *text) {
+	is_canceled = false;
+	is_cancelable = false;
 	SceKernelThreadInfo info;
 	info.size = sizeof(SceKernelThreadInfo);
 	int res = 0;

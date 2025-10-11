@@ -55,7 +55,7 @@ const char *sort_modes_themes_str[2] = {
 	"Alphabetical (Z-A)"
 };
 
-static const char *aux_main_files[5] = {
+static const char *aux_main_files[6] = {
 	"Media/sharedassets0.assets.resS", // Unity
 	"games/game.win", // GameMaker Studio
 	"index.lua", // LuaPlayer Plus Vita
