@@ -19,6 +19,9 @@
 #ifndef _DATABASE_H
 #define _DATABASE_H
 
+#include <vector>
+#include <string>
+
 enum {
 	APP_UNTRACKED,
 	APP_OUTDATED,
@@ -82,6 +85,7 @@ struct AppSelection {
 	char data_link[128];
 	int state;
 	bool trophies;
+	bool blacklisted;
 	AppSelection *next_clash;
 	AppSelection *prev_clash;
 	AppSelection *next;
@@ -100,6 +104,8 @@ struct ThemeSelection {
 	ThemeSelection *next;
 };
 
+extern std::vector<std::string> daemon_blacklist;
+
 extern ThemeSelection *themes;
 extern AppSelection *apps;
 extern AppSelection *psp_apps;
@@ -111,6 +117,10 @@ char *get_changelog(const char *file, char *id);
 
 bool populate_apps_database(const char *file, bool is_psp);
 void populate_themes_database(const char *file);
+
+void populate_daemon_blacklist();
+void insert_daemon_blacklist(char *tid);
+void remove_daemon_blacklist(char *tid);
 
 void sort_apps_list(AppSelection **start, int sort_idx);
 void sort_themes_list(ThemeSelection **start, int sort_idx);

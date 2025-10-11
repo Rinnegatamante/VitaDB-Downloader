@@ -33,6 +33,7 @@ ThemeSelection *themes = nullptr;
 AppSelection *apps = nullptr;
 AppSelection *psp_apps = nullptr;
 TrophySelection *trophies = nullptr;
+std::vector<std::string> daemon_blacklist;
 
 static SceUID clash_thd;
 
@@ -269,6 +270,14 @@ bool populate_apps_database(const char *file, bool is_psp) {
 				//printf("aux db hash %s\n", node->aux_hash);
 				sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
 				sprintf(fname2, "ux0:app/%s/eboot.bin", node->titleid);
+				
+				node->blacklisted = false;
+				for (auto &s : daemon_blacklist) {
+					if (s == node->titleid) {
+						node->blacklisted = true;
+						break;
+					}
+				}
 			}
 			if (checksum_match(fname, fname2, node, is_psp ? PSP_EXECUTABLE : VITA_EXECUTABLE)) {
 				if (!is_psp && strlen(node->aux_hash) > 0) {
@@ -329,6 +338,66 @@ bool populate_apps_database(const char *file, bool is_psp) {
 	vglFree(icons_db);
 	//printf("finished parsing\n");
 	return true;
+}
+
+void populate_daemon_blacklist() {
+	daemon_blacklist.clear();
+	SceUID fd = sceIoOpen("ux0:data/VitaDB/daemon_blacklist.txt", SCE_O_RDONLY, 0777);
+	if (fd >= 0) {
+		uint64_t len = sceIoLseek(fd, 0, SCE_SEEK_END);
+		sceIoLseek(fd, 0, SCE_SEEK_SET);
+		char *buffer = (char *)malloc(len + 1);
+		char *_buffer = buffer;
+		sceIoRead(fd, buffer, len);
+		buffer[len] = 0;
+		sceIoClose(fd);
+		for (int i = 0; i < len; i += 10) {
+			buffer[9] = 0;
+			daemon_blacklist.push_back(buffer);
+			buffer += 10;
+		}
+		free(_buffer);
+	}
+}
+
+void insert_daemon_blacklist(char *tid) {
+	daemon_blacklist.push_back(tid);
+	SceUID fd = sceIoOpen("ux0:data/VitaDB/daemon_blacklist.txt", SCE_O_WRONLY | SCE_O_CREAT, 0777);
+	uint64_t len = sceIoLseek(fd, 0, SCE_SEEK_END);
+	if (len > 0) {
+		char buffer[12];
+		sprintf(buffer, ";%s", tid);
+		sceIoWrite(fd, buffer, 10);
+	} else {
+		sceIoWrite(fd, tid, 9);
+	}
+	sceIoClose(fd);
+}
+
+void remove_daemon_blacklist(char *tid) {
+	if (daemon_blacklist.size() > 1) {
+		char *buffer = (char *)malloc((daemon_blacklist.size() - 1) * 10 + 1);
+		buffer[0] = 0;
+		int idx = 0;
+		int to_delete = 0;
+		for (std::string& s : daemon_blacklist) {
+			if (s == tid) {
+				to_delete = idx;
+			} else {
+				strcat(buffer, s.c_str());
+				strcat(buffer, ";");
+			}
+			idx++;
+		}
+		daemon_blacklist.erase(daemon_blacklist.begin() + to_delete);
+		SceUID fd = sceIoOpen("ux0:data/VitaDB/daemon_blacklist.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+		sceIoWrite(fd, buffer, daemon_blacklist.size() * 10 - 1);
+		sceIoClose(fd);
+		free(buffer);
+	} else {
+		daemon_blacklist.clear();
+		sceIoRemove("ux0:data/VitaDB/daemon_blacklist.txt");
+	}
 }
 
 static inline void swap_apps(AppSelection *prev, AppSelection *cur, AppSelection *next) {
@@ -506,6 +575,8 @@ void populate_themes_database(const char *file) {
 	}
 	//printf("finished parsing\n");
 }
+
+
 
 static inline void swap_themes(ThemeSelection *prev, ThemeSelection *cur, ThemeSelection *next) {
 	if (prev)

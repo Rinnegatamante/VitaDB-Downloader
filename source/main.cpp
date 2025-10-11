@@ -928,6 +928,8 @@ extract_libshacccg:
 		sceIoRemove(TEMP_DOWNLOAD_NAME);
 	}
 	
+	// Populating daemon blacklist
+	populate_daemon_blacklist();
 	
 	// Downloading apps list
 	bool is_vitadb_online = true;
@@ -956,7 +958,7 @@ extract_libshacccg:
 		sceMsgDialogTerm();
 		sceKernelExitProcess(0);
 	}
-	
+
 	// Initializing remaining stuffs
 	populate_pspemu_path();
 	char *changelog = nullptr;
@@ -978,7 +980,7 @@ extract_libshacccg:
 	AppSelection *decremented_app = nullptr;
 	ThemeSelection *to_install = nullptr;
 	int decrement_stack_idx = 0;
-	
+
 	while (!update_detected) {
 		if (old_sort_idx != sort_idx) {
 			old_sort_idx = sort_idx;
@@ -1435,11 +1437,11 @@ extract_libshacccg:
 		if (extra_menu_invoked) {
 			int num_items;
 			switch (hovered->state) {
-			case APP_OUTDATED: // Launch, Update, Screenshots (if any), Changelog, Uninstall, Tag Update
-				num_items = mode_idx == MODE_VITA_HBS ? 5 : 4; // FIXME: Add PSP hbs launch via Adrenaline
+			case APP_OUTDATED: // Launch, Update, Changelog, Uninstall, Tag Update, Blacklist
+				num_items = mode_idx == MODE_VITA_HBS ? 6 : 4; // FIXME: Add PSP hbs launch via Adrenaline
 				break;
-			case APP_UPDATED: // Launch, Screenshots (if any), Changelog, Uninstall
-				num_items = mode_idx == MODE_VITA_HBS ? 3 : 2; // FIXME: Add PSP hbs launch via Adrenaline
+			case APP_UPDATED: // Launch, Changelog, Uninstall, Blacklist
+				num_items = mode_idx == MODE_VITA_HBS ? 4 : 2; // FIXME: Add PSP hbs launch via Adrenaline
 				break;
 			case APP_UNTRACKED: // Install, Screenshots (if any), Changelog
 				num_items = 2;
@@ -1500,6 +1502,26 @@ extract_libshacccg:
 					sceIoWrite(f, hovered->hash, 32);
 					sceIoClose(f);
 					hovered->state = APP_UPDATED;
+				}
+			}
+			if (mode_idx == MODE_VITA_HBS && hovered->state != APP_UNTRACKED) {
+				if (ImGui::Button(hovered->blacklisted ? "Whitelist for Daemon Updates" : "Blacklist for Daemon Updates", ImVec2(-1.0f, 0.0f))) {
+					if (hovered->blacklisted) {
+						remove_daemon_blacklist(hovered->titleid);
+					} else {
+						insert_daemon_blacklist(hovered->titleid);
+					}
+					hovered->blacklisted = !hovered->blacklisted;
+					AppSelection *clashes = hovered->prev_clash;
+					while (clashes) {
+						clashes->blacklisted = hovered->blacklisted;
+						clashes = clashes->prev_clash;
+					}
+					clashes = hovered->next_clash;
+					while (clashes) {
+						clashes->blacklisted = hovered->blacklisted;
+						clashes = clashes->next_clash;
+					}
 				}
 			}
 			if (hovered->trophies) {

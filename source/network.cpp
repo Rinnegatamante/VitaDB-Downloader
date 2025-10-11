@@ -131,7 +131,7 @@ static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata
 #endif
 	}
 	ptr = strcasestr(buffer, "Json-Length");
-		if (ptr != NULL) {
+	if (ptr != NULL) {
 		sscanf(ptr, "Json-Length: %llu", &total_bytes);
 #ifdef DEBUG_NET
 		sceClibPrintf("network.cpp: Detected total length of %llu bytes.\n", total_bytes);
