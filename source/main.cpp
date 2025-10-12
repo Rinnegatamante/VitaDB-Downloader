@@ -211,19 +211,46 @@ void PrepareTrophy(const char *tid, const char *name, int index, int count) {
 }
 
 enum {
-	FILTER_APPS_ALL,
-	FILTER_APPS_GAME,
-	FILTER_APPS_PORT,
-	FILTER_APPS_UTILITY,
-	FILTER_APPS_EMULATOR,
-	FILTER_APPS_FREEWARE,
-	FILTER_APPS_NOT_INSTALLED,
-	FILTER_APPS_OUTDATED,
-	FILTER_APPS_INSTALLED,
-	FILTER_APPS_TROPHY
+	FILTER_VITA_APPS_ALL,
+	FILTER_VITA_APPS_GAME,
+	FILTER_VITA_APPS_PORT,
+	FILTER_VITA_APPS_UTILITY,
+	FILTER_VITA_APPS_EMULATOR,
+	FILTER_VITA_APPS_FAVORITES,
+	FILTER_VITA_APPS_FREEWARE,
+	FILTER_VITA_APPS_NOT_INSTALLED,
+	FILTER_VITA_APPS_OUTDATED,
+	FILTER_VITA_APPS_INSTALLED,
+	FILTER_VITA_APPS_TROPHY
 };
 
-const char *filter_apps_modes[] = {
+const char *filter_vita_apps_modes[] = {
+	"All Apps",
+	"Original Games",
+	"Game Ports",
+	"Utilities",
+	"Emulators",
+	"Favorites",
+	"Freeware Apps",
+	"Not Installed Apps",
+	"Outdated Apps",
+	"Installed Apps",
+	"Apps with Trophies",
+};
+
+enum {
+	FILTER_PSP_APPS_ALL,
+	FILTER_PSP_APPS_GAME,
+	FILTER_PSP_APPS_PORT,
+	FILTER_PSP_APPS_UTILITY,
+	FILTER_PSP_APPS_EMULATOR,
+	FILTER_PSP_APPS_FREEWARE,
+	FILTER_PSP_APPS_NOT_INSTALLED,
+	FILTER_PSP_APPS_OUTDATED,
+	FILTER_PSP_APPS_INSTALLED,
+};
+
+const char *filter_psp_apps_modes[] = {
 	"All Apps",
 	"Original Games",
 	"Game Ports",
@@ -232,8 +259,7 @@ const char *filter_apps_modes[] = {
 	"Freeware Apps",
 	"Not Installed Apps",
 	"Outdated Apps",
-	"Installed Apps",
-	"Apps with Trophies",
+	"Installed Apps"
 };
 
 enum {
@@ -251,28 +277,47 @@ const char *filter_themes_modes[] = {
 int sort_idx = 0;
 int old_sort_idx = -1;
 
-bool filterApps(AppSelection *p) {
+bool filterVitaApps(AppSelection *p) {
 	if (filter_idx) {
 		int filter_cat = filter_idx > 2 ? (filter_idx + 1) : filter_idx;
 		if (filter_cat <= 5) {
-			if (p->type[0] - '0' != filter_cat)
-				return true;
+			return p->type[0] - '0' != filter_cat;
+		} else {
+			filter_cat -= 6;
+			if (filter_cat == 0) { // Favorites
+				return !p->favorites;
+			} else if (filter_cat == 1) { // Freeware Apps
+				return p->requirements && strstr(p->requirements, "Game Data Files");
+			} else {
+				filter_cat -= 2;
+				if (filter_cat < 2) {
+					return p->state != filter_cat;
+				} else if (filter_cat == 2) { // Installed Apps
+					return p->state == APP_UNTRACKED;
+				} else {
+					return !p->trophies;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+bool filterPspApps(AppSelection *p) {
+	if (filter_idx) {
+		int filter_cat = filter_idx > 2 ? (filter_idx + 1) : filter_idx;
+		if (filter_cat <= 5) {
+			return p->type[0] - '0' != filter_cat;
 		} else {
 			filter_cat -= 6;
 			if (filter_cat == 0) { // Freeware Apps
-				if (p->requirements && strstr(p->requirements, "Game Data Files"))
-					return true;
+				return p->requirements && strstr(p->requirements, "Game Data Files");
 			} else {
 				filter_cat--;
 				if (filter_cat < 2) {
-					if (p->state != filter_cat)
-						return true;
+					return p->state != filter_cat;
 				} else if (filter_cat == 2) { // Installed Apps
-					if (p->state == APP_UNTRACKED)
-						return true;
-				} else {
-					if (!p->trophies)
-						return true;
+					return p->state == APP_UNTRACKED;
 				}
 			}
 		}
@@ -283,17 +328,12 @@ bool filterApps(AppSelection *p) {
 bool filterThemes(ThemeSelection *p) {
 	switch (filter_idx) {
 	case FILTER_THEMES_DOWNLOADED:
-		if (p->state != APP_UPDATED)
-			return true;
-		break;
+		return p->state != APP_UPDATED;
 	case FILTER_THEMES_NOT_DOWNLOADED:
-		if (p->state != APP_UNTRACKED)
-			return true;
-		break;
+		return p->state != APP_UNTRACKED;
 	default:
-		break;
+		return false;
 	}
-	return false;
 }
 
 volatile bool kill_audio_thread = false;
@@ -1011,8 +1051,10 @@ extract_libshacccg:
 			char title[256];
 			if (mode_idx == MODE_THEMES)
 				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d themes with '%s' filter", VERSION, filtered_entries, filter_themes_modes[filter_idx]);
+			else if (mode_idx == MODE_VITA_HBS)
+				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d results with '%s' filter", VERSION, filtered_entries, filter_vita_apps_modes[filter_idx]);
 			else
-				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d results with '%s' filter", VERSION, filtered_entries, filter_apps_modes[filter_idx]);
+				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d results with '%s' filter", VERSION, filtered_entries, filter_psp_apps_modes[filter_idx]);
 			ImGui::Text(title);
 			if (calculate_right_len) {
 				calculate_right_len = false;
@@ -1068,17 +1110,28 @@ extract_libshacccg:
 				}
 				ImGui::EndCombo();
 			}
-		} else {
-			if (ImGui::BeginCombo("##combo", filter_apps_modes[filter_idx])) {
-				for (int n = 0; n < sizeof(filter_apps_modes) / sizeof(*filter_apps_modes); n++) {
+		} else if (mode_idx == MODE_VITA_HBS) {
+			if (ImGui::BeginCombo("##combo", filter_vita_apps_modes[filter_idx])) {
+				for (int n = 0; n < sizeof(filter_vita_apps_modes) / sizeof(*filter_vita_apps_modes); n++) {
 					bool is_selected = filter_idx == n;
-					if (ImGui::Selectable(filter_apps_modes[n], is_selected))
+					if (ImGui::Selectable(filter_vita_apps_modes[n], is_selected))
 						filter_idx = n;
 					if (is_selected)
 						ImGui::SetItemDefaultFocus();
 				}
 				ImGui::EndCombo();
 			}
+		} else {
+			if (ImGui::BeginCombo("##combo", filter_psp_apps_modes[filter_idx])) {
+				for (int n = 0; n < sizeof(filter_psp_apps_modes) / sizeof(*filter_psp_apps_modes); n++) {
+					bool is_selected = filter_idx == n;
+					if (ImGui::Selectable(filter_psp_apps_modes[n], is_selected))
+						filter_idx = n;
+					if (is_selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}			
 		}
 		if (ImGui::IsItemHovered()) {
 			hovered = nullptr;
@@ -1209,7 +1262,7 @@ extract_libshacccg:
 			is_app_hovered = false;
 			ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
 			while (g) {
-				if (filterApps(g)) {
+				if (mode_idx == MODE_VITA_HBS ? filterVitaApps(g) : filterPspApps(g)) {
 					g = g->next;
 					continue;
 				}
@@ -1817,8 +1870,10 @@ extract_libshacccg:
 		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !trailer_feature && !screenshots_feature && !show_requirements && !trophies_feature && !show_changelog && !extra_menu_invoked) {
 			if (mode_idx == MODE_THEMES)
 				filter_idx = (filter_idx + 1) % (sizeof(filter_themes_modes) / sizeof(*filter_themes_modes));
+			else if (mode_idx == MODE_VITA_HBS)
+				filter_idx = (filter_idx + 1) % (sizeof(filter_vita_apps_modes) / sizeof(*filter_vita_apps_modes));
 			else
-				filter_idx = (filter_idx + 1) % (sizeof(filter_apps_modes) / sizeof(*filter_apps_modes));
+				filter_idx = (filter_idx + 1) % (sizeof(filter_psp_apps_modes) / sizeof(*filter_psp_apps_modes));
 			go_to_top = true;
 		}
 		oldpad = pad.buttons;

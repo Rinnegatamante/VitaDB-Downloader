@@ -281,6 +281,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			ptr = get_value_from_json(node->hash, ptr, "hash", nullptr);
 			//printf("db hash %s\n", node->hash);
 			if (is_psp) {
+				node->favorites = false;
 				int type_num;
 				sscanf(node->type, "%d", &type_num);
 				type_num -= 10;
@@ -310,11 +311,11 @@ bool populate_apps_database(const char *file, bool is_psp) {
 				
 				node->favorites = false;
 				for (auto &s : favorites) {
-						if (s == node->titleid) {
-							node->favorites = true;
-							break;
-						}
+					if (s == node->titleid) {
+						node->favorites = true;
+						break;
 					}
+				}
 			}
 			if (checksum_match(fname, fname2, node, is_psp ? PSP_EXECUTABLE : VITA_EXECUTABLE)) {
 				if (!is_psp && strlen(node->aux_hash) > 0) {
