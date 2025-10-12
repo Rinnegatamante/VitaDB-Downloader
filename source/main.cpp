@@ -230,7 +230,7 @@ const char *filter_vita_apps_modes[] = {
 	"Game Ports",
 	"Utilities",
 	"Emulators",
-	"Favorites",
+	"Favorites Apps",
 	"Freeware Apps",
 	"Not Installed Apps",
 	"Outdated Apps",

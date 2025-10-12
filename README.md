@@ -31,6 +31,24 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 
 ## Changelog
 
+### v.2.4
+- Fixed a bug in the daemon causing the console to panic when downloading the homebrews list for scanning new updates. (Part of a v.2.3 hotfix)
+- Added a progressbar and video time (current/total) info for the trailers player.
+- Made so that when a trailer ends, the app will automatically transition back to the main apps list.
+- Made so that the apps list downloader at boot will retry the download if it fails or gets stuck.
+- Added a check for VitaDB state: now if the website is offline, the application will show a warning when launched.
+- Fixed several bugs in the trailers player causing deadlocks or app crashes in certain circumstances.
+- Made more robust the whole downloader logic: this should solve some edge cases leading to app softlocks.
+- Added a custom header on VitaDB backend and implemented its usage in the app: this will make file size shown when downloading apps list be correct and not just guessed as it was before.
+- Implemented a feature that allows to edit the daemon blacklist from the app itself: now an option will be available in the Manage menu of installed apps that will allow to blacklist or whitelist apps for the daemon.
+- Added showing of the daemon blacklist state in the Info panel of the currently hovered application.
+- Added proper support for update detection of applications made with LifeLua.
+- Fixed empagination of the Manage submenu being inconsistent depending on how many options are available.
+- Fixed a bug causing Manage submenu to have the last option offscreen when the related homebrew has trophies available.
+- Added possibility to add Vita homebrews in a Favorites list from the Manage submenu: favorites homebrews will show a star icon near their name in the main apps list.
+- Added "Favorites Apps" filter to the available Vita homebrews filters.
+- Removed the "Apps with Trophies" filter from the PSP homebrews list: PSP homebrews can't have trophies so the filter would always return an empty list.
+
 ### v.2.3
 - Fixed a bug causing renpy games to install with missing files.
 - Added the possibility to view Release Page and Sourcecode Page for homebrews (Available in the Manage submenu).
