@@ -102,7 +102,7 @@ int trophies_feature = FEATURE_OFF;
 
 SceUID trophy_thd;
 static int preview_width, preview_height, preview_x, preview_y;
-GLuint preview_icon = 0, preview_shot = 0, bg_image = 0, trp_icon = 0, empty_icon = 0;
+GLuint preview_icon = 0, preview_shot = 0, bg_image = 0, trp_icon = 0, star_icon = 0, empty_icon = 0;
 void load_preview(AppSelection *game) {
 	if (old_hovered == game)
 		return;
@@ -839,11 +839,17 @@ extract_libshacccg:
 
 	// Load trophy icon
 	int w, h;
-	uint8_t *trp_data = stbi_load("app0:trophy.png", &w, &h, NULL, 4);
+	uint8_t *icon_data = stbi_load("app0:trophy.png", &w, &h, NULL, 4);
 	glGenTextures(1, &trp_icon);
-	glTextureImage2D(trp_icon, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, trp_data);
-	free(trp_data);
+	glTextureImage2D(trp_icon, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+	free(icon_data);
 	glGenTextures(1, &empty_icon);
+	
+	// Load star icon
+	icon_data = stbi_load("app0:star.png", &w, &h, NULL, 4);
+	glGenTextures(1, &star_icon);
+	glTextureImage2D(star_icon, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+	free(icon_data);	
 
 	// Initializing dear ImGui
 	ImGui::CreateContext();
@@ -928,8 +934,9 @@ extract_libshacccg:
 		sceIoRemove(TEMP_DOWNLOAD_NAME);
 	}
 	
-	// Populating daemon blacklist
+	// Populating daemon blacklist and favorites list
 	populate_daemon_blacklist();
+	populate_favorites();
 	
 	// Downloading apps list
 	bool is_vitadb_online = true;
@@ -1208,7 +1215,7 @@ extract_libshacccg:
 				}
 				if ((strlen(app_name_filter) == 0) || (strlen(app_name_filter) > 0 && (strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter)))) {
 					float y = ImGui::GetCursorPosY() + 3.0f;
-					if (g->trophies) {
+					if (g->trophies || g->favorites) {
 						char lbl[128];
 						sprintf(lbl, "##%d", btn_idx++);
 						if (ImGui::Button(lbl, ImVec2(-1.0f, 0.0f))) {
@@ -1269,8 +1276,19 @@ extract_libshacccg:
 						break;
 					}
 					if (g->trophies) {
+						float x_offs = 28.0f;
 						ImGui::SetCursorPosY(y - 2.0f);
+						if (g->favorites) {
+							ImGui::Image((void*)star_icon, ImVec2(20, 20));
+							ImGui::SameLine();
+							x_offs += 20.0f;
+						}
 						ImGui::Image((void*)trp_icon, ImVec2(20, 20));
+						ImGui::SetCursorPos(ImVec2(x_offs, y));
+						ImGui::Text(g->name);
+					} else if (g->favorites) {
+						ImGui::SetCursorPosY(y - 2.0f);
+						ImGui::Image((void*)star_icon, ImVec2(20, 20));
 						ImGui::SetCursorPos(ImVec2(28.0f, y));
 						ImGui::Text(g->name);
 					}
@@ -1447,14 +1465,14 @@ extract_libshacccg:
 		if (extra_menu_invoked) {
 			int num_items;
 			switch (hovered->state) {
-			case APP_OUTDATED: // Launch, Update, Changelog, Uninstall, Tag Update, Blacklist
-				num_items = mode_idx == MODE_VITA_HBS ? 6 : 4; // FIXME: Add PSP hbs launch via Adrenaline
+			case APP_OUTDATED: // Launch, Update, Changelog, Uninstall, Tag Update, Blacklist, Favorites
+				num_items = mode_idx == MODE_VITA_HBS ? 7 : 4; // FIXME: Add PSP hbs launch via Adrenaline
 				break;
-			case APP_UPDATED: // Launch, Changelog, Uninstall, Blacklist
-				num_items = mode_idx == MODE_VITA_HBS ? 4 : 2; // FIXME: Add PSP hbs launch via Adrenaline
+			case APP_UPDATED: // Launch, Changelog, Uninstall, Blacklist, Favorites
+				num_items = mode_idx == MODE_VITA_HBS ? 5 : 2; // FIXME: Add PSP hbs launch via Adrenaline
 				break;
-			case APP_UNTRACKED: // Install, Screenshots (if any), Changelog
-				num_items = 2;
+			case APP_UNTRACKED: // Install, Favorites, Changelog
+				num_items = mode_idx == MODE_VITA_HBS ? 3 : 2;
 				break;
 			default:
 				printf("Fatal error\n");
@@ -1504,6 +1522,27 @@ extract_libshacccg:
 					extra_menu_invoked = false;
 				}
 			}
+			if (mode_idx == MODE_VITA_HBS) {
+				if (ImGui::Button(hovered->favorites ? "Remove from Favorites": "Add to Favorites", ImVec2(-1.0f, 0.0f))) {
+					if (hovered->favorites) {
+						remove_favorites(hovered->titleid);
+					} else {
+						insert_favorites(hovered->titleid);
+					}
+					hovered->favorites = !hovered->favorites;
+					AppSelection *clashes = hovered->prev_clash;
+					while (clashes) {
+						clashes->favorites = hovered->favorites;
+						clashes = clashes->prev_clash;
+					}
+					clashes = hovered->next_clash;
+					while (clashes) {
+						clashes->favorites = hovered->favorites;
+						clashes = clashes->next_clash;
+					}
+					extra_menu_invoked = false;
+				}
+			}
 			if (hovered->state == APP_OUTDATED) {
 				if (ImGui::Button("Tag as Updated", ImVec2(-1.0f, 0.0f))) {
 					char fname[256];
@@ -1516,6 +1555,7 @@ extract_libshacccg:
 					sceIoWrite(f, hovered->hash, 32);
 					sceIoClose(f);
 					hovered->state = APP_UPDATED;
+					extra_menu_invoked = false;
 				}
 			}
 			if (mode_idx == MODE_VITA_HBS && hovered->state != APP_UNTRACKED && hovered->blacklisted != APP_HARD_BLACKLISTED) {
@@ -1537,6 +1577,7 @@ extract_libshacccg:
 						clashes->blacklisted = hovered->blacklisted;
 						clashes = clashes->next_clash;
 					}
+					extra_menu_invoked = false;
 				}
 			}
 			if (hovered->trophies) {

@@ -34,6 +34,7 @@ AppSelection *apps = nullptr;
 AppSelection *psp_apps = nullptr;
 TrophySelection *trophies = nullptr;
 std::vector<std::string> daemon_blacklist;
+std::vector<std::string> favorites;
 
 char *hardcoded_daemon_blacklist[] = {
 	"ABCD12345",
@@ -306,6 +307,14 @@ bool populate_apps_database(const char *file, bool is_psp) {
 						}
 					}
 				}
+				
+				node->favorites = false;
+				for (auto &s : favorites) {
+						if (s == node->titleid) {
+							node->favorites = true;
+							break;
+						}
+					}
 			}
 			if (checksum_match(fname, fname2, node, is_psp ? PSP_EXECUTABLE : VITA_EXECUTABLE)) {
 				if (!is_psp && strlen(node->aux_hash) > 0) {
@@ -425,6 +434,66 @@ void remove_daemon_blacklist(char *tid) {
 	} else {
 		daemon_blacklist.clear();
 		sceIoRemove("ux0:data/VitaDB/daemon_blacklist.txt");
+	}
+}
+
+void populate_favorites() {
+	favorites.clear();
+	SceUID fd = sceIoOpen("ux0:data/VitaDB/favorites.txt", SCE_O_RDONLY, 0777);
+	if (fd >= 0) {
+		uint64_t len = sceIoLseek(fd, 0, SCE_SEEK_END);
+		sceIoLseek(fd, 0, SCE_SEEK_SET);
+		char *buffer = (char *)malloc(len + 1);
+		char *_buffer = buffer;
+		sceIoRead(fd, buffer, len);
+		buffer[len] = 0;
+		sceIoClose(fd);
+		for (int i = 0; i < len; i += 10) {
+			buffer[9] = 0;
+			favorites.push_back(buffer);
+			buffer += 10;
+		}
+		free(_buffer);
+	}
+}
+
+void insert_favorites(char *tid) {
+	favorites.push_back(tid);
+	SceUID fd = sceIoOpen("ux0:data/VitaDB/favorites.txt", SCE_O_WRONLY | SCE_O_CREAT, 0777);
+	uint64_t len = sceIoLseek(fd, 0, SCE_SEEK_END);
+	if (len > 0) {
+		char buffer[12];
+		sprintf(buffer, ";%s", tid);
+		sceIoWrite(fd, buffer, 10);
+	} else {
+		sceIoWrite(fd, tid, 9);
+	}
+	sceIoClose(fd);
+}
+
+void remove_favorites(char *tid) {
+	if (favorites.size() > 1) {
+		char *buffer = (char *)malloc((favorites.size() - 1) * 10 + 1);
+		buffer[0] = 0;
+		int idx = 0;
+		int to_delete = 0;
+		for (std::string& s : favorites) {
+			if (s == tid) {
+				to_delete = idx;
+			} else {
+				strcat(buffer, s.c_str());
+				strcat(buffer, ";");
+			}
+			idx++;
+		}
+		favorites.erase(favorites.begin() + to_delete);
+		SceUID fd = sceIoOpen("ux0:data/VitaDB/favorites.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+		sceIoWrite(fd, buffer, favorites.size() * 10 - 1);
+		sceIoClose(fd);
+		free(buffer);
+	} else {
+		favorites.clear();
+		sceIoRemove("ux0:data/VitaDB/favorites.txt");
 	}
 }
 

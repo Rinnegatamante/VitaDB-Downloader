@@ -91,6 +91,7 @@ struct AppSelection {
 	char data_link[128];
 	int state;
 	bool trophies;
+	bool favorites;
 	uint8_t blacklisted;
 	AppSelection *next_clash;
 	AppSelection *prev_clash;
@@ -111,6 +112,7 @@ struct ThemeSelection {
 };
 
 extern std::vector<std::string> daemon_blacklist;
+extern std::vector<std::string> favorites;
 
 extern ThemeSelection *themes;
 extern AppSelection *apps;
@@ -127,6 +129,10 @@ void populate_themes_database(const char *file);
 void populate_daemon_blacklist();
 void insert_daemon_blacklist(char *tid);
 void remove_daemon_blacklist(char *tid);
+
+void populate_favorites();
+void insert_favorites(char *tid);
+void remove_favorites(char *tid);
 
 void sort_apps_list(AppSelection **start, int sort_idx);
 void sort_themes_list(ThemeSelection **start, int sort_idx);
