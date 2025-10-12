@@ -1472,7 +1472,7 @@ extract_libshacccg:
 				num_items++;
 			if (strlen(hovered->release_page) > 5)
 				num_items++;
-			int h = 29 + 25 * num_items;
+			int h = 33 + 24 * num_items;
 			int y = 272 - h / 2;
 			ImGui::SetNextWindowPos(ImVec2(280, y), ImGuiSetCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(400, h), ImGuiSetCond_Always);
