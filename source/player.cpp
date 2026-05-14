@@ -20,6 +20,7 @@
 #include <vitaGL.h>
 #include <stdio.h>
 #include <malloc.h>
+#include <string.h>
 
 #include "network.h"
 

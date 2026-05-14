@@ -22,6 +22,7 @@
 #include <codecvt>
 #include <stdio.h>
 #include <malloc.h>
+#include <string.h>
 #include <vitasdk.h>
 #include <vitaGL.h>
 #include "database.h"

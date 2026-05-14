@@ -21,7 +21,7 @@
 #include <locale>
 #include <curl/curl.h>
 #include <stdio.h>
-#include <string>
+#include <string.h>
 #include <vitasdk.h>
 #include <vitaGL.h>
 #include "dialogs.h"

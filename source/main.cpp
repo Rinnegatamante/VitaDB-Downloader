@@ -117,7 +117,7 @@ void load_preview(AppSelection *game) {
 	uint8_t *icon_data = stbi_load(banner_path, &preview_width, &preview_height, NULL, 4);
 	if (!preview_icon)
 		glGenTextures(1, &preview_icon);
-	glTextureImage2D(preview_icon, GL_TEXTURE_2D, 0, GL_RGBA, preview_width, preview_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+	glTextureImage2D(preview_icon, 0, GL_RGBA, preview_width, preview_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
 	float scale = MIN(PREVIEW_WIDTH / (float)preview_width, PREVIEW_HEIGHT / (float)preview_height);
 	preview_width = scale * (float)preview_width;
 	preview_height = scale * (float)preview_height;
@@ -156,7 +156,7 @@ void LoadScreenshot() {
 	}
 	if (!preview_shot)
 		glGenTextures(1, &preview_shot);
-	glTextureImage2D(preview_shot, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, shot_data);
+	glTextureImage2D(preview_shot, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, shot_data);
 	free(shot_data);
 }
 
@@ -173,7 +173,7 @@ void load_background() {
 		uint8_t *bg_data = stbi_load("ux0:data/VitaDB/bg.png", &w, &h, NULL, 4);
 		if (bg_data) {
 			glGenTextures(1, &bg_image);
-			glTextureImage2D(bg_image, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, bg_data);
+			glTextureImage2D(bg_image, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, bg_data);
 			free(bg_data);
 		}
 	}
@@ -191,7 +191,7 @@ int trophy_loader(unsigned int args, void *arg) {
 		GLuint res;
 		glGenTextures(1, &res);
 		uint8_t *icon_data = stbi_load(fname, &w, &h, NULL, 4);
-		glTextureImage2D(res, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+		glTextureImage2D(res, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
 		free(icon_data);
 		t->icon = res;
 		t = t->next;
@@ -881,14 +881,14 @@ extract_libshacccg:
 	int w, h;
 	uint8_t *icon_data = stbi_load("app0:trophy.png", &w, &h, NULL, 4);
 	glGenTextures(1, &trp_icon);
-	glTextureImage2D(trp_icon, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+	glTextureImage2D(trp_icon, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
 	free(icon_data);
 	glGenTextures(1, &empty_icon);
 	
 	// Load star icon
 	icon_data = stbi_load("app0:star.png", &w, &h, NULL, 4);
 	glGenTextures(1, &star_icon);
-	glTextureImage2D(star_icon, GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+	glTextureImage2D(star_icon, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
 	free(icon_data);	
 
 	// Initializing dear ImGui

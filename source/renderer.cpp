@@ -32,8 +32,8 @@ static GLuint previous_frame;
 void prepare_simple_drawer() {
 	GLuint vshad = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fshad = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderBinary(1, &vshad, 0, shader_v, size_shader_v);
-	glShaderBinary(1, &fshad, 0, shader_f, size_shader_f);
+	vglShaderGxpBinary(1, &vshad, shader_v, size_shader_v);
+	vglShaderGxpBinary(1, &fshad, shader_f, size_shader_f);
 
 	simple_prog = glCreateProgram();
 	glAttachShader(simple_prog, vshad);
@@ -49,8 +49,8 @@ void prepare_simple_drawer() {
 void prepare_bubble_drawer() {
 	GLuint vshad = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fshad = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderBinary(1, &vshad, 0, bubble_shader_v, size_bubble_shader_v);
-	glShaderBinary(1, &fshad, 0, bubble_shader_f, size_bubble_shader_f);
+	vglShaderGxpBinary(1, &vshad, bubble_shader_v, size_bubble_shader_v);
+	vglShaderGxpBinary(1, &fshad, bubble_shader_f, size_bubble_shader_f);
 	
 	bubble_prog = glCreateProgram();
 	glAttachShader(bubble_prog, vshad);
@@ -66,7 +66,7 @@ void prepare_bubble_drawer() {
 	glGenFramebuffers(1, &bubble_fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, bubble_fbo);
 	glGenTextures(1, &bubble_fbo_tex);
-	glTextureImage2D(bubble_fbo_tex, GL_TEXTURE_2D, 0, GL_RGBA, 128, 128, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	glTextureImage2D(bubble_fbo_tex, 0, GL_RGBA, 128, 128, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, bubble_fbo_tex, 0);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
