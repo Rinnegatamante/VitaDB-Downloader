@@ -1553,16 +1553,16 @@ extract_libshacccg:
 			int num_items;
 			switch (hovered->state) {
 			case APP_OUTDATED: // Launch, Update, Changelog, Uninstall, Tag Update, Blacklist, Favorites
-				num_items = mode_idx == MODE_VITA_HBS ? 7 : 4; // FIXME: Add PSP hbs launch via Adrenaline
+				num_items = mode_idx == MODE_VITA_HBS ? 7 : 5; // FIXME: Add PSP hbs launch via Adrenaline
 				break;
 			case APP_UPDATED: // Launch, Changelog, Uninstall, Blacklist, Favorites
-				num_items = mode_idx == MODE_VITA_HBS ? 5 : 2; // FIXME: Add PSP hbs launch via Adrenaline
+				num_items = mode_idx == MODE_VITA_HBS ? 5 : 3; // FIXME: Add PSP hbs launch via Adrenaline
 				break;
 			case APP_UNTRACKED: // Install, Favorites, Changelog
-				num_items = mode_idx == MODE_VITA_HBS ? 3 : 2;
+				num_items = 3;
 				break;
 			default:
-				printf("Fatal error\n");
+				sceClibPrintf("Fatal error\n");
 				break;
 			}
 			if (hovered->blacklisted == APP_HARD_BLACKLISTED && hovered->state != APP_UNTRACKED) // Hardcoded blacklisted app can't be white/blacklisted
@@ -1609,7 +1609,7 @@ extract_libshacccg:
 					extra_menu_invoked = false;
 				}
 			}
-			if (mode_idx == MODE_VITA_HBS) {
+			if (mode_idx != MODE_THEMES) {
 				if (ImGui::Button(hovered->favorites ? "Remove from Favorites": "Add to Favorites", ImVec2(-1.0f, 0.0f))) {
 					if (hovered->favorites) {
 						remove_favorites(hovered->id);
@@ -1617,16 +1617,6 @@ extract_libshacccg:
 						insert_favorites(hovered->id);
 					}
 					hovered->favorites = !hovered->favorites;
-					AppSelection *clashes = hovered->prev_clash;
-					while (clashes) {
-						clashes->favorites = hovered->favorites;
-						clashes = clashes->prev_clash;
-					}
-					clashes = hovered->next_clash;
-					while (clashes) {
-						clashes->favorites = hovered->favorites;
-						clashes = clashes->next_clash;
-					}
 					extra_menu_invoked = false;
 				}
 			}

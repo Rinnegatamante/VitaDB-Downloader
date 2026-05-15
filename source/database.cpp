@@ -286,6 +286,14 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			//printf("db hash %s\n", node->hash);
 			if (is_psp) {
 				node->favorites = false;
+				if (!favorites_old_format) {
+					for (auto &s : favorites) {
+						if (atoi(s.c_str()) == atoi(node->id)) {
+							node->favorites = true;
+							break;
+						}
+					}
+				}
 				int type_num;
 				sscanf(node->type, "%d", &type_num);
 				type_num -= 10;
