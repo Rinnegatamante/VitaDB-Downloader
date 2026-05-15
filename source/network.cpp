@@ -122,6 +122,8 @@ static size_t write_video_cb(void *ptr, size_t size, size_t nmemb, void *stream)
 	return nmemb;
 }
 
+time_t download_tstamp = 0;
+int response_code = 0;
 static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata) {
 	char *ptr = strcasestr(buffer, "Content-Length");
 	if (ptr != NULL) {
@@ -137,6 +139,30 @@ static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata
 		sceClibPrintf("network.cpp: Detected total length of %llu bytes.\n", total_bytes);
 #endif
 	}
+	ptr = strcasestr(buffer, "Last-Modified:");
+	if (ptr != NULL) {
+		char date_string[128];
+		const char *data_start = ptr + 15; 
+		size_t date_len = size * nitems - (data_start - buffer);
+		if (date_len > 127) {
+			date_len = 127;
+		}
+		sceClibMemcpy(date_string, data_start, date_len);
+		date_string[date_len] = '\0';
+		for (size_t i = 0; i < date_len; i++) {
+			if (date_string[i] == '\r' || date_string[i] == '\n') {
+				date_string[i] = '\0';
+				break;
+			}
+		}
+		time_t parsed_time = curl_getdate(date_string, NULL);
+		if (parsed_time != -1) {
+			download_tstamp = parsed_time;
+#ifdef DEBUG_NET
+			sceClibPrintf("network.cpp: Parsed Last-Modified timestamp: %d\n", download_tstamp);
+#endif		
+		}
+	}
 	return nitems;
 }
 
@@ -144,7 +170,7 @@ static size_t header_dummy_cb(char *buffer, size_t size, size_t nitems, void *us
 	return nitems;
 }
 
-static void startDownload(const char *url) {
+static void startDownload(const char *url, time_t timestamp = 0) {
 	curl_easy_reset(curl_handle);
 	curl_easy_setopt(curl_handle, CURLOPT_URL, url);
 	curl_easy_setopt(curl_handle, CURLOPT_HTTPGET, 1L);
@@ -155,6 +181,10 @@ static void startDownload(const char *url) {
 	curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, 10L);
 	curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
+	if (timestamp > 0) {
+		curl_easy_setopt(curl_handle, CURLOPT_TIMECONDITION, (long)CURL_TIMECOND_IFMODSINCE);
+		curl_easy_setopt(curl_handle, CURLOPT_TIMEVALUE, (long)timestamp);
+	}
 	curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_cb);
 	curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, bytes_string); // Dummy
 	curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, downloaded_bytes ? header_dummy_cb : header_cb);
@@ -167,7 +197,10 @@ static void startDownload(const char *url) {
 	headerchunk = curl_slist_append(headerchunk, "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36");
 	headerchunk = curl_slist_append(headerchunk, "Content-Length: 0");
 	curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headerchunk);
-	curl_easy_perform(curl_handle);
+	CURLcode res = curl_easy_perform(curl_handle);
+	if (res == CURLE_OK) {
+		curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &response_code);
+	}
 }
 
 static void startStream(const char *url) {
@@ -203,21 +236,30 @@ int appListThread(unsigned int args, void *arg) {
 	downloader_pass = 1;
 	downloaded_bytes = 0;
 	fh = -1;
+	time_t timestamp = 0;
 
 	SceIoStat stat;
 	if (sceIoGetstat("ux0:data/VitaDB/apps.json", &stat) >= 0) {
 		total_bytes = stat.st_size;
+		fh = sceIoOpen("ux0:data/VitaDB/apps.stamp", SCE_O_RDONLY, 0777);
+		if (fh > 0) {
+			sceIoRead(fh, &timestamp, sizeof(time_t));
+			sceIoClose(fh);
+		}
 	} else {
 		total_bytes = 12 * 1024;
 	}
 
-	while (downloaded_bytes < total_bytes) {
-		startDownload("https://www.rinnegatamante.eu/vitadb/list_hbs_json.php");
+	while (downloaded_bytes < total_bytes && response_code != 304) {
+		startDownload("https://www.rinnegatamante.eu/vitadb/list_hbs_json.php", timestamp);
 	}
 
 	if (downloaded_bytes > 12 * 1024) {
 		fh = sceIoOpen("ux0:data/VitaDB/apps.json", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 		sceIoWrite(fh, generic_mem_buffer, downloaded_bytes);
+		sceIoClose(fh);
+		fh = sceIoOpen("ux0:data/VitaDB/apps.stamp", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+		sceIoWrite(fh, &download_tstamp, sizeof(time_t));
 		sceIoClose(fh);
 	}
 	downloaded_bytes = total_bytes;
@@ -232,21 +274,30 @@ int appPspListThread(unsigned int args, void *arg) {
 	downloader_pass = 1;
 	downloaded_bytes = 0;
 	fh = -1;
+	time_t timestamp = 0;
 
 	SceIoStat stat;
 	if (sceIoGetstat("ux0:data/VitaDB/psp_apps.json", &stat) >= 0) {
 		total_bytes = stat.st_size;
+		fh = sceIoOpen("ux0:data/VitaDB/psp_apps.stamp", SCE_O_RDONLY, 0777);
+		if (fh > 0) {
+			sceIoRead(fh, &timestamp, sizeof(time_t));
+			sceIoClose(fh);
+		}
 	} else {
 		total_bytes = 12 * 1024;
 	}
 
-	while (downloaded_bytes < total_bytes) {
-		startDownload("https://www.rinnegatamante.eu/vitadb/list_psp_hbs_json.php");
+	while (downloaded_bytes < total_bytes && response_code != 304) {
+		startDownload("https://www.rinnegatamante.eu/vitadb/list_psp_hbs_json.php", timestamp);
 	}
 
 	if (downloaded_bytes > 12 * 1024) {
 		fh = sceIoOpen("ux0:data/VitaDB/psp_apps.json", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 		sceIoWrite(fh, generic_mem_buffer, downloaded_bytes);
+		sceIoClose(fh);
+		fh = sceIoOpen("ux0:data/VitaDB/psp_apps.stamp", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+		sceIoWrite(fh, &download_tstamp, sizeof(time_t));
 		sceIoClose(fh);
 	}
 	downloaded_bytes = total_bytes;
