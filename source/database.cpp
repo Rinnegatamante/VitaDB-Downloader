@@ -243,7 +243,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 		char *ptr = buffer;
 		char *end, *end2;
 		do {
-			char name[128], version[64], fname[128], fname2[128], has_trophies[4];
+			char name[128], version[64], fname[128], fname2[128], smalldata[4];
 			ptr = get_value_from_json(name, ptr, "name", nullptr);
 			//printf("parsing %s\n", name);
 			if (!ptr)
@@ -331,8 +331,10 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			ptr = get_value_from_json(node->requirements, ptr, "requirements", &node->requirements);
 			if (node->requirements)
 				node->requirements = unescape(node->requirements);
-			ptr = get_value_from_json(has_trophies, ptr, "trophies", nullptr);
-			node->trophies = atoi(has_trophies);
+			ptr = get_value_from_json(smalldata, ptr, "trophies", nullptr);
+			node->trophies = atoi(smalldata);
+			ptr = get_value_from_json(smalldata, ptr, "ai", nullptr);
+			node->ai = atoi(smalldata);
 			ptr = get_value_from_json(node->data_link, ptr, "data", nullptr);
 			if (strlen(node->data_link) > 5 && strstr(node->data_link, "www.rinnegatamante.eu")) { // Redirect to PSARCs any data files hosted on VitaDB webhost
 				strcat(node->data_link, ".psarc");

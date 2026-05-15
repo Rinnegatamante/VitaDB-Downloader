@@ -91,6 +91,7 @@ struct AppSelection {
 	char data_link[128];
 	int state;
 	bool trophies;
+	bool ai;
 	bool favorites;
 	uint8_t blacklisted;
 	AppSelection *next_clash;

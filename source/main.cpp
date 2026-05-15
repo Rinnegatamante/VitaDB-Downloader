@@ -102,7 +102,7 @@ int trophies_feature = FEATURE_OFF;
 
 SceUID trophy_thd;
 static int preview_width, preview_height, preview_x, preview_y;
-GLuint preview_icon = 0, preview_shot = 0, bg_image = 0, trp_icon = 0, star_icon = 0, empty_icon = 0;
+GLuint preview_icon = 0, preview_shot = 0, bg_image = 0, trp_icon = 0, star_icon = 0, crank_icon = 0, empty_icon = 0;
 void load_preview(AppSelection *game) {
 	if (old_hovered == game)
 		return;
@@ -221,7 +221,9 @@ enum {
 	FILTER_VITA_APPS_NOT_INSTALLED,
 	FILTER_VITA_APPS_OUTDATED,
 	FILTER_VITA_APPS_INSTALLED,
-	FILTER_VITA_APPS_TROPHY
+	FILTER_VITA_APPS_TROPHY,
+	FILTER_VITA_APPS_NO_AI,
+	FILTER_VITA_APPS_AI
 };
 
 const char *filter_vita_apps_modes[] = {
@@ -236,6 +238,8 @@ const char *filter_vita_apps_modes[] = {
 	"Outdated Apps",
 	"Installed Apps",
 	"Apps with Trophies",
+	"Apps not using AI",
+	"Apps using AI",
 };
 
 enum {
@@ -294,8 +298,10 @@ bool filterVitaApps(AppSelection *p) {
 					return p->state != filter_cat;
 				} else if (filter_cat == 2) { // Installed Apps
 					return p->state == APP_UNTRACKED;
-				} else {
+				} else if (filter_cat == 3) {
 					return !p->trophies;
+				} else {
+					return p->ai == (filter_cat == 4);
 				}
 			}
 		}
@@ -877,19 +883,26 @@ extract_libshacccg:
 		install_theme_from_shuffle(true);
 	load_background();
 
+	glGenTextures(1, &empty_icon);
+	
 	// Load trophy icon
 	int w, h;
 	uint8_t *icon_data = stbi_load("app0:trophy.png", &w, &h, NULL, 4);
 	glGenTextures(1, &trp_icon);
 	glTextureImage2D(trp_icon, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
 	free(icon_data);
-	glGenTextures(1, &empty_icon);
+	
+	// Load crank icon
+	icon_data = stbi_load("app0:crank.png", &w, &h, NULL, 4);
+	glGenTextures(1, &crank_icon);
+	glTextureImage2D(crank_icon, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+	free(icon_data);	
 	
 	// Load star icon
 	icon_data = stbi_load("app0:star.png", &w, &h, NULL, 4);
 	glGenTextures(1, &star_icon);
 	glTextureImage2D(star_icon, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
-	free(icon_data);	
+	free(icon_data);
 
 	// Initializing dear ImGui
 	ImGui::CreateContext();
@@ -1268,7 +1281,7 @@ extract_libshacccg:
 				}
 				if ((strlen(app_name_filter) == 0) || (strlen(app_name_filter) > 0 && (strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter)))) {
 					float y = ImGui::GetCursorPosY() + 3.0f;
-					if (g->trophies || g->favorites) {
+					if (g->trophies || g->favorites || g->ai) {
 						char lbl[128];
 						sprintf(lbl, "##%d", btn_idx++);
 						if (ImGui::Button(lbl, ImVec2(-1.0f, 0.0f))) {
@@ -1328,21 +1341,34 @@ extract_libshacccg:
 						ImGui::Text("Unknown");
 						break;
 					}
+					float x_offs = 8.0f;
+					bool reset_cursor = false;
+					if (g->ai) {
+						ImGui::SetCursorPosY(y - 2.0f);
+						ImGui::Image((void*)crank_icon, ImVec2(20, 20));
+						reset_cursor = true;
+						x_offs += 20.0f;
+						ImGui::SameLine();
+					}
 					if (g->trophies) {
-						float x_offs = 28.0f;
-						ImGui::SetCursorPosY(y - 2.0f);
-						if (g->favorites) {
-							ImGui::Image((void*)star_icon, ImVec2(20, 20));
-							ImGui::SameLine();
-							x_offs += 20.0f;
+						if (!reset_cursor) {
+							ImGui::SetCursorPosY(y - 2.0f);
 						}
+						reset_cursor = true;
 						ImGui::Image((void*)trp_icon, ImVec2(20, 20));
-						ImGui::SetCursorPos(ImVec2(x_offs, y));
-						ImGui::Text(g->name);
-					} else if (g->favorites) {
-						ImGui::SetCursorPosY(y - 2.0f);
+						x_offs += 20.0f;
+						ImGui::SameLine();
+					}
+					if (g->favorites) {
+						if (!reset_cursor) {
+							ImGui::SetCursorPosY(y - 2.0f);
+						}
+						reset_cursor = true;
 						ImGui::Image((void*)star_icon, ImVec2(20, 20));
-						ImGui::SetCursorPos(ImVec2(28.0f, y));
+						x_offs += 20.0f;
+					}
+					if (reset_cursor) {
+						ImGui::SetCursorPos(ImVec2(x_offs, y));
 						ImGui::Text(g->name);
 					}
 					filtered_entries++;
