@@ -249,6 +249,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			if (!ptr)
 				break;
 			AppSelection *node = (AppSelection*)malloc(sizeof(AppSelection));
+			node->search_filtered = false;
 			node->desc = nullptr;
 			node->requirements = nullptr;
 			node->next_clash = nullptr;

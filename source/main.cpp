@@ -87,6 +87,7 @@ static AppSelection *old_hovered = NULL;
 static AppSelection *to_uninstall = nullptr;
 AppSelection *to_download = nullptr;
 
+bool dirty_filter = false;
 GLuint anti_burn_in_texture;
 
 enum {
@@ -1200,7 +1201,10 @@ extract_libshacccg:
 					g = g->next;
 					continue;
 				}
-				if ((strlen(app_name_filter) == 0) || (strlen(app_name_filter) > 0 && (strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter)))) {
+				if (dirty_filter) {
+					g->search_filtered = app_name_filter[0] != 0 && !(strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter) || strcasestr(g->desc, app_name_filter));
+				}
+				if (!g->search_filtered) {
 					float y = ImGui::GetCursorPosY() + 3.0f;
 					bool is_shuffle = false;
 					if (g->shuffle) {
@@ -1279,7 +1283,10 @@ extract_libshacccg:
 					g = g->next;
 					continue;
 				}
-				if ((strlen(app_name_filter) == 0) || (strlen(app_name_filter) > 0 && (strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter)))) {
+				if (dirty_filter) {
+					g->search_filtered = app_name_filter[0] != 0 && !(strcasestr(g->name, app_name_filter) || strcasestr(g->author, app_name_filter) || strcasestr(g->desc, app_name_filter));
+				}
+				if (!g->search_filtered) {
 					float y = ImGui::GetCursorPosY() + 3.0f;
 					if (g->trophies || g->favorites || g->ai) {
 						char lbl[128];
@@ -1376,6 +1383,7 @@ extract_libshacccg:
 				g = g->next;
 			}
 		}
+		dirty_filter = false;
 		ImGui::PopStyleVar();
 		if (decrement_stack_idx == filtered_entries || !is_app_hovered)
 			fast_decrement = false;
@@ -1807,6 +1815,7 @@ extract_libshacccg:
 			filter_idx = 0;
 			mode_idx = (mode_idx + 1) % MODES_NUM;
 			go_to_top = true;
+			dirty_filter = true;
 		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !trophies_feature && !extra_menu_invoked) {
 			if (mode_idx == MODE_THEMES)
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_themes_str) / sizeof(sort_modes_themes_str[0]));
@@ -2268,6 +2277,7 @@ skip_install:
 			sceImeDialogGetResult(&res);
 			if (res.button == SCE_IME_DIALOG_BUTTON_ENTER) {
 				get_dialog_text_result(app_name_filter);
+				dirty_filter = true;
 			}
 			sceImeDialogTerm();
 			is_ime_active = false;

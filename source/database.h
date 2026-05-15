@@ -93,6 +93,7 @@ struct AppSelection {
 	bool trophies;
 	bool ai;
 	bool favorites;
+	bool search_filtered;
 	uint8_t blacklisted;
 	AppSelection *next_clash;
 	AppSelection *prev_clash;
@@ -108,6 +109,7 @@ struct ThemeSelection {
 	char has_music[2];
 	char has_font[2];
 	int state;
+	bool search_filtered;
 	bool shuffle;
 	ThemeSelection *next;
 };
