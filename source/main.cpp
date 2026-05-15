@@ -1639,10 +1639,10 @@ extract_libshacccg:
 				if (ImGui::Button(hovered->blacklisted ? "Whitelist for Daemon Updates" : "Blacklist for Daemon Updates", ImVec2(-1.0f, 0.0f))) {
 					if (hovered->blacklisted == APP_BLACKLISTED) {
 						remove_daemon_blacklist(hovered->titleid);
-						hovered->blacklisted == APP_WHITELISTED;
+						hovered->blacklisted = APP_WHITELISTED;
 					} else {
 						insert_daemon_blacklist(hovered->titleid);
-						hovered->blacklisted == APP_BLACKLISTED;
+						hovered->blacklisted = APP_BLACKLISTED;
 					}
 					AppSelection *clashes = hovered->prev_clash;
 					while (clashes) {
