@@ -31,6 +31,19 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 
 ## Changelog
 
+### v.2.5
+- Added a Crank icon nearby apps using AI.
+- Added two new filters: "Apps using AI" and "Apps not using AI" for Vita homebrews.
+- Moved to MariaDB IDs usage for the Favorites homebrew system: This means now applications with clashing TitleIDs can be properly put in the favorite list singularly.
+- Added support to Favorites system for PSP homebrews.
+- Reduced memory usage of the application.
+- Updated to latest vitaGL commit.
+- Made so that the search feature searches also inside homebrews/themes descriptions.
+- Made so that the search feature is now cached, not impacting performance of the app.
+- Made so that Vita applist and PSP applist are downloaded only when there's an update on the server (using If-Modified-Since HTTP header): this will make booting the app and switching to PSP apps way faster.
+- Fixed a bug causing Favorites list and the daemon blacklist to get corrupted when deleting entries in some circumstances.
+- Fixed a bug causing the blacklisted status to not be visually updated inside the app when blacklisting or whitelisting an application in certain circumstances.
+
 ### v.2.4
 - Fixed a bug in the daemon causing the console to panic when downloading the homebrews list for scanning new updates. (Part of a v.2.3 hotfix)
 - Added a progressbar and video time (current/total) info for the trailers player.

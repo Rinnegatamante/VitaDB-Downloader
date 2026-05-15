@@ -171,6 +171,8 @@ static size_t header_dummy_cb(char *buffer, size_t size, size_t nitems, void *us
 }
 
 static void startDownload(const char *url, time_t timestamp = 0) {
+	response_code = 0;
+	download_tstamp = 0;
 	curl_easy_reset(curl_handle);
 	curl_easy_setopt(curl_handle, CURLOPT_URL, url);
 	curl_easy_setopt(curl_handle, CURLOPT_HTTPGET, 1L);
@@ -241,10 +243,10 @@ int appListThread(unsigned int args, void *arg) {
 	SceIoStat stat;
 	if (sceIoGetstat("ux0:data/VitaDB/apps.json", &stat) >= 0) {
 		total_bytes = stat.st_size;
-		fh = sceIoOpen("ux0:data/VitaDB/apps.stamp", SCE_O_RDONLY, 0777);
-		if (fh > 0) {
-			sceIoRead(fh, &timestamp, sizeof(time_t));
-			sceIoClose(fh);
+		SceUID fh2 = sceIoOpen("ux0:data/VitaDB/apps.stamp", SCE_O_RDONLY, 0777);
+		if (fh2 > 0) {
+			sceIoRead(fh2, &timestamp, sizeof(time_t));
+			sceIoClose(fh2);
 		}
 	} else {
 		total_bytes = 12 * 1024;
@@ -254,7 +256,7 @@ int appListThread(unsigned int args, void *arg) {
 		startDownload("https://www.rinnegatamante.eu/vitadb/list_hbs_json.php", timestamp);
 	}
 
-	if (downloaded_bytes > 12 * 1024) {
+	if (downloaded_bytes > 12 * 1024 && response_code != 304) {
 		fh = sceIoOpen("ux0:data/VitaDB/apps.json", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 		sceIoWrite(fh, generic_mem_buffer, downloaded_bytes);
 		sceIoClose(fh);
@@ -279,10 +281,10 @@ int appPspListThread(unsigned int args, void *arg) {
 	SceIoStat stat;
 	if (sceIoGetstat("ux0:data/VitaDB/psp_apps.json", &stat) >= 0) {
 		total_bytes = stat.st_size;
-		fh = sceIoOpen("ux0:data/VitaDB/psp_apps.stamp", SCE_O_RDONLY, 0777);
-		if (fh > 0) {
-			sceIoRead(fh, &timestamp, sizeof(time_t));
-			sceIoClose(fh);
+		SceUID fh2 = sceIoOpen("ux0:data/VitaDB/psp_apps.stamp", SCE_O_RDONLY, 0777);
+		if (fh2 > 0) {
+			sceIoRead(fh2, &timestamp, sizeof(time_t));
+			sceIoClose(fh2);
 		}
 	} else {
 		total_bytes = 12 * 1024;
@@ -292,7 +294,7 @@ int appPspListThread(unsigned int args, void *arg) {
 		startDownload("https://www.rinnegatamante.eu/vitadb/list_psp_hbs_json.php", timestamp);
 	}
 
-	if (downloaded_bytes > 12 * 1024) {
+	if (downloaded_bytes > 12 * 1024 && response_code != 304) {
 		fh = sceIoOpen("ux0:data/VitaDB/psp_apps.json", SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 		sceIoWrite(fh, generic_mem_buffer, downloaded_bytes);
 		sceIoClose(fh);
