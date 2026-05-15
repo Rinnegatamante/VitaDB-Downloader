@@ -457,7 +457,7 @@ void insert_daemon_blacklist(char *tid) {
 
 void remove_daemon_blacklist(char *tid) {
 	if (daemon_blacklist.size() > 1) {
-		char *buffer = (char *)malloc((daemon_blacklist.size() - 1) * 10 + 1);
+		char *buffer = (char *)malloc(daemon_blacklist.size() * 10 + 1);
 		buffer[0] = 0;
 		int idx = 0;
 		int to_delete = 0;
