@@ -1612,9 +1612,9 @@ extract_libshacccg:
 			if (mode_idx == MODE_VITA_HBS) {
 				if (ImGui::Button(hovered->favorites ? "Remove from Favorites": "Add to Favorites", ImVec2(-1.0f, 0.0f))) {
 					if (hovered->favorites) {
-						remove_favorites(hovered->titleid);
+						remove_favorites(hovered->id);
 					} else {
-						insert_favorites(hovered->titleid);
+						insert_favorites(hovered->id);
 					}
 					hovered->favorites = !hovered->favorites;
 					AppSelection *clashes = hovered->prev_clash;

@@ -36,6 +36,7 @@ AppSelection *psp_apps = nullptr;
 TrophySelection *trophies = nullptr;
 std::vector<std::string> daemon_blacklist;
 std::vector<std::string> favorites;
+bool favorites_old_format = false;
 
 char *hardcoded_daemon_blacklist[] = {
 	"ABCD12345",
@@ -242,6 +243,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 		}
 		char *ptr = buffer;
 		char *end, *end2;
+		std::vector<std::string> new_favorites;
 		do {
 			char name[128], version[64], fname[128], fname2[128], smalldata[4];
 			ptr = get_value_from_json(name, ptr, "name", nullptr);
@@ -313,9 +315,19 @@ bool populate_apps_database(const char *file, bool is_psp) {
 				
 				node->favorites = false;
 				for (auto &s : favorites) {
-					if (s == node->titleid) {
-						node->favorites = true;
-						break;
+					if (favorites_old_format) {
+						if (s == node->titleid) {
+							node->favorites = true;
+							char padded_id[5];
+							sprintf(padded_id, "%04d", atoi(node->id));
+							new_favorites.push_back(padded_id);
+							break;
+						}
+					} else {
+						if (atoi(s.c_str()) == atoi(node->id)) {
+							node->favorites = true;
+							break;
+						}
 					}
 				}
 			}
@@ -354,6 +366,25 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			}
 		} while (ptr);
 		free(buffer);
+		
+		if (favorites_old_format) {
+			char is_new = '.';
+			SceUID fd = sceIoOpen("ux0:data/VitaDB/favorites.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+			sceIoWrite(fd, &is_new, 1);
+			is_new = ';';
+			int i = 1;
+			int sz = new_favorites.size();
+			for (auto &s : new_favorites) {
+				sceIoWrite(fd, s.c_str(), s.size());
+				if (i != sz) {
+					sceIoWrite(fd, &is_new, 1);
+				}
+				i++;
+			}
+			sceIoClose(fd);
+			favorites_old_format = false;
+			favorites = new_favorites;
+		}
 		
 		if (!is_psp) {
 			// Populate TitleID clashes
@@ -446,19 +477,39 @@ void populate_favorites() {
 	favorites.clear();
 	SceUID fd = sceIoOpen("ux0:data/VitaDB/favorites.txt", SCE_O_RDONLY, 0777);
 	if (fd >= 0) {
-		uint64_t len = sceIoLseek(fd, 0, SCE_SEEK_END);
-		sceIoLseek(fd, 0, SCE_SEEK_SET);
-		char *buffer = (char *)malloc(len + 1);
-		char *_buffer = buffer;
-		sceIoRead(fd, buffer, len);
-		buffer[len] = 0;
-		sceIoClose(fd);
-		for (int i = 0; i < len; i += 10) {
-			buffer[9] = 0;
-			favorites.push_back(buffer);
-			buffer += 10;
+		char is_old;
+		sceIoRead(fd, &is_old, 1);
+		if (is_old == '.') {
+			uint64_t len = sceIoLseek(fd, 0, SCE_SEEK_END);
+			sceIoLseek(fd, 1, SCE_SEEK_SET);
+			char *buffer = (char *)malloc(len);
+			char *_buffer = buffer;
+			sceIoRead(fd, buffer, len);
+			buffer[len] = 0;
+			sceIoClose(fd);
+			for (int i = 0; i < len; i += 5) {
+				buffer[4] = 0;
+				favorites.push_back(buffer);
+				buffer += 5;
+			}
+			free(_buffer);
+		} else {
+			// Old format: needs to convert TitleIDs to MariaDB IDs
+			favorites_old_format = true;
+			uint64_t len = sceIoLseek(fd, 0, SCE_SEEK_END);
+			sceIoLseek(fd, 0, SCE_SEEK_SET);
+			char *buffer = (char *)malloc(len + 1);
+			char *_buffer = buffer;
+			sceIoRead(fd, buffer, len);
+			buffer[len] = 0;
+			sceIoClose(fd);
+			for (int i = 0; i < len; i += 10) {
+				buffer[9] = 0;
+				favorites.push_back(buffer);
+				buffer += 10;
+			}
+			free(_buffer);
 		}
-		free(_buffer);
 	}
 }
 
@@ -466,24 +517,28 @@ void insert_favorites(char *tid) {
 	favorites.push_back(tid);
 	SceUID fd = sceIoOpen("ux0:data/VitaDB/favorites.txt", SCE_O_WRONLY | SCE_O_CREAT, 0777);
 	uint64_t len = sceIoLseek(fd, 0, SCE_SEEK_END);
+	char buffer[12];
 	if (len > 0) {
-		char buffer[12];
-		sprintf(buffer, ";%s", tid);
-		sceIoWrite(fd, buffer, 10);
+		sprintf(buffer, ";%04d", atoi(tid));
+		sceIoWrite(fd, buffer, 5);
 	} else {
-		sceIoWrite(fd, tid, 9);
+		sprintf(buffer, "%04d", atoi(tid));
+		sceIoWrite(fd, buffer, 4);
 	}
 	sceIoClose(fd);
 }
 
 void remove_favorites(char *tid) {
 	if (favorites.size() > 1) {
-		char *buffer = (char *)malloc((favorites.size() - 1) * 10 + 1);
-		buffer[0] = 0;
+		char padded_id[12];
+		sprintf(padded_id, ";%04d", atoi(tid));
+		char *buffer = (char *)malloc(favorites.size() * 5 + 1);
+		buffer[0] = '.';
+		buffer[1] = 0;
 		int idx = 0;
 		int to_delete = 0;
 		for (std::string& s : favorites) {
-			if (s == tid) {
+			if (s == padded_id) {
 				to_delete = idx;
 			} else {
 				strcat(buffer, s.c_str());
@@ -493,7 +548,7 @@ void remove_favorites(char *tid) {
 		}
 		favorites.erase(favorites.begin() + to_delete);
 		SceUID fd = sceIoOpen("ux0:data/VitaDB/favorites.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-		sceIoWrite(fd, buffer, favorites.size() * 10 - 1);
+		sceIoWrite(fd, buffer, favorites.size() * 5);
 		sceIoClose(fd);
 		free(buffer);
 	} else {
@@ -641,6 +696,7 @@ void populate_themes_database(const char *file) {
 				missing_previews[missing_previews_num++] = node;
 			node->desc = nullptr;
 			node->shuffle = false;
+			node->search_filtered = false;
 			strcpy(node->name, name);
 			sprintf(fname, "ux0:data/VitaDB/themes/%s/theme.ini", node->name);
 			
