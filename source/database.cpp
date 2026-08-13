@@ -490,7 +490,7 @@ void populate_favorites() {
 		if (is_old == '.') {
 			uint64_t len = sceIoLseek(fd, 0, SCE_SEEK_END);
 			sceIoLseek(fd, 1, SCE_SEEK_SET);
-			char *buffer = (char *)malloc(len);
+			char *buffer = (char *)malloc(len + 1);
 			char *_buffer = buffer;
 			sceIoRead(fd, buffer, len);
 			buffer[len] = 0;

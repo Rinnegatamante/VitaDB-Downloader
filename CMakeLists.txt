@@ -11,8 +11,8 @@ endif()
 project(VitaDB C CXX)
 include("${VITASDK}/share/vita.cmake" REQUIRED)
 set(VITA_APP_NAME "VitaDB Downloader")
-set(VITA_TITLEID	"VITADBDLD")
-set(VITA_VERSION	"01.00")
+set(VITA_TITLEID "VITADBDLD")
+set(VITA_VERSION "01.00")
 
 execute_process(COMMAND git describe --abbrev=6 --dirty --always
 	OUTPUT_VARIABLE GIT_HASH
@@ -168,4 +168,5 @@ vita_create_vpk(VitaDB.vpk ${VITA_TITLEID} eboot.bin
 		${CMAKE_SOURCE_DIR}/trophy.png trophy.png
 		${CMAKE_SOURCE_DIR}/star.png star.png
 		${CMAKE_SOURCE_DIR}/crank.png crank.png
+		${CMAKE_SOURCE_DIR}/slop.png slop.png
 )
