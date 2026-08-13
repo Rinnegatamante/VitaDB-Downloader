@@ -85,7 +85,7 @@ void *gpu_alloc(void *p, uint32_t align, uint32_t size) {
 		align = FB_ALIGNMENT;
 	}
 	size = ALIGN_MEM(size, align);
-	return vglAlloc(size, VGL_MEM_SLOW);
+	return vglAlloc(size, VGL_MEM_PHYCONT);
 }
 
 void gpu_free(void *p, void *ptr) {
