@@ -212,19 +212,18 @@ void PrepareTrophy(const char *tid, const char *name, int index, int count) {
 }
 
 enum {
-	FILTER_VITA_APPS_ALL,
 	FILTER_VITA_APPS_GAME,
 	FILTER_VITA_APPS_PORT,
 	FILTER_VITA_APPS_UTILITY,
 	FILTER_VITA_APPS_EMULATOR,
 	FILTER_VITA_APPS_FAVORITES,
-	FILTER_VITA_APPS_FREEWARE,
+	FILTER_VITA_APPS_NON_FREEWARE,
 	FILTER_VITA_APPS_NOT_INSTALLED,
 	FILTER_VITA_APPS_OUTDATED,
 	FILTER_VITA_APPS_INSTALLED,
 	FILTER_VITA_APPS_TROPHY,
-	FILTER_VITA_APPS_NO_AI,
-	FILTER_VITA_APPS_AI
+	FILTER_VITA_APPS_AI_ASSISTED,
+	FILTER_VITA_APPS_VIBECODED
 };
 
 const char *filter_vita_apps_modes[] = {
@@ -233,7 +232,7 @@ const char *filter_vita_apps_modes[] = {
 	"Utilities",
 	"Emulators",
 	"Favorites Apps",
-	"Freeware Apps",
+	"Non Freeware Apps",
 	"Not Installed Apps",
 	"Outdated Apps",
 	"Installed Apps",
@@ -245,28 +244,34 @@ const char *filter_vita_apps_modes[] = {
 bool filter_vita_apps_states[] = {true, true, true, true, true, true, true, true, true, true, true, true};
 
 enum {
-	FILTER_PSP_APPS_ALL,
 	FILTER_PSP_APPS_GAME,
 	FILTER_PSP_APPS_PORT,
 	FILTER_PSP_APPS_UTILITY,
 	FILTER_PSP_APPS_EMULATOR,
-	FILTER_PSP_APPS_FREEWARE,
+	FILTER_PSP_APPS_FAVORITES,
+	FILTER_PSP_APPS_NON_FREEWARE,
 	FILTER_PSP_APPS_NOT_INSTALLED,
 	FILTER_PSP_APPS_OUTDATED,
 	FILTER_PSP_APPS_INSTALLED,
+	FILTER_PSP_APPS_AI_ASSISTED,
+	FILTER_PSP_APPS_VIBECODED
 };
 
 const char *filter_psp_apps_modes[] = {
-	"All Apps",
 	"Original Games",
 	"Game Ports",
 	"Utilities",
 	"Emulators",
-	"Freeware Apps",
+	"Favorites Apps",
+	"Non Freeware Apps",
 	"Not Installed Apps",
 	"Outdated Apps",
-	"Installed Apps"
+	"Installed Apps",
+	"AI Assisted Apps",
+	"Vibecoded Apps",
 };
+
+bool filter_psp_apps_states[] = {true, true, true, true, true, true, true, true, true, true, true};
 
 enum {
 	FILTER_THEMES_ALL,
@@ -288,42 +293,45 @@ bool filterVitaApps(AppSelection *p) {
 	for (int i = 0; i < sizeof(filter_vita_apps_states) / sizeof(*filter_vita_apps_states); i++) {
 		if (!filter_vita_apps_states[i]) {
 			switch (i) {
-			case 0: // Original Games
-			case 1: // Game Ports
-			case 2: // Utilities
-			case 3: // Emulators
+			case FILTER_VITA_APPS_GAME:
+			case FILTER_VITA_APPS_PORT:
 				if (cat == i)
 					return true;
 				break;
-			case 4: // Favorites
-				if (!p->favorites)
+			case FILTER_VITA_APPS_UTILITY:
+			case FILTER_VITA_APPS_EMULATOR:
+				if (cat - 1 == i)
 					return true;
 				break;
-			case 5: // Freeware Apps
-				if (!(p->requirements && strstr(p->requirements, "Game Data Files")))
+			case FILTER_VITA_APPS_FAVORITES:
+				if (p->favorites)
 					return true;
 				break;
-			case 6: // Not Installed Apps
+			case FILTER_VITA_APPS_NON_FREEWARE:
+				if (p->requirements && strstr(p->requirements, "Game Data Files"))
+					return true;
+				break;
+			case FILTER_VITA_APPS_NOT_INSTALLED:
 				if (p->state == APP_UNTRACKED)
 					return true;
 				break;
-			case 7: // Outdated Apps
+			case FILTER_VITA_APPS_OUTDATED:
 				if (p->state == APP_OUTDATED)
 					return true;
 				break;
-			case 8: // Installed Apps
+			case FILTER_VITA_APPS_INSTALLED:
 				if (p->state != APP_UNTRACKED)
 					return true;
 				break;
-			case 9: // Trophies
+			case FILTER_VITA_APPS_TROPHY:
 				if (p->trophies)
 					return true;
 				break;
-			case 10: // AI Assisted
+			case FILTER_VITA_APPS_AI_ASSISTED:
 				if (p->ai == APP_AI_ASSISTED)
 					return true;
 				break;
-			case 11: // Vibecoded
+			case FILTER_VITA_APPS_VIBECODED:
 				if (p->ai == APP_VIBECODED)
 					return true;
 				break;				
@@ -334,21 +342,48 @@ bool filterVitaApps(AppSelection *p) {
 }
 
 bool filterPspApps(AppSelection *p) {
-	if (filter_idx) {
-		int filter_cat = filter_idx > 2 ? (filter_idx + 1) : filter_idx;
-		if (filter_cat <= 5) {
-			return p->type[0] - '0' != filter_cat;
-		} else {
-			filter_cat -= 6;
-			if (filter_cat == 0) { // Freeware Apps
-				return p->requirements && strstr(p->requirements, "Game Data Files");
-			} else {
-				filter_cat--;
-				if (filter_cat < 2) {
-					return p->state != filter_cat;
-				} else if (filter_cat == 2) { // Installed Apps
-					return p->state == APP_UNTRACKED;
-				}
+	int cat = (p->type[0] - '0') - 1;
+	for (int i = 0; i < sizeof(filter_psp_apps_states) / sizeof(*filter_psp_apps_states); i++) {
+		if (!filter_psp_apps_states[i]) {
+			switch (i) {
+			case FILTER_PSP_APPS_GAME:
+			case FILTER_PSP_APPS_PORT:
+				if (cat == i)
+					return true;
+				break;
+			case FILTER_PSP_APPS_UTILITY:
+			case FILTER_PSP_APPS_EMULATOR:
+				if (cat - 1 == i)
+					return true;
+				break;
+			case FILTER_PSP_APPS_FAVORITES:
+				if (p->favorites)
+					return true;
+				break;
+			case FILTER_PSP_APPS_NON_FREEWARE:
+				if (p->requirements && strstr(p->requirements, "Game Data Files"))
+					return true;
+				break;
+			case FILTER_PSP_APPS_NOT_INSTALLED:
+				if (p->state == APP_UNTRACKED)
+					return true;
+				break;
+			case FILTER_PSP_APPS_OUTDATED:
+				if (p->state == APP_OUTDATED)
+					return true;
+				break;
+			case FILTER_PSP_APPS_INSTALLED:
+				if (p->state != APP_UNTRACKED)
+					return true;
+				break;
+			case FILTER_PSP_APPS_AI_ASSISTED:
+				if (p->ai == APP_AI_ASSISTED)
+					return true;
+				break;
+			case FILTER_PSP_APPS_VIBECODED:
+				if (p->ai == APP_VIBECODED)
+					return true;
+				break;				
 			}
 		}
 	}
@@ -1096,9 +1131,9 @@ extract_libshacccg:
 			if (mode_idx == MODE_THEMES)
 				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d themes with '%s' filter", VERSION, filtered_entries, filter_themes_modes[filter_idx]);
 			else if (mode_idx == MODE_VITA_HBS)
-				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d results with '%s' filter", VERSION, filtered_entries, filter_vita_apps_modes[filter_idx]);
+				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d results", VERSION, filtered_entries);
 			else
-				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d results with '%s' filter", VERSION, filtered_entries, filter_psp_apps_modes[filter_idx]);
+				sprintf(title, "VitaDB Downloader v.%s - Currently listing %d results", VERSION, filtered_entries);
 			ImGui::Text(title);
 			if (calculate_right_len) {
 				calculate_right_len = false;
@@ -1170,13 +1205,17 @@ extract_libshacccg:
 				ImGui::EndCombo();
 			}
 		} else {
-			if (ImGui::BeginCombo("##combo", filter_psp_apps_modes[filter_idx])) {
+			int active_filters = 0;
+			for (int n = 0; n < sizeof(filter_psp_apps_modes) / sizeof(*filter_psp_apps_modes); n++) {
+				if (filter_psp_apps_states[n]) {
+					active_filters++;
+				}
+			}
+			char active_filters_str[32];
+			sprintf(active_filters_str, "%d active", active_filters);
+			if (ImGui::BeginCombo("##combo", active_filters_str)) {
 				for (int n = 0; n < sizeof(filter_psp_apps_modes) / sizeof(*filter_psp_apps_modes); n++) {
-					bool is_selected = filter_idx == n;
-					if (ImGui::Selectable(filter_psp_apps_modes[n], is_selected))
-						filter_idx = n;
-					if (is_selected)
-						ImGui::SetItemDefaultFocus();
+					ImGui::Checkbox(filter_psp_apps_modes[n], &filter_psp_apps_states[n]);
 				}
 				ImGui::EndCombo();
 			}			
