@@ -1520,18 +1520,26 @@ extract_libshacccg:
 					ImGui::SetCursorPosY(116);
 					ImGui::SetCursorPosX(140);
 				}
-				char size_str[64];
+				char size_str[64], size_str2[64] = {};
 				char *dummy;
 				uint64_t sz;
 				if (strlen(hovered->data_link) > 5) {
 					sz = strtoull(hovered->size, &dummy, 10);
 					uint64_t sz2 = strtoull(hovered->data_size, &dummy, 10);
-					sprintf(size_str, "%s: %.2f %s, Data: %.2f %s", mode_idx == MODE_VITA_HBS ? "VPK" : "App", format_size(sz), format_size_str(sz), format_size(sz2), format_size_str(sz2));
+					sprintf(size_str, "%s: %.2f %s", mode_idx == MODE_VITA_HBS ? "VPK" : "App", format_size(sz), format_size_str(sz));
+					sprintf(size_str2, "Data: %.2f %s", format_size(sz2), format_size_str(sz2));
 				} else {
 					sz = strtoull(hovered->size, &dummy, 10);
 					sprintf(size_str, "%s: %.2f %s", mode_idx == MODE_VITA_HBS ? "VPK" : "App", format_size(sz), format_size_str(sz));
 				}
 				ImGui::Text(size_str);
+				if (size_str2[0]) {
+					if (mode_idx == MODE_VITA_HBS) {
+						ImGui::SetCursorPosY(132);
+						ImGui::SetCursorPosX(140);
+					}
+					ImGui::Text(size_str2);
+				}
 				ImGui::TextColored(TextLabel, "Description:");
 				ImGui::TextWrapped(hovered->desc);
 				ImGui::SetCursorPosY(6);
@@ -1556,6 +1564,37 @@ extract_libshacccg:
 						ImGui::TextColored(TextOutdated, hovered->titleid);
 					} else {
 						ImGui::Text(hovered->titleid);
+					}
+					if (hovered->score > 0.0f) {
+						ImGui::SetCursorPosY(100);
+						ImGui::SetCursorPosX(320);
+						ImGui::TextColored(TextLabel, "Game Score:");
+						ImGui::SetCursorPosY(116);
+						ImGui::SetCursorPosX(320);
+						if (hovered->score < 60.0f)
+							ImGui::TextColored(ImVec4(0.85f, 0.20f, 0.20f, 1.0f), "%.1f", hovered->score);
+						else if (hovered->score < 70.0f)
+							ImGui::TextColored(ImVec4(0.95f, 0.55f, 0.15f, 1.0f), "%.1f", hovered->score);
+						else if (hovered->score < 80.0f)
+							ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.15f, 1.0f), "%.1f", hovered->score);
+						else if (hovered->score < 90.0f)
+							ImGui::TextColored(ImVec4(0.25f, 0.75f, 0.35f, 1.0f), "%.1f", hovered->score);
+						else {
+							float t = (float)ImGui::GetTime();
+							float pulse = (sinf(t * 3.0f) + 1.0f) * 0.5f;
+							ImVec4 green(0.25f + pulse * 0.20f, 0.75f + pulse * 0.25f, 0.35f + pulse * 0.20f, 1.0f);
+							ImVec2 pos = ImGui::GetCursorScreenPos();
+							char score_text[32];
+							sprintf(score_text, "%.1f", hovered->score);
+							ImDrawList *draw = ImGui::GetWindowDrawList();
+							float glow_alpha = 0.10f + pulse * 0.20f;
+							ImU32 glow = ImGui::ColorConvertFloat4ToU32(ImVec4(0.25f, 1.0f, 0.40f, glow_alpha));
+							draw->AddText(ImVec2(pos.x - 1.0f, pos.y), glow, score_text);
+							draw->AddText(ImVec2(pos.x + 1.0f, pos.y), glow, score_text);
+							draw->AddText(ImVec2(pos.x, pos.y - 1.0f), glow, score_text);
+							draw->AddText(ImVec2(pos.x, pos.y + 1.0f), glow, score_text);
+							ImGui::TextColored(green, "%.1f", hovered->score);
+						}
 					}
 					if (hovered->state != APP_UNTRACKED) {
 						ImGui::SetCursorPosY(132);

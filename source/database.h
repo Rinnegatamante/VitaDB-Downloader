@@ -96,6 +96,7 @@ struct AppSelection {
 	char *requirements;
 	char data_link[128];
 	int state;
+	float score;
 	bool trophies;
 	uint8_t ai;
 	bool favorites;
