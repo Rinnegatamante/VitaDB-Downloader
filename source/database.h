@@ -35,6 +35,12 @@ enum {
 };
 
 enum {
+	APP_HUMAN_MADE,
+	APP_AI_ASSISTED,
+	APP_VIBECODED
+};
+
+enum {
 	SORT_APPS_NEWEST,
 	SORT_APPS_OLDEST,
 	SORT_APPS_MOST_DOWNLOADED,
@@ -91,7 +97,7 @@ struct AppSelection {
 	char data_link[128];
 	int state;
 	bool trophies;
-	bool ai;
+	uint8_t ai;
 	bool favorites;
 	bool search_filtered;
 	uint8_t blacklisted;

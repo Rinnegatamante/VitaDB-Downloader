@@ -103,7 +103,7 @@ int trophies_feature = FEATURE_OFF;
 
 SceUID trophy_thd;
 static int preview_width, preview_height, preview_x, preview_y;
-GLuint preview_icon = 0, preview_shot = 0, bg_image = 0, trp_icon = 0, star_icon = 0, crank_icon = 0, empty_icon = 0;
+GLuint preview_icon = 0, preview_shot = 0, bg_image = 0, trp_icon = 0, star_icon = 0, crank_icon = 0, slop_icon = 0, empty_icon = 0;
 void load_preview(AppSelection *game) {
 	if (old_hovered == game)
 		return;
@@ -898,6 +898,12 @@ extract_libshacccg:
 	icon_data = stbi_load("app0:crank.png", &w, &h, NULL, 4);
 	glGenTextures(1, &crank_icon);
 	glTextureImage2D(crank_icon, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+	free(icon_data);
+	
+	// Load slop icon
+	icon_data = stbi_load("app0:slop.png", &w, &h, NULL, 4);
+	glGenTextures(1, &slop_icon);
+	glTextureImage2D(slop_icon, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
 	free(icon_data);	
 	
 	// Load star icon
@@ -1353,7 +1359,7 @@ extract_libshacccg:
 					bool reset_cursor = false;
 					if (g->ai) {
 						ImGui::SetCursorPosY(y - 2.0f);
-						ImGui::Image((void*)crank_icon, ImVec2(20, 20));
+						ImGui::Image(g->ai == 1 ? (void*)crank_icon : (void*)slop_icon, ImVec2(20, 20));
 						reset_cursor = true;
 						x_offs += 20.0f;
 						ImGui::SameLine();
