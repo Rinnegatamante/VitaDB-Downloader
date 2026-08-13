@@ -228,7 +228,6 @@ enum {
 };
 
 const char *filter_vita_apps_modes[] = {
-	"All Apps",
 	"Original Games",
 	"Game Ports",
 	"Utilities",
@@ -239,9 +238,11 @@ const char *filter_vita_apps_modes[] = {
 	"Outdated Apps",
 	"Installed Apps",
 	"Apps with Trophies",
-	"Apps not using AI",
-	"Apps using AI",
+	"AI Assisted Apps",
+	"Vibecoded Apps",
 };
+
+bool filter_vita_apps_states[] = {true, true, true, true, true, true, true, true, true, true, true, true};
 
 enum {
 	FILTER_PSP_APPS_ALL,
@@ -283,27 +284,49 @@ int sort_idx = 0;
 int old_sort_idx = -1;
 
 bool filterVitaApps(AppSelection *p) {
-	if (filter_idx) {
-		int filter_cat = filter_idx > 2 ? (filter_idx + 1) : filter_idx;
-		if (filter_cat <= 5) {
-			return p->type[0] - '0' != filter_cat;
-		} else {
-			filter_cat -= 6;
-			if (filter_cat == 0) { // Favorites
-				return !p->favorites;
-			} else if (filter_cat == 1) { // Freeware Apps
-				return p->requirements && strstr(p->requirements, "Game Data Files");
-			} else {
-				filter_cat -= 2;
-				if (filter_cat < 2) {
-					return p->state != filter_cat;
-				} else if (filter_cat == 2) { // Installed Apps
-					return p->state == APP_UNTRACKED;
-				} else if (filter_cat == 3) {
-					return !p->trophies;
-				} else {
-					return p->ai == (filter_cat == 4);
-				}
+	int cat = (p->type[0] - '0') - 1;
+	for (int i = 0; i < sizeof(filter_vita_apps_states) / sizeof(*filter_vita_apps_states); i++) {
+		if (!filter_vita_apps_states[i]) {
+			switch (i) {
+			case 0: // Original Games
+			case 1: // Game Ports
+			case 2: // Utilities
+			case 3: // Emulators
+				if (cat == i)
+					return true;
+				break;
+			case 4: // Favorites
+				if (!p->favorites)
+					return true;
+				break;
+			case 5: // Freeware Apps
+				if (!(p->requirements && strstr(p->requirements, "Game Data Files")))
+					return true;
+				break;
+			case 6: // Not Installed Apps
+				if (p->state == APP_UNTRACKED)
+					return true;
+				break;
+			case 7: // Outdated Apps
+				if (p->state == APP_OUTDATED)
+					return true;
+				break;
+			case 8: // Installed Apps
+				if (p->state != APP_UNTRACKED)
+					return true;
+				break;
+			case 9: // Trophies
+				if (p->trophies)
+					return true;
+				break;
+			case 10: // AI Assisted
+				if (p->ai == APP_AI_ASSISTED)
+					return true;
+				break;
+			case 11: // Vibecoded
+				if (p->ai == APP_VIBECODED)
+					return true;
+				break;				
 			}
 		}
 	}
@@ -1132,13 +1155,17 @@ extract_libshacccg:
 				ImGui::EndCombo();
 			}
 		} else if (mode_idx == MODE_VITA_HBS) {
-			if (ImGui::BeginCombo("##combo", filter_vita_apps_modes[filter_idx])) {
+			int active_filters = 0;
+			for (int n = 0; n < sizeof(filter_vita_apps_modes) / sizeof(*filter_vita_apps_modes); n++) {
+				if (filter_vita_apps_states[n]) {
+					active_filters++;
+				}
+			}
+			char active_filters_str[32];
+			sprintf(active_filters_str, "%d active", active_filters);
+			if (ImGui::BeginCombo("##combo", active_filters_str)) {
 				for (int n = 0; n < sizeof(filter_vita_apps_modes) / sizeof(*filter_vita_apps_modes); n++) {
-					bool is_selected = filter_idx == n;
-					if (ImGui::Selectable(filter_vita_apps_modes[n], is_selected))
-						filter_idx = n;
-					if (is_selected)
-						ImGui::SetItemDefaultFocus();
+					ImGui::Checkbox(filter_vita_apps_modes[n], &filter_vita_apps_states[n]);
 				}
 				ImGui::EndCombo();
 			}
