@@ -105,6 +105,26 @@ int trophies_feature = FEATURE_OFF;
 SceUID trophy_thd;
 static int preview_width, preview_height, preview_x, preview_y;
 GLuint preview_icon = 0, preview_shot = 0, bg_image = 0, trp_icon = 0, star_icon = 0, crank_icon = 0, slop_icon = 0, empty_icon = 0;
+
+static void restore_navigation_focus(ImGuiID item_id, const ImRect& item_rect) {
+	ImGuiContext *context = ImGui::GetCurrentContext();
+	ImGuiWindow *window = context->CurrentWindow;
+	ImGui::FocusWindow(window);
+	context->NavLayer = window->DC.NavLayerCurrent;
+	context->NavId = item_id;
+	window->NavLastIds[context->NavLayer] = context->NavId;
+	window->NavRectRel[context->NavLayer] = item_rect;
+	context->NavInitRequest = false;
+	context->NavInitResultId = 0;
+	context->NavMoveRequest = false;
+	context->NavMoveRequestForward = ImGuiNavForward_None;
+	context->NavMoveResultLocal.Clear();
+	context->NavMoveResultOther.Clear();
+	context->NavAnyRequest = false;
+	context->NavDisableHighlight = false;
+	context->NavDisableMouseHover = true;
+}
+
 void load_preview(AppSelection *game) {
 	if (old_hovered == game)
 		return;
@@ -1126,6 +1146,9 @@ extract_libshacccg:
 	bool fast_increment = false;
 	bool fast_decrement = false;
 	bool extra_menu_invoked = false;
+	AppSelection *restore_app_focus = nullptr;
+	ImGuiID hovered_app_id = 0;
+	ImRect hovered_app_rect;
 	bool has_touched = false;
 	bool is_app_hovered;
 	float right_len = 0.0f;
@@ -1181,6 +1204,12 @@ extract_libshacccg:
 		ImGui::SetNextWindowPos(ImVec2(0, 21), ImGuiSetCond_Always);
 		ImGui::SetNextWindowSize(ImVec2(553, 523), ImGuiSetCond_Always);
 		ImGui::Begin("##main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
+		if (restore_app_focus && hovered_app_id) {
+			hovered = restore_app_focus;
+			restore_navigation_focus(hovered_app_id, hovered_app_rect);
+			restore_app_focus = nullptr;
+			go_to_top = false;
+		}
 		
 		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Search: ");
@@ -1333,6 +1362,9 @@ extract_libshacccg:
 					if (ImGui::IsItemHovered()) {
 						is_app_hovered = true;
 						hovered = (AppSelection *)g;
+						hovered_app_id = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
+						hovered_app_rect = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemRect;
+						hovered_app_rect.Translate(ImVec2(-ImGui::GetWindowPos().x, -ImGui::GetWindowPos().y));
 						if (fast_increment)
 							increment_idx = 1;
 						else if (fast_decrement) {
@@ -1395,20 +1427,21 @@ extract_libshacccg:
 				}
 				if (!g->search_filtered) {
 					float y = ImGui::GetCursorPosY() + 3.0f;
+					char lbl[128];
+					const char *button_label = g->name;
 					if (g->trophies || g->favorites || g->ai) {
-						char lbl[128];
 						sprintf(lbl, "##%d", btn_idx++);
-						if (ImGui::Button(lbl, ImVec2(-1.0f, 0.0f))) {
-							to_download = g;
-						}
-					} else {
-						if (ImGui::Button(g->name, ImVec2(-1.0f, 0.0f))) {
-							to_download = g;
-						}
+						button_label = lbl;
+					}
+					if (ImGui::Button(button_label, ImVec2(-1.0f, 0.0f))) {
+						to_download = g;
 					}
 					if (ImGui::IsItemHovered()) {
 						is_app_hovered = true;
 						hovered = g;
+						hovered_app_id = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
+						hovered_app_rect = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemRect;
+						hovered_app_rect.Translate(ImVec2(-ImGui::GetWindowPos().x, -ImGui::GetWindowPos().y));
 						if (fast_increment)
 							increment_idx = 1;
 						else if (fast_decrement) {
@@ -1743,17 +1776,20 @@ extract_libshacccg:
 				if (ImGui::Button("Install", ImVec2(-1.0f, 0.0f))) {
 					to_download = hovered;
 					extra_menu_invoked = false;
+					restore_app_focus = hovered;
 				}
 			} else {
 				if (hovered->state == APP_OUTDATED) {
 					if (ImGui::Button("Update", ImVec2(-1.0f, 0.0f))) {
 						to_download = hovered;
 						extra_menu_invoked = false;
+						restore_app_focus = hovered;
 					}
 				}
 				if (ImGui::Button("Uninstall", ImVec2(-1.0f, 0.0f))) {
 					to_uninstall = hovered;
 					extra_menu_invoked = false;
+					restore_app_focus = hovered;
 				}
 			}
 			if (mode_idx != MODE_THEMES) {
@@ -1765,6 +1801,7 @@ extract_libshacccg:
 					}
 					hovered->favorites = !hovered->favorites;
 					extra_menu_invoked = false;
+					restore_app_focus = hovered;
 				}
 			}
 			if (hovered->state == APP_OUTDATED) {
@@ -1780,6 +1817,7 @@ extract_libshacccg:
 					sceIoClose(f);
 					hovered->state = APP_UPDATED;
 					extra_menu_invoked = false;
+					restore_app_focus = hovered;
 				}
 			}
 			if (mode_idx == MODE_VITA_HBS && hovered->state != APP_UNTRACKED && hovered->blacklisted != APP_HARD_BLACKLISTED) {
@@ -1802,6 +1840,7 @@ extract_libshacccg:
 						clashes = clashes->next_clash;
 					}
 					extra_menu_invoked = false;
+					restore_app_focus = hovered;
 				}
 			}
 			if (hovered->trophies) {
@@ -1891,6 +1930,8 @@ extract_libshacccg:
 			} else if (video_is_finished()) {
 				trailer_feature = FEATURE_OFF;
 				close_trailer();
+				if (!extra_menu_invoked)
+					restore_app_focus = hovered;
 			}
 			ImGui::End();
 		}
@@ -1961,18 +2002,34 @@ extract_libshacccg:
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES || strlen(hovered->trailer) > 5) && !show_changelog && !show_requirements && !trophies_feature) {
 			if (mode_idx == MODE_THEMES) {
-				screenshots_feature = screenshots_feature ? FEATURE_OFF : FEATURE_LOADING;
+				if (screenshots_feature) {
+					screenshots_feature = FEATURE_OFF;
+					if (!extra_menu_invoked)
+						restore_app_focus = hovered;
+				} else {
+					screenshots_feature = FEATURE_LOADING;
+				}
 			} else if (strlen(hovered->trailer) > 5) {
 				if (screenshots_feature) {
 					screenshots_feature = FEATURE_OFF;
+					if (!extra_menu_invoked)
+						restore_app_focus = hovered;
 				} else {
 					trailer_feature = trailer_feature ? FEATURE_OFF : FEATURE_LOADING;
 					if (!trailer_feature) {
 						close_trailer();
+						if (!extra_menu_invoked)
+							restore_app_focus = hovered;
 					}
 				}
 			} else {
-				screenshots_feature = screenshots_feature ? 0 : 1;
+				if (screenshots_feature) {
+					screenshots_feature = FEATURE_OFF;
+					if (!extra_menu_invoked)
+						restore_app_focus = hovered;
+				} else {
+					screenshots_feature = FEATURE_LOADING;
+				}
 			}
 		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !trophies_feature) {
 			if (mode_idx == MODE_THEMES) {
@@ -1993,8 +2050,14 @@ extract_libshacccg:
 					install_theme_from_shuffle(false);
 				} else
 					sceIoRemove("ux0:data/VitaDB/shuffle.cfg");
-			} else if (hovered)
-				extra_menu_invoked = !extra_menu_invoked;
+			} else if (hovered) {
+				if (extra_menu_invoked) {
+					extra_menu_invoked = false;
+					restore_app_focus = hovered;
+				} else {
+					extra_menu_invoked = true;
+				}
+			}
 		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && !trailer_feature && !show_changelog && !show_requirements && !trophies_feature && (!extra_menu_invoked || screenshots_feature)) {
 			if (screenshots_feature)
 				cur_ss_idx--;
@@ -2029,11 +2092,16 @@ extract_libshacccg:
 				}
 			} else if (screenshots_feature) {
 				screenshots_feature = FEATURE_OFF;
+				if (!extra_menu_invoked)
+					restore_app_focus = hovered;
 			} else if (trailer_feature) {
 				close_trailer();
 				trailer_feature = FEATURE_OFF;
+				if (!extra_menu_invoked)
+					restore_app_focus = hovered;
 			} else if (extra_menu_invoked) {
 				extra_menu_invoked = false;
+				restore_app_focus = hovered;
 			} else
 				go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !trailer_feature && !screenshots_feature && !show_requirements && !trophies_feature && !show_changelog && !extra_menu_invoked) {
@@ -2089,7 +2157,9 @@ extract_libshacccg:
 				}
 				to_uninstall->state = APP_UNTRACKED;
 			}
+			restore_app_focus = to_uninstall;
 			to_uninstall = nullptr;
+			go_to_top = false;
 		}
 		
 		// Queued app download
