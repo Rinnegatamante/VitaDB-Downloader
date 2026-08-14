@@ -103,6 +103,7 @@ struct AppSelection {
 	uint8_t ai;
 	bool favorites;
 	bool search_filtered;
+	bool filtered;
 	uint8_t blacklisted;
 	AppSelection *next_clash;
 	AppSelection *prev_clash;

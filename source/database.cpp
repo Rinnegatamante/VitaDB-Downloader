@@ -71,8 +71,8 @@ const char *sort_modes_apps_str[10] = {
 	"Alphabetical (Z-A)",
 	"Smallest",
 	"Largest",
-	"Highest Score",
-	"Lowest Score"
+	"Highest Game Score",
+	"Lowest Game Score"
 };
 
 const char *sort_modes_themes_str[2] = {
@@ -252,6 +252,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 				break;
 			AppSelection *node = (AppSelection*)malloc(sizeof(AppSelection));
 			node->search_filtered = false;
+			node->filtered = false;
 			node->desc = nullptr;
 			node->requirements = nullptr;
 			node->next_clash = nullptr;
