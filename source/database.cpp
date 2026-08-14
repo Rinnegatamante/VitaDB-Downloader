@@ -62,7 +62,7 @@ static SceUID clash_thd;
 extern char boot_params[1024];
 extern AppSelection *to_download;
 
-const char *sort_modes_apps_str[8] = {
+const char *sort_modes_apps_str[10] = {
 	"Most Recent",
 	"Oldest",
 	"Most Downloaded",
@@ -70,7 +70,9 @@ const char *sort_modes_apps_str[8] = {
 	"Alphabetical (A-Z)",
 	"Alphabetical (Z-A)",
 	"Smallest",
-	"Largest"
+	"Largest",
+	"Highest Score",
+	"Lowest Score"
 };
 
 const char *sort_modes_themes_str[2] = {
@@ -655,6 +657,20 @@ void sort_apps_list(AppSelection **start, int sort_idx) {
 				d1 = strtoll(ptr1->size, &dummy, 10) + strtoll(ptr1->data_size, &dummy, 10);
 				d2 = strtoll(ptr1->next->size, &dummy, 10) + strtoll(ptr1->next->data_size, &dummy, 10);
 				if (d1 < d2) {
+					swap_apps(lptr, ptr1, ptr1->next); 
+					swapped = true;
+					last_swapped = true;
+				}
+				break;
+			case SORT_APPS_HIGHEST_SCORE:
+				if (ptr1->score < ptr1->next->score) {
+					swap_apps(lptr, ptr1, ptr1->next); 
+					swapped = true;
+					last_swapped = true;
+				}
+				break;
+			case SORT_APPS_LOWEST_SCORE:
+				if (ptr1->score > ptr1->next->score) {
 					swap_apps(lptr, ptr1, ptr1->next); 
 					swapped = true;
 					last_swapped = true;
