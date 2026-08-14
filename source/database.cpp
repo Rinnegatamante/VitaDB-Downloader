@@ -54,8 +54,6 @@ char *hardcoded_daemon_blacklist[] = {
 	"VID000016",
 	"VITAPONG0",
 	"VSCU00001",
-	"YYOLOADER",
-	"NZZMBSPTB",
 	"XASH00001"
 };
 
