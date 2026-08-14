@@ -31,6 +31,19 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 
 ## Changelog
 
+### v.2.6
+- Added distinction between vibecoded and AI assisted apps: now they will use different icons.
+- Made so that filters for PSP and PSVita homebrews are now stackable: this will allow for more granular researches in the database.
+- Made so that filters results are cached instead of being recalculated each frame: this reduces the CPU workload of the application.
+- Added Favorites filter for PSP homebrews.
+- Added Vibecoded Apps filter for PSP and PSVita homebrews.
+- Fixed an out of bound bug in the favorites list population that caused VitaDB Downloader to crash at boot under certain circumstances.
+- Added Game Score metadata for game ports having one in the database. The Game Score is a weighted average of the original game ported scores on different critics aggregator websites (it is NOT related to the quality of the port itself).
+- Added two new sorting methods: Highest Game Score, Lowest Game Score.
+- Made YoYo Loader and Nazi Zombies Portable no more hardcoded blacklisted in the daemon blacklist since the new CI support offered by VitaDB ensures that the update hashes are properly fresh.
+- Fixed a bug causing visual loss of selected application after performing some specific actions (eg: Uninstalling an app, watching a trailer, ...).
+- Updated to latest vitaGL commit.
+
 ### v.2.5
 - Added a Crank icon nearby apps using AI.
 - Added two new filters: "Apps using AI" and "Apps not using AI" for Vita homebrews.
