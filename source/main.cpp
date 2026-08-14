@@ -328,7 +328,7 @@ bool filterVitaApps(AppSelection *p) {
 					return true;
 				break;
 			case FILTER_VITA_APPS_AI_ASSISTED:
-				if (p->ai == APP_AI_ASSISTED)
+				if (p->ai != APP_HUMAN_MADE)
 					return true;
 				break;
 			case FILTER_VITA_APPS_VIBECODED:
@@ -377,7 +377,7 @@ bool filterPspApps(AppSelection *p) {
 					return true;
 				break;
 			case FILTER_PSP_APPS_AI_ASSISTED:
-				if (p->ai == APP_AI_ASSISTED)
+				if (p->ai != APP_HUMAN_MADE)
 					return true;
 				break;
 			case FILTER_PSP_APPS_VIBECODED:
