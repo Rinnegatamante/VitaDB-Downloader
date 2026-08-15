@@ -239,10 +239,10 @@ enum {
 	FILTER_VITA_APPS_EMULATOR,
 	FILTER_VITA_APPS_FAVORITES,
 	FILTER_VITA_APPS_NON_FREEWARE,
+	FILTER_VITA_APPS_TROPHY,
 	FILTER_VITA_APPS_NOT_INSTALLED,
 	FILTER_VITA_APPS_OUTDATED,
 	FILTER_VITA_APPS_INSTALLED,
-	FILTER_VITA_APPS_TROPHY,
 	FILTER_VITA_APPS_AI_ASSISTED,
 	FILTER_VITA_APPS_VIBECODED
 };
@@ -254,10 +254,10 @@ const char *filter_vita_apps_modes[] = {
 	"Emulators",
 	"Favorites Apps",
 	"Non Freeware Apps",
+	"Apps with Trophies",
 	"Not Installed Apps",
 	"Outdated Apps",
 	"Installed Apps",
-	"Apps with Trophies",
 	"AI Assisted Apps",
 	"Vibecoded Apps",
 };
@@ -1259,6 +1259,8 @@ extract_libshacccg:
 			sprintf(active_filters_str, "%d active", active_filters);
 			if (ImGui::BeginCombo("##combo", active_filters_str)) {
 				for (int n = 0; n < sizeof(filter_vita_apps_modes) / sizeof(*filter_vita_apps_modes); n++) {
+					if (n == FILTER_VITA_APPS_FAVORITES || n == FILTER_VITA_APPS_NOT_INSTALLED || n == FILTER_VITA_APPS_AI_ASSISTED)
+						ImGui::Separator();
 					if (ImGui::Checkbox(filter_vita_apps_modes[n], &filter_vita_apps_states[n])) {
 						filters_dirty = true;
 					}
@@ -1276,6 +1278,8 @@ extract_libshacccg:
 			sprintf(active_filters_str, "%d active", active_filters);
 			if (ImGui::BeginCombo("##combo", active_filters_str)) {
 				for (int n = 0; n < sizeof(filter_psp_apps_modes) / sizeof(*filter_psp_apps_modes); n++) {
+					if (n == FILTER_PSP_APPS_FAVORITES || n == FILTER_PSP_APPS_NOT_INSTALLED || n == FILTER_PSP_APPS_AI_ASSISTED)
+						ImGui::Separator();
 					if (ImGui::Checkbox(filter_psp_apps_modes[n], &filter_psp_apps_states[n])) {
 						filters_dirty = true;
 					}
