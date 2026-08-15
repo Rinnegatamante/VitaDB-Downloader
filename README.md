@@ -18,6 +18,18 @@ VitaDB Downloader is the official PSVita/PSTV client for [VitaDB](https://www.ri
 - Support for PSP homebrews.
 - Daemon support for homebrews update check in background during normal console usage.
 
+## Controls (while navigating)
+- Cross: Select option / Install application
+- Circle: Go to the top of the list
+- Dpad: Change Selection (Left / Right = Fast scrolling)
+- Left Analog: Scroll the visual scrollbar of the list
+- Triangle: Star a search
+- L Trigger: Change between categories (Vita Homebrews, PSP Homebrews, VitaDB Downloader Themes)
+- R Trigger: Change sorting method
+- Start: Show screenshots/video for the selected application
+- Select: Open extra options for the selected application
+- Square: Add/Remove application from Favorites
+
 ## Themes
 You can find some themes usable with this application on [this repository](https://github.com/CatoTheYounger97/vitaDB_themes).
 Those themes can also be accessed in the app itself by pressing L. While in Themes Manager mode, you can download themes by pressing X and install themes in two different ways (that can be interchanged by pressing Select):
@@ -30,6 +42,16 @@ By default, a couple of homebrews are blacklisted from this process either cause
 It's also possible to add more blacklisted homebrews (for example, if you use a modded build which would be tagged as outdated by VitaDB Downloader). To do so, create the file `ux0:data/VitaDB/daemon_blacklist.txt` and add inside it a list of Title ID of the homebrews you want to blacklist in this format `ABCD12345;ABCD12346;ABCD12347`.
 
 ## Changelog
+
+### v.2.7
+- Added separators between filters listing to make categories of filters clearly distinguishable.
+- Fixed a bug causing nightly builds powered by the recent CI support program in VitaDB to have broken Data Files downloads.
+- Reduced memory usage of the whole application.
+- Made so that pressing Square button will mark/unmark a homebrew as Favorite.
+- Fixed a crash due to stack overflow in rare circumstances.
+- Fixed a bug causing visual loss of selected application after performing an install from the main listing window.
+- Fixed a visual bug causing entries with icons in the listing to slightly misalign the list rendering.
+- Change the "Filter:" text to "Filters:" when listing homebrews to reflect the change to stackable filters.
 
 ### v.2.6
 - Added distinction between vibecoded and AI assisted apps: now they will use different icons.
@@ -218,6 +240,9 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 - Fixed a bug causing selected app icon to get corrupted temporarily after installing an app.
 - Added background music (You can disable it or change the track by removing/replacing ux0:data/VitaDB/bg.ogg)
 - Fixed a bug causing selected app to change randomly when changing sort mode.
+
+## Required vitaGL flags
+`make PHYCONT_ON_DEMAND=1 NO_DEBUG=1 ENABLE_LEGACY_PIPELINE=1 NO_SPLASHSCREEN=1 install`
 
 ## Credits
 - noname120 for the code related to head.bin generation.
