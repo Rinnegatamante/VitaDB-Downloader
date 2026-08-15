@@ -1163,6 +1163,7 @@ extract_libshacccg:
 	bool is_app_hovered;
 	float right_len = 0.0f;
 	float text_diff_len = 0.0f;
+	float text_diff_len2 = 0.0f;
 	uint32_t oldpad;
 	int filtered_entries;
 	AppSelection *decrement_stack[4096];
@@ -1241,10 +1242,17 @@ extract_libshacccg:
 		}
 		ImGui::PopStyleVar();
 		ImGui::AlignTextToFramePadding();
-		if (text_diff_len == 0.0f)
+		if (text_diff_len == 0.0f) {
 			text_diff_len = ImGui::CalcTextSize("Search: ").x - ImGui::CalcTextSize("Filter: ").x;
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + text_diff_len);
-		ImGui::Text("Filter: ");
+			text_diff_len2 = ImGui::CalcTextSize("Search: ").x - ImGui::CalcTextSize("Filters: ").x;
+		}
+		if (mode_idx == MODE_VITA_HBS || mode_idx == MODE_PSP_HBS) {
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + text_diff_len2);
+			ImGui::Text("Filters: ");
+		} else {
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + text_diff_len);
+			ImGui::Text("Filter: ");
+		}
 		ImGui::SameLine();
 		ImGui::PushItemWidth(190.0f);
 		if (mode_idx == MODE_THEMES) {
