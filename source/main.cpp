@@ -800,7 +800,17 @@ typedef struct {
 	uint32_t size;
 } entry;
 
-int main(int argc, char *argv[]) {
+int vdb_main(unsigned int argc, void* argv);
+
+int main(int argc, char **argv) {
+	SceUID main_thread = sceKernelCreateThread("VitaDB Downloader", vdb_main, 0x40, 0x100000, 0, 0, NULL);
+	if (main_thread >= 0){
+		sceKernelStartThread(main_thread, 0, NULL);
+	}
+	return sceKernelExitDeleteThread(0);
+}
+
+int vdb_main(unsigned int argc, void* argv) {
 #if 0
 	sceSysmoduleLoadModule(SCE_SYSMODULE_RAZOR_CAPTURE);
 #endif
@@ -2712,4 +2722,6 @@ skip_install:
 		}
 		sceMsgDialogTerm();
 	}
+	
+	return 0;
 }
