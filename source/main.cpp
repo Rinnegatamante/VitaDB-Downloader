@@ -1449,6 +1449,7 @@ extract_libshacccg:
 					}
 					if (ImGui::Button(button_label, ImVec2(-1.0f, 0.0f))) {
 						to_download = g;
+						restore_app_focus = g;
 					}
 					if (ImGui::IsItemHovered()) {
 						is_app_hovered = true;
