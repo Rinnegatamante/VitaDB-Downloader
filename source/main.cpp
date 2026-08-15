@@ -2108,13 +2108,16 @@ extract_libshacccg:
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !trailer_feature && !screenshots_feature && !show_requirements && !trophies_feature && !show_changelog && !extra_menu_invoked) {
-			if (mode_idx == MODE_THEMES)
-				filter_idx = (filter_idx + 1) % (sizeof(filter_themes_modes) / sizeof(*filter_themes_modes));
-			else if (mode_idx == MODE_VITA_HBS)
-				filter_idx = (filter_idx + 1) % (sizeof(filter_vita_apps_modes) / sizeof(*filter_vita_apps_modes));
-			else
-				filter_idx = (filter_idx + 1) % (sizeof(filter_psp_apps_modes) / sizeof(*filter_psp_apps_modes));
-			go_to_top = true;
+			if (mode_idx == MODE_VITA_HBS || mode_idx == MODE_PSP_HBS) {
+				if (hovered) {
+					if (hovered->favorites) {
+						remove_favorites(hovered->id);
+					} else {
+						insert_favorites(hovered->id);
+					}
+					hovered->favorites = !hovered->favorites;
+				}
+			}
 		}
 		oldpad = pad.buttons;
 		bool anti_burn_in_set_up = false;
