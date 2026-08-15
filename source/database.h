@@ -96,7 +96,6 @@ struct AppSelection {
 	char hash[34];
 	char aux_hash[34];
 	char *requirements;
-	char data_link[128];
 	int state;
 	float score;
 	bool trophies;
@@ -105,6 +104,7 @@ struct AppSelection {
 	bool search_filtered;
 	bool filtered;
 	uint8_t blacklisted;
+	bool has_data;
 	AppSelection *next_clash;
 	AppSelection *prev_clash;
 	AppSelection *next;

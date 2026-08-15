@@ -1591,7 +1591,7 @@ extract_libshacccg:
 				char size_str[64], size_str2[64] = {};
 				char *dummy;
 				uint64_t sz;
-				if (strlen(hovered->data_link) > 5) {
+				if (hovered->has_data) {
 					sz = strtoull(hovered->size, &dummy, 10);
 					uint64_t sz2 = strtoull(hovered->data_size, &dummy, 10);
 					sprintf(size_str, "%s: %.2f %s", mode_idx == MODE_VITA_HBS ? "VPK" : "App", format_size(sz), format_size_str(sz));
@@ -2305,7 +2305,7 @@ extract_libshacccg:
 				}
 				
 				bool downloading_data_files = false;
-				if (strlen(to_download->data_link) > 5) {
+				if (to_download->has_data) {
 					setup_anti_burn_in();
 					init_interactive_msg_dialog("This homebrew also has data files. Do you wish to install them as well?");
 					while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
@@ -2332,7 +2332,8 @@ extract_libshacccg:
 							sceMsgDialogTerm();
 							continue;
 						}
-						if (!download_file(to_download->data_link, "Downloading data files", true, -1, -1, anti_burn_in_texture)) {
+						sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/get_psarc_data.php?id=%s", to_download->id);
+						if (!download_file(download_link, "Downloading data files", true, -1, -1, anti_burn_in_texture)) {
 							to_download = nullptr;
 							sceIoRemove(TEMP_DOWNLOAD_NAME);
 							continue;
