@@ -1505,7 +1505,9 @@ extract_libshacccg:
 					}
 					float x_offs = 8.0f;
 					bool reset_cursor = false;
+					float next_row;
 					if (g->ai) {
+						next_row = ImGui::GetCursorPosY();
 						ImGui::SetCursorPosY(y - 2.0f);
 						ImGui::Image(g->ai == 1 ? (void*)crank_icon : (void*)slop_icon, ImVec2(20, 20));
 						reset_cursor = true;
@@ -1514,6 +1516,7 @@ extract_libshacccg:
 					}
 					if (g->trophies) {
 						if (!reset_cursor) {
+							next_row = ImGui::GetCursorPosY();
 							ImGui::SetCursorPosY(y - 2.0f);
 						}
 						reset_cursor = true;
@@ -1523,6 +1526,7 @@ extract_libshacccg:
 					}
 					if (g->favorites) {
 						if (!reset_cursor) {
+							next_row = ImGui::GetCursorPosY();
 							ImGui::SetCursorPosY(y - 2.0f);
 						}
 						reset_cursor = true;
@@ -1532,6 +1536,7 @@ extract_libshacccg:
 					if (reset_cursor) {
 						ImGui::SetCursorPos(ImVec2(x_offs, y));
 						ImGui::Text(g->name);
+						ImGui::SetCursorPosY(next_row);
 					}
 					filtered_entries++;
 				}
