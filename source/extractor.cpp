@@ -30,6 +30,7 @@
 #include "fios.h"
 #include "unzip.h"
 #include "utils.h"
+#include <un7zip.h>
 
 #define READ_BUFFER_SIZE (128 * 1024)
 static char fname[512], ext_fname[512], *read_buffer;
@@ -225,4 +226,13 @@ bool extract_zip_file(char *file, char *dir, bool indexing, bool cancelable) {
 	unzClose(zipfile);
 	ImGui::GetIO().MouseDrawCursor = false;
 	return true;
+}
+
+static void extract_7z_progress_cb(const char *file_name, unsigned long file_size, unsigned int file_num, unsigned int total_files) {
+	draw_extractor_dialog(file_num, 0, file_num, file_size, total_files, (char *)file_name, total_files);
+	vglSwapBuffers(GL_TRUE);
+}
+
+bool extract_7z_file(char *file, char *dir) {
+	return un7z_ExtractArchive(file, dir, extract_7z_progress_cb, UN7Z_IN_BUF_SIZE) == SZ_OK;
 }

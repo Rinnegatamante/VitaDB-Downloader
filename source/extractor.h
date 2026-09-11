@@ -24,5 +24,6 @@ void early_extract_zip_file(char *file, char *dir);
 
 bool extract_psarc_file(char *file, char *out_dir, bool cancelable = false, GLuint bg_tex = 0);
 bool extract_zip_file(char *file, char *dir, bool indexing, bool cancelable = false);
+bool extract_7z_file(char *file, char *dir);
 
 #endif

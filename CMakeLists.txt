@@ -39,8 +39,6 @@ add_executable(VitaDB
 	source/utils.cpp
 )
 
-add_dependencies(VitaDB vitadb.skprx vitadb.suprx vdb_daemon.suprx)
-
 target_link_libraries(VitaDB
 	-Wl,--whole-archive pthread -Wl,--no-whole-archive
 	imgui
@@ -51,6 +49,7 @@ target_link_libraries(VitaDB
 	SDL2
 	vitaGL
 	vitashark
+	un7zip
 	SceShaccCgExt
 	mathneon
 	curl

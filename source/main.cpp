@@ -2438,13 +2438,23 @@ extract_libshacccg:
 						bool extract_finished;
 						if (header == 0x52415350) // PSARC
 							extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, TEMP_INSTALL_DIR, true, anti_burn_in_texture);
-						else // ZIP
+						else if (header == 0x04034B50) // ZIP (local file header magic)
 							extract_finished = extract_zip_file(TEMP_DOWNLOAD_NAME, TEMP_INSTALL_PATH, false, true);
+						else if (header == 0xAFBC7A37) // 7z
+							extract_finished = extract_7z_file(TEMP_DOWNLOAD_NAME, TEMP_INSTALL_PATH);
+						else // unrecognized format - fail fast instead of silently promoting an empty install
+							extract_finished = false;
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 						if (!extract_finished) {
 							if (downloading_data_files)
 								recursive_rmdir(TEMP_DATA_DIR);
 							recursive_rmdir(TEMP_INSTALL_DIR);
+							init_msg_dialog("%s could not be installed: the downloaded file is not a supported package format.", to_download->name);
+							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+								draw_simple_texture(anti_burn_in_texture);
+								vglSwapBuffers(GL_TRUE);
+							}
+							sceMsgDialogTerm();
 							to_download = nullptr;
 							continue;
 						}
@@ -2455,12 +2465,30 @@ extract_libshacccg:
 						}
 						f = sceIoOpen(HASH_FILE, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 					} else {
+						uint32_t header;
+						f = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_RDONLY, 0777);
+						sceIoRead(f, &header, 4);
+						sceIoClose(f);
 						sprintf(tmp_path, "%spspemu/PSP/GAME/%s", pspemu_dev, to_download->id);
 						sceIoMkdir(tmp_path, 0777);
-						bool extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, tmp_path, true, anti_burn_in_texture);
+						bool extract_finished;
+						if (header == 0x52415350) // PSARC
+							extract_finished = extract_psarc_file(TEMP_DOWNLOAD_NAME, tmp_path, true, anti_burn_in_texture);
+						else if (header == 0x04034B50) // ZIP (local file header magic)
+							extract_finished = extract_zip_file(TEMP_DOWNLOAD_NAME, tmp_path, false, true);
+						else if (header == 0xAFBC7A37) // 7z
+							extract_finished = extract_7z_file(TEMP_DOWNLOAD_NAME, tmp_path);
+						else // unrecognized format - fail fast instead of silently promoting an empty install
+							extract_finished = false;
 						sceIoRemove(TEMP_DOWNLOAD_NAME);
 						if (!extract_finished) {
 							recursive_rmdir(tmp_path);
+							init_msg_dialog("%s could not be installed: the downloaded file is not a supported package format.", to_download->name);
+							while (sceMsgDialogGetStatus() != SCE_COMMON_DIALOG_STATUS_FINISHED) {
+								draw_simple_texture(anti_burn_in_texture);
+								vglSwapBuffers(GL_TRUE);
+							}
+							sceMsgDialogTerm();
 							to_download = nullptr;
 							continue;
 						}
