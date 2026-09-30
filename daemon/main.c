@@ -1,5 +1,7 @@
 #include <vitasdk.h>
 #include <taihen.h>
+#include <stddef.h>
+#include <taipool.h>
 #include <string.h>
 #include <libk/stdlib.h>
 #include <libk/stdio.h>
