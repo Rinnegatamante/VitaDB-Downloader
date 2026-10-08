@@ -23,6 +23,10 @@
 #include <stdio.h>
 #include <malloc.h>
 #include <string.h>
+#include <algorithm>
+#include <cmath>
+#include <unordered_map>
+#include <unordered_set>
 #include <vitasdk.h>
 #include <vitaGL.h>
 #include "database.h"
@@ -57,8 +61,6 @@ char *hardcoded_daemon_blacklist[] = {
 	"XASH00001"
 };
 
-static SceUID clash_thd;
-
 extern char boot_params[1024];
 extern AppSelection *to_download;
 
@@ -89,100 +91,126 @@ static const char *aux_main_files[6] = {
 	"game_data/game.pck" // Godot
 };
 
-static int clashThread(unsigned int args, void *arg) {
-	AppSelection *app = apps;
-	while (app) {
-		AppSelection *chk = app->next;
-		while (chk) {
-			if (!strcmp(chk->titleid, app->titleid)) {
-				app->next_clash = chk;
-				chk->prev_clash = app;
-				break;
-			}
-			chk = chk->next;
-		}
-		app = app->next;
+static void populate_titleid_clashes(AppSelection *head) {
+	std::unordered_map<std::string, AppSelection *> previous;
+	for (AppSelection *app = head; app; app = app->next) {
+		AppSelection *&prev = previous[app->titleid];
+		app->next_clash = nullptr;
+		app->prev_clash = prev;
+		if (prev)
+			prev->next_clash = app;
+		prev = app;
 	}
-	//printf("clash thread ended\n");
-	return sceKernelExitDeleteThread(0);
 }
 
-static char *get_value_from_json(char *dst, char *src, char *val, char **new_ptr) {
+static char *get_value_from_json(char *dst, char *src, char *val, char **new_ptr, bool trim = false) {
 	char label[32];
-	sprintf(label, "\"%s\": \"", val);
+	int label_len = sprintf(label, "\"%s\": \"", val);
 	//printf("label: %s\n", label);
-	char *ptr = strstr(src, label) + strlen(label);
-	//printf("ptr is: %X\n", ptr);
-	if ((uintptr_t)ptr == strlen(label))
+	char *ptr = strstr(src, label);
+	if (!ptr)
 		return nullptr;
+	ptr += label_len;
+	//printf("ptr is: %X\n", ptr);
 	char *end2 = strstr(ptr, (val[0] == 'l' || val[0] == 'c') ? "\"," : "\"");
+	char *value_end = end2;
+	if (trim) {
+		auto padding = [](char c) { return c == ' ' || (c >= '\t' && c <= '\r'); };
+		while (ptr < value_end && padding(*ptr))
+			++ptr;
+		while (ptr < value_end && padding(value_end[-1]))
+			--value_end;
+	}
 	if (dst == nullptr) {
-		if (end2 - ptr > 0) {
-			dst = (char *)malloc(end2 - ptr + 1);
+		if (value_end - ptr > 0) {
+			dst = (char *)malloc(value_end - ptr + 1);
 			*new_ptr = dst;
 		} else {
 			*new_ptr = nullptr;
 			return end2 + 1;
 		}
 	}
-	//printf("size: %d\n", end2 - ptr);
-	memcpy(dst, ptr, end2 - ptr);
-	dst[end2 - ptr] = 0;
+	//printf("size: %d\n", value_end - ptr);
+	memcpy(dst, ptr, value_end - ptr);
+	dst[value_end - ptr] = 0;
 	return end2 + 1;
 }
 
-static bool checksum_match(char *hash_fname, char *fname, AppSelection *node, uint8_t type) {
-	char cur_hash[40], aux_fname[256];
-	SceUID f = sceIoOpen(hash_fname, SCE_O_RDONLY, 0777);
-	if (f >= 0) {
-		sceIoRead(f, cur_hash, 32);
-		cur_hash[32] = 0;
-		sceIoClose(f);
-		if (strncmp(cur_hash, type != AUXILIARY_FILE ? node->hash : node->aux_hash, 32))
-			node->state = APP_OUTDATED;
-		else
-			node->state = APP_UPDATED;
-		return true;
-	} else {
-		if (type != AUXILIARY_FILE)
-			f = sceIoOpen(fname, SCE_O_RDONLY, 0777);
-		else {
-			for (int i = 0; i < sizeof(aux_main_files) / sizeof(*aux_main_files); i++) {
-				sprintf(aux_fname, "ux0:app/%s/%s", node->titleid, aux_main_files[i]);
-				//printf("attempting with %s\n", aux_fname);
-				f = sceIoOpen(aux_fname, SCE_O_RDONLY, 0777);
-				if (f >= 0)
-					break;
+static std::string filesystem_key(const char *name) {
+	std::string key(name);
+	for (char &c : key) {
+		if (c >= 'A' && c <= 'Z')
+			c += 'a' - 'A';
+	}
+	return key;
+}
+
+class InstalledDirectories {
+	std::unordered_set<std::string> names;
+	bool complete = false;
+public:
+	explicit InstalledDirectories(const char *path) {
+		SceUID dir = sceIoDopen(path);
+		if (dir < 0)
+			return;
+		int ret;
+		do {
+			SceIoDirent entry = {};
+			ret = sceIoDread(dir, &entry);
+			if (ret > 0 && SCE_S_ISDIR(entry.d_stat.st_mode))
+				names.insert(filesystem_key(entry.d_name));
+		} while (ret > 0);
+		complete = ret == 0;
+		sceIoDclose(dir);
+	}
+	bool may_contain(const char *name) const {
+		// A failed or partial scan is not evidence that an app is absent.
+		return !complete || names.count(filesystem_key(name)) != 0;
+	}
+};
+
+struct CachedChecksum {
+	bool present = false;
+	char hash[33] = {};
+};
+typedef std::unordered_map<std::string, CachedChecksum> ChecksumCache;
+
+static bool checksum_match(const char *hash_fname, const char *fname, AppSelection *node,
+	uint8_t type, ChecksumCache &cache) {
+	auto insertion = cache.emplace(filesystem_key(hash_fname), CachedChecksum());
+	CachedChecksum &actual = insertion.first->second;
+	if (insertion.second) {
+		SceUID f = sceIoOpen(hash_fname, SCE_O_RDONLY, 0777);
+		if (f >= 0) {
+			sceIoRead(f, actual.hash, 32);
+			sceIoClose(f);
+			actual.present = true;
+		} else {
+			if (type != AUXILIARY_FILE) {
+				f = sceIoOpen(fname, SCE_O_RDONLY, 0777);
+			} else {
+				char aux_fname[256];
+				for (const char *candidate : aux_main_files) {
+					sprintf(aux_fname, "ux0:app/%s/%s", node->titleid, candidate);
+					//printf("attempting with %s\n", aux_fname);
+					f = sceIoOpen(aux_fname, SCE_O_RDONLY, 0777);
+					if (f >= 0)
+						break;
+				}
+			}
+			actual.present = f >= 0;
+			if (actual.present) {
+				calculate_md5(f, actual.hash);
+				f = sceIoOpen(hash_fname, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+				sceIoWrite(f, actual.hash, 32);
+				sceIoClose(f);
 			}
 		}
-		if (f >= 0) {
-			calculate_md5(f, cur_hash);
-			if (strncmp(cur_hash, type != AUXILIARY_FILE ? node->hash : node->aux_hash, 32))
-				node->state = APP_OUTDATED;
-			else
-				node->state = APP_UPDATED;
-			switch (type) {
-			case VITA_EXECUTABLE:
-				sprintf(aux_fname, "ux0:app/%s/hash.vdb", node->titleid);
-				break;
-			case PSP_EXECUTABLE:
-				sprintf(aux_fname, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, node->id);
-				break;
-			case AUXILIARY_FILE:
-				sprintf(aux_fname, "ux0:app/%s/aux_hash.vdb", node->titleid);
-				break;
-			default:
-				printf("Fatal Error!!!!\n");
-				break;
-			}
-			f = sceIoOpen(aux_fname, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
-			sceIoWrite(f, cur_hash, 32);
-			sceIoClose(f);
-			return true;
-		} else
-			node->state = APP_UNTRACKED;
-		return false;
 	}
+	const char *expected = type == AUXILIARY_FILE ? node->aux_hash : node->hash;
+	node->state = !actual.present ? APP_UNTRACKED :
+		(strncmp(actual.hash, expected, 32) ? APP_OUTDATED : APP_UPDATED);
+	return actual.present;
 }
 
 char *get_changelog(const char *file, char *id) {
@@ -214,17 +242,38 @@ char *get_changelog(const char *file, char *id) {
 
 bool populate_apps_database(const char *file, bool is_psp) {
 	// Read icons database
+	std::unordered_set<std::string> icons;
+	char *icons_text = (char *)generic_mem_buffer;
+	int icons_size = 0;
 	SceUID f = sceIoOpen("ux0:data/VitaDB/icons.db", SCE_O_RDONLY, 0777);
-	//printf("f is %x\n", f);
-	size_t icons_db_size = sceIoRead(f, generic_mem_buffer, MEM_BUFFER_SIZE);
-	//printf("icons_db_size is %x\n", icons_db_size);
-	char *icons_db = (char *)vglMalloc(icons_db_size + 1);
-	sceClibMemcpy(icons_db, generic_mem_buffer, icons_db_size);
-	icons_db[icons_db_size] = 0;
-	sceIoClose(f);
-	
-	uint32_t missing_icons_num = 0;
-	AppSelection *missing_icons[2048];
+	if (f >= 0) {
+		icons_size = sceIoRead(f, icons_text, MEM_BUFFER_SIZE - 1);
+		sceIoClose(f);
+	}
+	icons_text[icons_size > 0 ? icons_size : 0] = 0;
+	for (char *line = icons_text; line && *line; ) {
+		char *end = strchr(line, '\n');
+		if (end)
+			*end = 0;
+		size_t length = strlen(line);
+		if (length && line[length - 1] == '\r')
+			line[length - 1] = 0;
+		char *name = strrchr(line, '/');
+		name = name ? name + 1 : line;
+		if (*name)
+			icons.insert(name);
+		line = end ? end + 1 : nullptr;
+	}
+	std::vector<AppSelection *> missing_icons;
+	std::string installed_path = is_psp ? std::string(pspemu_dev) + "pspemu/PSP/GAME" : "ux0:app";
+	InstalledDirectories installed(installed_path.c_str());
+	ChecksumCache checksums;
+	std::unordered_set<int> favorite_ids;
+	for (const std::string &favorite : favorites)
+		favorite_ids.insert(atoi(favorite.c_str()));
+	std::unordered_set<std::string> favorite_titles(favorites.begin(), favorites.end());
+	std::unordered_set<std::string> blacklist(daemon_blacklist.begin(), daemon_blacklist.end());
+	std::unordered_set<std::string> hard_blacklist(std::begin(hardcoded_daemon_blacklist), std::end(hardcoded_daemon_blacklist));
 
 	// Burning on screen the parsing text dialog
 	for (int i = 0; i < 3; i++) {
@@ -257,9 +306,11 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			node->requirements = nullptr;
 			node->next_clash = nullptr;
 			node->prev_clash = nullptr;
+			node->state = APP_UNTRACKED;
+			node->score = 0.0f;
 			ptr = get_value_from_json(node->icon, ptr, "icon", nullptr);
-			if (!strstr(icons_db, node->icon)) {
-				missing_icons[missing_icons_num++] = node;
+			if (node->icon[0] && node->icon[1] && icons.insert(node->icon).second) {
+				missing_icons.push_back(node);
 				//printf("%s is missing [%s]\n", node->icon, name);
 			}
 			ptr = get_value_from_json(version, ptr, "version", nullptr);
@@ -273,7 +324,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 				}
 			}
 			ptr = get_value_from_json(node->date, ptr, "date", nullptr);
-			ptr = get_value_from_json(node->titleid, ptr, "titleid", nullptr);
+			ptr = get_value_from_json(node->titleid, ptr, "titleid", nullptr, true);
 			ptr = get_value_from_json(node->screenshots, ptr, "screenshots", nullptr);
 			ptr = get_value_from_json(node->desc, ptr, "long_description", &node->desc);
 			node->desc = unescape(node->desc);
@@ -286,19 +337,8 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			ptr = get_value_from_json(node->hash, ptr, "hash", nullptr);
 			//printf("db hash %s\n", node->hash);
 			if (is_psp) {
-				node->favorites = false;
-				if (!favorites_old_format) {
-					for (auto &s : favorites) {
-						if (atoi(s.c_str()) == atoi(node->id)) {
-							node->favorites = true;
-							break;
-						}
-					}
-				}
-				int type_num;
-				sscanf(node->type, "%d", &type_num);
-				type_num -= 10;
-				sprintf(node->type, "%d", type_num);
+				node->favorites = !favorites_old_format && favorite_ids.count(atoi(node->id));
+				sprintf(node->type, "%d", atoi(node->type) - 10);
 				sprintf(fname, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, node->id);
 				sprintf(fname2, "%spspemu/PSP/GAME/%s/EBOOT.PBP", pspemu_dev, node->id);
 			} else {
@@ -306,47 +346,20 @@ bool populate_apps_database(const char *file, bool is_psp) {
 				//printf("aux db hash %s\n", node->aux_hash);
 				sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
 				sprintf(fname2, "ux0:app/%s/eboot.bin", node->titleid);
-				
-				node->blacklisted = APP_WHITELISTED;
-				for (int i = 0; i < sizeof(hardcoded_daemon_blacklist) / sizeof(*hardcoded_daemon_blacklist); i++) {
-					if (!strcmp(hardcoded_daemon_blacklist[i], node->titleid)) {
-						node->blacklisted = APP_HARD_BLACKLISTED;
-					}
-				}
-				if (node->blacklisted == APP_WHITELISTED) {
-					for (auto &s : daemon_blacklist) {
-						if (s == node->titleid) {
-							node->blacklisted = APP_BLACKLISTED;
-							break;
-						}
-					}
-				}
-				
-				node->favorites = false;
-				for (auto &s : favorites) {
-					if (favorites_old_format) {
-						if (s == node->titleid) {
-							node->favorites = true;
-							char padded_id[5];
-							sprintf(padded_id, "%04d", atoi(node->id));
-							new_favorites.push_back(padded_id);
-							break;
-						}
-					} else {
-						if (atoi(s.c_str()) == atoi(node->id)) {
-							node->favorites = true;
-							break;
-						}
-					}
+				node->blacklisted = hard_blacklist.count(node->titleid) ? APP_HARD_BLACKLISTED :
+					(blacklist.count(node->titleid) ? APP_BLACKLISTED : APP_WHITELISTED);
+				node->favorites = favorites_old_format ? favorite_titles.count(node->titleid) : favorite_ids.count(atoi(node->id));
+				if (node->favorites && favorites_old_format) {
+					char padded_id[5];
+					sprintf(padded_id, "%04d", atoi(node->id));
+					new_favorites.push_back(padded_id);
 				}
 			}
-			if (checksum_match(fname, fname2, node, is_psp ? PSP_EXECUTABLE : VITA_EXECUTABLE)) {
+			if (installed.may_contain(is_psp ? node->id : node->titleid) &&
+				checksum_match(fname, fname2, node, is_psp ? PSP_EXECUTABLE : VITA_EXECUTABLE, checksums)) {
 				if (!is_psp && strlen(node->aux_hash) > 0) {
 					sprintf(fname, "ux0:app/%s/aux_hash.vdb", node->titleid);
-					for (int i = 0; i < sizeof(aux_main_files) / sizeof(*aux_main_files); i++) {
-						if (checksum_match(fname, NULL, node, AUXILIARY_FILE))
-							break;
-					}
+					checksum_match(fname, NULL, node, AUXILIARY_FILE, checksums);
 				}
 			}
 			//printf("hash part done\n");
@@ -377,49 +390,41 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			}
 		} while (ptr);
 		free(buffer);
-		
+
 		if (favorites_old_format) {
-			char is_new = '.';
-			SceUID fd = sceIoOpen("ux0:data/VitaDB/favorites.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-			sceIoWrite(fd, &is_new, 1);
-			is_new = ';';
-			int i = 1;
-			int sz = new_favorites.size();
-			for (auto &s : new_favorites) {
-				sceIoWrite(fd, s.c_str(), s.size());
-				if (i != sz) {
-					sceIoWrite(fd, &is_new, 1);
-				}
-				i++;
+			std::string serialized = ".";
+			for (const std::string &favorite : new_favorites) {
+				if (serialized.size() > 1)
+					serialized += ';';
+				serialized += favorite;
 			}
+			SceUID fd = sceIoOpen("ux0:data/VitaDB/favorites.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+			sceIoWrite(fd, serialized.data(), serialized.size());
 			sceIoClose(fd);
 			favorites_old_format = false;
 			favorites = new_favorites;
 		}
-		
-		if (!is_psp) {
-			// Populate TitleID clashes
-			clash_thd = sceKernelCreateThread("Clasher Thread", &clashThread, 0x10000100, 0x100000, 0, 0, NULL);
-			sceKernelStartThread(clash_thd, 0, NULL);
-		}
-		
+		if (!is_psp)
+			populate_titleid_clashes(apps);
+
 		// Downloading missing icons
-		if (!update_detected) {
-			for (int i = 0; i < missing_icons_num; i++) {
+		if (!update_detected && !missing_icons.empty()) {
+			FILE *index = fopen("ux0:data/VitaDB/icons.db", "a");
+			for (size_t i = 0; i < missing_icons.size(); ++i) {
 				char download_link[512];
 				sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/icons/%s", missing_icons[i]->icon);
-				download_file(download_link, "Downloading missing icons", false, i + 1, missing_icons_num);
+				download_file(download_link, "Downloading missing icons", false, i + 1, missing_icons.size());
 				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c", missing_icons[i]->icon[0], missing_icons[i]->icon[1]);
 				sceIoMkdir(download_link, 0777);
 				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c/%s", missing_icons[i]->icon[0], missing_icons[i]->icon[1], missing_icons[i]->icon);
 				sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
-				FILE *f = fopen("ux0:data/VitaDB/icons.db", "a");
-				fprintf(f, "%s\n", download_link);
-				fclose(f);
+				if (index)
+					fprintf(index, "%s\n", download_link);
 			}
+			if (index)
+				fclose(index);
 		}
 	}
-	vglFree(icons_db);
 	//printf("finished parsing\n");
 	return true;
 }
@@ -568,126 +573,39 @@ void remove_favorites(char *tid) {
 	}
 }
 
-static inline void swap_apps(AppSelection *prev, AppSelection *cur, AppSelection *next) {
-	if (prev)
-		prev->next = next;
-	cur->next = next->next;
-	next->next = cur;
-}
-
 void sort_apps_list(AppSelection **start, int sort_idx) {
-	// Ensuring clasher titleids check finished
-	sceKernelWaitThreadEnd(clash_thd, NULL, NULL);
-	//printf("sort_apps_list called\n");
-
-	// Checking for empty list
-	if (start == NULL) 
-		return; 
-	
-	bool swapped; 
-  
-	do {
-		AppSelection *lptr = NULL; 
-		AppSelection *ptr1 = *start; 
-		swapped = false; 
-		
-		int64_t d1, d2;
-		char *dummy;
-		while (ptr1->next) {
-			bool last_swapped = false;
-			AppSelection *old_next = ptr1->next;
-			switch (sort_idx) {
-			case SORT_APPS_NEWEST:
-				if (strcasecmp(ptr1->date, ptr1->next->date) < 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_OLDEST:
-				if (strcasecmp(ptr1->date, ptr1->next->date) > 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_MOST_DOWNLOADED:
-				d1 = strtoll(ptr1->downloads, &dummy, 10);
-				d2 = strtoll(ptr1->next->downloads, &dummy, 10);
-				if (d1 < d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_LEAST_DOWNLOADED:
-				d1 = strtoll(ptr1->downloads, &dummy, 10);
-				d2 = strtoll(ptr1->next->downloads, &dummy, 10);
-				if (d1 > d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = 1;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_A_Z:
-				if (strcasecmp(ptr1->name, ptr1->next->name) > 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_Z_A:
-				if (strcasecmp(ptr1->name, ptr1->next->name) < 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_SMALLEST:
-				d1 = strtoll(ptr1->size, &dummy, 10) + strtoll(ptr1->data_size, &dummy, 10);
-				d2 = strtoll(ptr1->next->size, &dummy, 10) + strtoll(ptr1->next->data_size, &dummy, 10);
-				if (d1 > d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_LARGEST:
-				d1 = strtoll(ptr1->size, &dummy, 10) + strtoll(ptr1->data_size, &dummy, 10);
-				d2 = strtoll(ptr1->next->size, &dummy, 10) + strtoll(ptr1->next->data_size, &dummy, 10);
-				if (d1 < d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_HIGHEST_SCORE:
-				if (ptr1->score < ptr1->next->score) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_LOWEST_SCORE:
-				if (ptr1->score > ptr1->next->score) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			default:
-				break;
-			}
-			if (!last_swapped) {
-				lptr = ptr1;
-				ptr1 = ptr1->next; 
-			} else {
-				if (*start == ptr1)
-					*start = old_next;
-				lptr = old_next;
-			}
-		} 
-	} while (swapped); 
+	if (!start || !*start || sort_idx < SORT_APPS_NEWEST || sort_idx > SORT_APPS_LOWEST_SCORE)
+		return;
+	std::vector<AppSelection *> sorted;
+	for (AppSelection *app = *start; app; app = app->next) {
+		sorted.push_back(app);
+		if (sort_idx == SORT_APPS_MOST_DOWNLOADED || sort_idx == SORT_APPS_LEAST_DOWNLOADED)
+			app->sort_key = strtoll(app->downloads, nullptr, 10);
+		else if (sort_idx == SORT_APPS_SMALLEST || sort_idx == SORT_APPS_LARGEST)
+			app->sort_key = strtoll(app->size, nullptr, 10) + strtoll(app->data_size, nullptr, 10);
+		else if ((sort_idx == SORT_APPS_HIGHEST_SCORE || sort_idx == SORT_APPS_LOWEST_SCORE) &&
+			std::isnan(app->score))
+			app->score = 0.0f;
+	}
+	std::stable_sort(sorted.begin(), sorted.end(), [sort_idx](const AppSelection *a, const AppSelection *b) {
+		switch (sort_idx) {
+		case SORT_APPS_NEWEST: return strcasecmp(a->date, b->date) > 0;
+		case SORT_APPS_OLDEST: return strcasecmp(a->date, b->date) < 0;
+		case SORT_APPS_A_Z: return strcasecmp(a->name, b->name) < 0;
+		case SORT_APPS_Z_A: return strcasecmp(a->name, b->name) > 0;
+		case SORT_APPS_MOST_DOWNLOADED:
+		case SORT_APPS_LARGEST: return a->sort_key > b->sort_key;
+		case SORT_APPS_LEAST_DOWNLOADED:
+		case SORT_APPS_SMALLEST: return a->sort_key < b->sort_key;
+		case SORT_APPS_HIGHEST_SCORE: return a->score > b->score;
+		case SORT_APPS_LOWEST_SCORE: return a->score < b->score;
+		default: return false;
+		}
+	});
+	*start = sorted.front();
+	for (size_t i = 1; i < sorted.size(); ++i)
+		sorted[i - 1]->next = sorted[i];
+	sorted.back()->next = nullptr;
 }
 
 void populate_themes_database(const char *file) {
@@ -761,55 +679,18 @@ void populate_themes_database(const char *file) {
 
 
 
-static inline void swap_themes(ThemeSelection *prev, ThemeSelection *cur, ThemeSelection *next) {
-	if (prev)
-		prev->next = next;
-	cur->next = next->next;
-	next->next = cur;
-}
-
 void sort_themes_list(ThemeSelection **start, int sort_idx) {
-	// Checking for empty list
-	if (start == NULL) 
-		return; 
-	
-	bool swapped; 
-  
-	do {
-		ThemeSelection *ptr1 = *start; 
-		ThemeSelection *lptr = NULL; 
-		swapped = false; 
-
-		int64_t d1, d2;
-		while (ptr1->next) {
-			bool last_swapped = false;
-			ThemeSelection *old_next = ptr1->next;
-			switch (sort_idx) {
-			case SORT_THEMES_A_Z:
-				if (strcasecmp(ptr1->name, ptr1->next->name) > 0) {
-					swap_themes(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_THEMES_Z_A:
-				if (strcasecmp(ptr1->name, ptr1->next->name) < 0) {
-					swap_themes(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			default:
-				break;
-			}
-			if (!last_swapped) {
-				lptr = ptr1;
-				ptr1 = ptr1->next; 
-			} else {
-				if (*start == ptr1)
-					*start = old_next;
-				lptr = old_next;
-			}
-		} 
-	} while (swapped); 
+	if (!start || !*start || (sort_idx != SORT_THEMES_A_Z && sort_idx != SORT_THEMES_Z_A))
+		return;
+	std::vector<ThemeSelection *> sorted;
+	for (ThemeSelection *theme = *start; theme; theme = theme->next)
+		sorted.push_back(theme);
+	std::stable_sort(sorted.begin(), sorted.end(), [sort_idx](const ThemeSelection *a, const ThemeSelection *b) {
+		int order = strcasecmp(a->name, b->name);
+		return sort_idx == SORT_THEMES_A_Z ? order < 0 : order > 0;
+	});
+	*start = sorted.front();
+	for (size_t i = 1; i < sorted.size(); ++i)
+		sorted[i - 1]->next = sorted[i];
+	sorted.back()->next = nullptr;
 }

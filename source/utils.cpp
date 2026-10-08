@@ -191,7 +191,7 @@ uint64_t get_total_storage() {
 }
 
 char *unescape(char *src) {
-	char *res = (char *)malloc(strlen(src) + 1);
+	char *res = src;
 	uint32_t i = 0;
 	char *s = src;
 	while (*s) {
@@ -227,7 +227,6 @@ char *unescape(char *src) {
 		s += incr;
 	}
 	res[i] = 0;
-	free(src);
 	return res;
 }
 

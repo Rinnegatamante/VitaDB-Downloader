@@ -9,6 +9,9 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 
 project(VitaDB C CXX)
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+	set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 include("${VITASDK}/share/vita.cmake" REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2_mixer REQUIRED IMPORTED_TARGET SDL2_mixer)
@@ -42,6 +45,9 @@ add_executable(VitaDB
 	source/utils.cpp
 )
 
+# Reserve SCE metadata space independently of the compiled code size.
+set_property(TARGET VitaDB APPEND_STRING PROPERTY LINK_FLAGS
+	" -Wl,--defsym,__sce_headroom=0x10000")
 
 target_link_libraries(VitaDB
 	# Force these imports before pkg-config can pull the same stub objects individually.
