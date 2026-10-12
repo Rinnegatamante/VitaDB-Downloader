@@ -104,7 +104,7 @@ int trophies_feature = FEATURE_OFF;
 
 SceUID trophy_thd;
 static int preview_width, preview_height, preview_x, preview_y;
-GLuint preview_icon = 0, preview_shot = 0, bg_image = 0, trp_icon = 0, star_icon = 0, crank_icon = 0, slop_icon = 0, empty_icon = 0;
+GLuint preview_icon = 0, preview_shot = 0, bg_image = 0, trp_icon = 0, star_icon = 0, crank_icon = 0, ai_icon = 0, empty_icon = 0;
 
 static void restore_navigation_focus(ImGuiID item_id, const ImRect& item_rect) {
 	ImGuiContext *context = ImGui::GetCurrentContext();
@@ -1018,10 +1018,10 @@ extract_libshacccg:
 	glTextureImage2D(crank_icon, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
 	free(icon_data);
 	
-	// Load slop icon
-	icon_data = stbi_load("app0:slop.png", &w, &h, NULL, 4);
-	glGenTextures(1, &slop_icon);
-	glTextureImage2D(slop_icon, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
+	// Load AI icon
+	icon_data = stbi_load("app0:ai.png", &w, &h, NULL, 4);
+	glGenTextures(1, &ai_icon);
+	glTextureImage2D(ai_icon, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, icon_data);
 	free(icon_data);	
 	
 	// Load star icon
@@ -1517,7 +1517,7 @@ extract_libshacccg:
 					if (g->ai) {
 						next_row = ImGui::GetCursorPosY();
 						ImGui::SetCursorPosY(y - 2.0f);
-						ImGui::Image(g->ai == 1 ? (void*)crank_icon : (void*)slop_icon, ImVec2(20, 20));
+						ImGui::Image(g->ai == 1 ? (void*)crank_icon : (void*)ai_icon, ImVec2(20, 20));
 						reset_cursor = true;
 						x_offs += 20.0f;
 						ImGui::SameLine();
