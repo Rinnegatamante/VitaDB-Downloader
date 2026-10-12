@@ -105,6 +105,7 @@ struct AppSelection {
 	bool filtered;
 	uint8_t blacklisted;
 	bool has_data;
+	int64_t sort_key;
 	AppSelection *next_clash;
 	AppSelection *prev_clash;
 	AppSelection *next;

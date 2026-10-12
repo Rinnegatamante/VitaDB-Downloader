@@ -9,7 +9,13 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 
 project(VitaDB C CXX)
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+	set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 include("${VITASDK}/share/vita.cmake" REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SDL2_mixer REQUIRED IMPORTED_TARGET SDL2_mixer)
+pkg_check_modules(libcurl REQUIRED IMPORTED_TARGET libcurl)
 set(VITA_APP_NAME "VitaDB Downloader")
 set(VITA_TITLEID "VITADBDLD")
 set(VITA_VERSION "01.00")
@@ -39,30 +45,23 @@ add_executable(VitaDB
 	source/utils.cpp
 )
 
-add_dependencies(VitaDB vitadb.skprx vitadb.suprx vdb_daemon.suprx)
+# Reserve SCE metadata space independently of the compiled code size.
+set_property(TARGET VitaDB APPEND_STRING PROPERTY LINK_FLAGS
+	" -Wl,--defsym,__sce_headroom=0x10000")
 
 target_link_libraries(VitaDB
-	-Wl,--whole-archive pthread -Wl,--no-whole-archive
+	# Force these imports before pkg-config can pull the same stub objects individually.
+	-Wl,--whole-archive SceNetCtl_stub SceSysmodule_stub -Wl,--no-whole-archive
 	imgui
 	m
 	z
 	stdc++
-	SDL2_mixer
-	SDL2
+	PkgConfig::SDL2_mixer
+	PkgConfig::libcurl
 	vitaGL
 	vitashark
 	SceShaccCgExt
 	mathneon
-	curl
-	ssl
-	vorbisfile
-	vorbis
-	ogg
-	mpg123
-	mikmod
-	modplug
-	FLAC
-	crypto
 	taihen_stub
 	kubridge_stub
 	SceAvPlayer_stub
@@ -77,9 +76,7 @@ target_link_libraries(VitaDB
 	SceKernelDmacMgr_stub
 	SceGxm_stub
 	SceNet_stub
-	-Wl,--whole-archive SceNetCtl_stub -Wl,--no-whole-archive
 	SceShaccCg_stub
-	-Wl,--whole-archive SceSysmodule_stub -Wl,--no-whole-archive
 	ScePower_stub
 	SceTouch_stub
 	SceVshBridge_stub
@@ -154,6 +151,13 @@ vita_create_self(eboot.bin VitaDB UNSAFE)
 vita_create_self(vitadb.skprx vitadb_kernel UNSAFE CONFIG ${CMAKE_SOURCE_DIR}/kernel/exports.yml)
 vita_create_self(vitadb.suprx vitadb_user UNSAFE CONFIG ${CMAKE_SOURCE_DIR}/user/exports.yml)
 vita_create_self(vdb_daemon.suprx vitadb_daemon UNSAFE CONFIG ${CMAKE_SOURCE_DIR}/daemon/exports.yml)
+foreach(plugin vitadb.skprx vitadb.suprx vdb_daemon.suprx)
+    if(TARGET ${plugin}-self)
+        add_dependencies(VitaDB ${plugin}-self)
+    else()
+        add_dependencies(VitaDB ${plugin})
+    endif()
+endforeach()
 vita_create_vpk(VitaDB.vpk ${VITA_TITLEID} eboot.bin
 	VERSION ${VITA_VERSION}
 	NAME ${VITA_APP_NAME}
