@@ -275,6 +275,25 @@ bool populate_apps_database(const char *file, bool is_psp) {
 		std::string installed_path = is_psp ? std::string(pspemu_dev) + "pspemu/PSP/GAME" : "ux0:app";
 		InstalledDirectories installed(installed_path.c_str());
 		ChecksumCache checksums;
+		robin_hood::unordered_flat_set<int> favorite_ids;
+		robin_hood::unordered_flat_set<std::string> favorite_titles;
+		for (const std::string &favorite : favorites) {
+			if (favorites_old_format) {
+				favorite_titles.insert(favorite);
+			} else {
+				favorite_ids.insert(atoi(favorite.c_str()));
+			}
+		}
+		robin_hood::unordered_flat_set<std::string> blacklist;
+		robin_hood::unordered_flat_set<std::string> hard_blacklist;
+		if (!is_psp) {
+			for (const std::string &title_id : daemon_blacklist) {
+				blacklist.insert(title_id);
+			}
+			for (const char *title_id : hardcoded_daemon_blacklist) {
+				hard_blacklist.insert(title_id);
+			}
+		}
 		do {
 			char name[128], version[64], fname[128], fname2[128], smalldata[4];
 			ptr = get_value_from_json(name, ptr, "name", nullptr);
@@ -320,15 +339,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			ptr = get_value_from_json(node->hash, ptr, "hash", nullptr);
 			//printf("db hash %s\n", node->hash);
 			if (is_psp) {
-				node->favorites = false;
-				if (!favorites_old_format) {
-					for (auto &s : favorites) {
-						if (atoi(s.c_str()) == atoi(node->id)) {
-							node->favorites = true;
-							break;
-						}
-					}
-				}
+				node->favorites = !favorites_old_format && favorite_ids.count(atoi(node->id)) != 0;
 				int type_num;
 				sscanf(node->type, "%d", &type_num);
 				type_num -= 10;
@@ -341,37 +352,12 @@ bool populate_apps_database(const char *file, bool is_psp) {
 				sprintf(fname, "ux0:app/%s/hash.vdb", node->titleid);
 				sprintf(fname2, "ux0:app/%s/eboot.bin", node->titleid);
 				
-				node->blacklisted = APP_WHITELISTED;
-				for (int i = 0; i < sizeof(hardcoded_daemon_blacklist) / sizeof(*hardcoded_daemon_blacklist); i++) {
-					if (!strcmp(hardcoded_daemon_blacklist[i], node->titleid)) {
-						node->blacklisted = APP_HARD_BLACKLISTED;
-					}
-				}
-				if (node->blacklisted == APP_WHITELISTED) {
-					for (auto &s : daemon_blacklist) {
-						if (s == node->titleid) {
-							node->blacklisted = APP_BLACKLISTED;
-							break;
-						}
-					}
-				}
-				
-				node->favorites = false;
-				for (auto &s : favorites) {
-					if (favorites_old_format) {
-						if (s == node->titleid) {
-							node->favorites = true;
-							char padded_id[5];
-							sprintf(padded_id, "%04d", atoi(node->id));
-							new_favorites.push_back(padded_id);
-							break;
-						}
-					} else {
-						if (atoi(s.c_str()) == atoi(node->id)) {
-							node->favorites = true;
-							break;
-						}
-					}
+				node->blacklisted = hard_blacklist.count(node->titleid) ? APP_HARD_BLACKLISTED : (blacklist.count(node->titleid) ? APP_BLACKLISTED : APP_WHITELISTED);
+				node->favorites = favorites_old_format ? favorite_titles.count(node->titleid) != 0 : favorite_ids.count(atoi(node->id)) != 0;
+				if (node->favorites && favorites_old_format) {
+					char padded_id[5];
+					sprintf(padded_id, "%04d", atoi(node->id));
+					new_favorites.push_back(padded_id);
 				}
 			}
 			if (installed.may_contain(is_psp ? node->id : node->titleid) && checksum_match(fname, fname2, node, is_psp ? PSP_EXECUTABLE : VITA_EXECUTABLE, checksums)) {
@@ -411,19 +397,15 @@ bool populate_apps_database(const char *file, bool is_psp) {
 		free(buffer);
 		
 		if (favorites_old_format) {
-			char is_new = '.';
-			SceUID fd = sceIoOpen("ux0:data/VitaDB/favorites.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-			sceIoWrite(fd, &is_new, 1);
-			is_new = ';';
-			int i = 1;
-			int sz = new_favorites.size();
-			for (auto &s : new_favorites) {
-				sceIoWrite(fd, s.c_str(), s.size());
-				if (i != sz) {
-					sceIoWrite(fd, &is_new, 1);
+			std::string serialized = ".";
+			for (const std::string &favorite : new_favorites) {
+				if (serialized.size() > 1) {
+					serialized += ';';
 				}
-				i++;
+				serialized += favorite;
 			}
+			SceUID fd = sceIoOpen("ux0:data/VitaDB/favorites.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+			sceIoWrite(fd, serialized.data(), serialized.size());
 			sceIoClose(fd);
 			favorites_old_format = false;
 			favorites = new_favorites;
