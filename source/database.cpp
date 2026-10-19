@@ -105,13 +105,14 @@ static void populate_titleid_clashes(AppSelection *head) {
 
 static char *get_value_from_json(char *dst, char *src, char *val, char **new_ptr) {
 	char label[32];
-	sprintf(label, "\"%s\": \"", val);
+	int label_len = sprintf(label, "\"%s\": \"", val);
 	//printf("label: %s\n", label);
-	char *ptr = strstr(src, label) + strlen(label);
-	//printf("ptr is: %X\n", ptr);
-	if ((uintptr_t)ptr == strlen(label)) {
+	char *ptr = strstr(src, label);
+	if (!ptr) {
 		return nullptr;
 	}
+	ptr += label_len;
+	//printf("ptr is: %X\n", ptr);
 	char *end2 = strstr(ptr, (val[0] == 'l' || val[0] == 'c') ? "\"," : "\"");
 	if (dst == nullptr) {
 		if (end2 - ptr > 0) {
