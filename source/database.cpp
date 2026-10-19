@@ -109,8 +109,9 @@ static char *get_value_from_json(char *dst, char *src, char *val, char **new_ptr
 	//printf("label: %s\n", label);
 	char *ptr = strstr(src, label) + strlen(label);
 	//printf("ptr is: %X\n", ptr);
-	if ((uintptr_t)ptr == strlen(label))
+	if ((uintptr_t)ptr == strlen(label)) {
 		return nullptr;
+	}
 	char *end2 = strstr(ptr, (val[0] == 'l' || val[0] == 'c') ? "\"," : "\"");
 	if (dst == nullptr) {
 		if (end2 - ptr > 0) {
@@ -127,58 +128,88 @@ static char *get_value_from_json(char *dst, char *src, char *val, char **new_ptr
 	return end2 + 1;
 }
 
-static bool checksum_match(char *hash_fname, char *fname, AppSelection *node, uint8_t type) {
-	char cur_hash[40], aux_fname[256];
-	SceUID f = sceIoOpen(hash_fname, SCE_O_RDONLY, 0777);
-	if (f >= 0) {
-		sceIoRead(f, cur_hash, 32);
-		cur_hash[32] = 0;
-		sceIoClose(f);
-		if (strncmp(cur_hash, type != AUXILIARY_FILE ? node->hash : node->aux_hash, 32))
-			node->state = APP_OUTDATED;
-		else
-			node->state = APP_UPDATED;
-		return true;
-	} else {
-		if (type != AUXILIARY_FILE)
-			f = sceIoOpen(fname, SCE_O_RDONLY, 0777);
-		else {
-			for (int i = 0; i < sizeof(aux_main_files) / sizeof(*aux_main_files); i++) {
-				sprintf(aux_fname, "ux0:app/%s/%s", node->titleid, aux_main_files[i]);
-				//printf("attempting with %s\n", aux_fname);
-				f = sceIoOpen(aux_fname, SCE_O_RDONLY, 0777);
-				if (f >= 0)
-					break;
+static std::string filesystem_key(const char *name) {
+	std::string key(name);
+	for (char &c : key) {
+		if (c >= 'A' && c <= 'Z') {
+			c += 'a' - 'A';
+		}
+	}
+	return key;
+}
+
+class InstalledDirectories {
+	robin_hood::unordered_flat_set<std::string> names;
+	bool complete = false;
+public:
+	explicit InstalledDirectories(const char *path) {
+		SceUID dir = sceIoDopen(path);
+		if (dir < 0) {
+			return;
+		}
+		int result;
+		do {
+			SceIoDirent entry;
+			result = sceIoDread(dir, &entry);
+			if (result > 0 && SCE_S_ISDIR(entry.d_stat.st_mode)) {
+				names.insert(filesystem_key(entry.d_name));
+			}
+		} while (result > 0);
+		complete = result == 0;
+		sceIoDclose(dir);
+	}
+
+	bool may_contain(const char *name) const {
+		return !complete || names.count(filesystem_key(name)) != 0;
+	}
+};
+
+struct CachedChecksum {
+	bool present = false;
+	char hash[33] = {};
+};
+
+using ChecksumCache = robin_hood::unordered_flat_map<std::string, CachedChecksum>;
+
+static bool checksum_match(const char *hash_fname, const char *fname, AppSelection *node,
+	uint8_t type, ChecksumCache &cache) {
+	auto insertion = cache.emplace(filesystem_key(hash_fname), CachedChecksum());
+	CachedChecksum &actual = insertion.first->second;
+	if (insertion.second) {
+		SceUID f = sceIoOpen(hash_fname, SCE_O_RDONLY, 0777);
+		if (f >= 0) {
+			int bytes = sceIoRead(f, actual.hash, 32);
+			sceIoClose(f);
+			actual.present = bytes == 32;
+		}
+		if (!actual.present) {
+			if (type != AUXILIARY_FILE) {
+				f = sceIoOpen(fname, SCE_O_RDONLY, 0777);
+			} else {
+				char aux_fname[256];
+				for (const char *candidate : aux_main_files) {
+					sprintf(aux_fname, "ux0:app/%s/%s", node->titleid, candidate);
+					f = sceIoOpen(aux_fname, SCE_O_RDONLY, 0777);
+					if (f >= 0) {
+						break;
+					}
+				}
+			}
+			if (f >= 0) {
+				calculate_md5(f, actual.hash);
+				actual.present = true;
+				SceUID hash_file = sceIoOpen(hash_fname, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
+				if (hash_file >= 0) {
+					sceIoWrite(hash_file, actual.hash, 32);
+					sceIoClose(hash_file);
+				}
 			}
 		}
-		if (f >= 0) {
-			calculate_md5(f, cur_hash);
-			if (strncmp(cur_hash, type != AUXILIARY_FILE ? node->hash : node->aux_hash, 32))
-				node->state = APP_OUTDATED;
-			else
-				node->state = APP_UPDATED;
-			switch (type) {
-			case VITA_EXECUTABLE:
-				sprintf(aux_fname, "ux0:app/%s/hash.vdb", node->titleid);
-				break;
-			case PSP_EXECUTABLE:
-				sprintf(aux_fname, "%spspemu/PSP/GAME/%s/hash.vdb", pspemu_dev, node->id);
-				break;
-			case AUXILIARY_FILE:
-				sprintf(aux_fname, "ux0:app/%s/aux_hash.vdb", node->titleid);
-				break;
-			default:
-				printf("Fatal Error!!!!\n");
-				break;
-			}
-			f = sceIoOpen(aux_fname, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
-			sceIoWrite(f, cur_hash, 32);
-			sceIoClose(f);
-			return true;
-		} else
-			node->state = APP_UNTRACKED;
-		return false;
 	}
+	const char *expected = type == AUXILIARY_FILE ? node->aux_hash : node->hash;
+	node->state = !actual.present ? APP_UNTRACKED :
+		(strncmp(actual.hash, expected, 32) ? APP_OUTDATED : APP_UPDATED);
+	return actual.present;
 }
 
 char *get_changelog(const char *file, char *id) {
@@ -197,8 +228,9 @@ char *get_changelog(const char *file, char *id) {
 			ptr = get_value_from_json(cur_id, ptr, "id", nullptr);
 			if (!strncmp(cur_id, id, 3)) {
 				ptr = get_value_from_json(res, ptr, "changelog", &res);
-				if (res)
+				if (res) {
 					res = unescape(res);
+				}
 				break;
 			}
 		} while (ptr);
@@ -240,12 +272,16 @@ bool populate_apps_database(const char *file, bool is_psp) {
 		char *ptr = buffer;
 		char *end, *end2;
 		std::vector<std::string> new_favorites;
+		std::string installed_path = is_psp ? std::string(pspemu_dev) + "pspemu/PSP/GAME" : "ux0:app";
+		InstalledDirectories installed(installed_path.c_str());
+		ChecksumCache checksums;
 		do {
 			char name[128], version[64], fname[128], fname2[128], smalldata[4];
 			ptr = get_value_from_json(name, ptr, "name", nullptr);
 			//printf("parsing %s\n", name);
-			if (!ptr)
+			if (!ptr) {
 				break;
+			}
 			AppSelection *node = (AppSelection*)malloc(sizeof(AppSelection));
 			node->search_filtered = false;
 			node->filtered = false;
@@ -253,6 +289,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			node->requirements = nullptr;
 			node->next_clash = nullptr;
 			node->prev_clash = nullptr;
+			node->state = APP_UNTRACKED;
 			node->score = 0.0f;
 			ptr = get_value_from_json(node->icon, ptr, "icon", nullptr);
 			if (!strstr(icons_db, node->icon)) {
@@ -337,19 +374,17 @@ bool populate_apps_database(const char *file, bool is_psp) {
 					}
 				}
 			}
-			if (checksum_match(fname, fname2, node, is_psp ? PSP_EXECUTABLE : VITA_EXECUTABLE)) {
+			if (installed.may_contain(is_psp ? node->id : node->titleid) && checksum_match(fname, fname2, node, is_psp ? PSP_EXECUTABLE : VITA_EXECUTABLE, checksums)) {
 				if (!is_psp && strlen(node->aux_hash) > 0) {
 					sprintf(fname, "ux0:app/%s/aux_hash.vdb", node->titleid);
-					for (int i = 0; i < sizeof(aux_main_files) / sizeof(*aux_main_files); i++) {
-						if (checksum_match(fname, NULL, node, AUXILIARY_FILE))
-							break;
-					}
+					checksum_match(fname, NULL, node, AUXILIARY_FILE, checksums);
 				}
 			}
 			//printf("hash part done\n");
 			ptr = get_value_from_json(node->requirements, ptr, "requirements", &node->requirements);
-			if (node->requirements)
+			if (node->requirements) {
 				node->requirements = unescape(node->requirements);
+			}
 			ptr = get_value_from_json(smalldata, ptr, "trophies", nullptr);
 			node->trophies = atoi(smalldata);
 			ptr = get_value_from_json(smalldata, ptr, "ai", nullptr);
@@ -635,22 +670,25 @@ void populate_themes_database(const char *file) {
 			SceIoStat st;
 			ptr = get_value_from_json(name, ptr, "name", nullptr);
 			//printf("parsing %s\n", name);
-			if (!ptr)
+			if (!ptr) {
 				break;
+			}
 			ThemeSelection *node = (ThemeSelection*)malloc(sizeof(ThemeSelection));
 			sprintf(fname, "ux0:data/VitaDB/previews/%s.png", name);
-			if (sceIoGetstat(fname, &st) < 0)
+			if (sceIoGetstat(fname, &st) < 0) {
 				missing_previews[missing_previews_num++] = node;
+			}
 			node->desc = nullptr;
 			node->shuffle = false;
 			node->search_filtered = false;
 			strcpy(node->name, name);
 			sprintf(fname, "ux0:data/VitaDB/themes/%s/theme.ini", node->name);
 			
-			if (sceIoGetstat(fname, &st) >= 0)
+			if (sceIoGetstat(fname, &st) >= 0) {
 				node->state = APP_UPDATED;
-			else
+			} else {
 				node->state = APP_UNTRACKED;
+			}
 			ptr = get_value_from_json(node->author, ptr, "author", nullptr);
 			//printf("%s\n", node->author);
 			ptr = get_value_from_json(node->desc, ptr, "description", &node->desc);
