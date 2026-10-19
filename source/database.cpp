@@ -240,25 +240,47 @@ char *get_changelog(const char *file, char *id) {
 	return res;
 }
 
+static void read_icon_index(robin_hood::unordered_flat_set<std::string> &icons) {
+	SceUID f = sceIoOpen("ux0:data/VitaDB/icons.db", SCE_O_RDONLY, 0777);
+	if (f < 0) {
+		return;
+	}
+	int size = sceIoRead(f, generic_mem_buffer, MEM_BUFFER_SIZE - 1);
+	sceIoClose(f);
+	if (size <= 0) {
+		return;
+	}
+	char *icons_text = (char *)generic_mem_buffer;
+	icons_text[size] = 0;
+	for (char *line = icons_text; line;) {
+		char *end = strchr(line, '\n');
+		if (end) {
+			*end = 0;
+		}
+		size_t length = strlen(line);
+		if (length && line[length - 1] == '\r') {
+			line[length - 1] = 0;
+		}
+		char *slash = strrchr(line, '/');
+		const char *name = slash ? slash + 1 : line;
+		if (*name) {
+			icons.insert(name);
+		}
+		line = end ? end + 1 : nullptr;
+	}
+}
+
 bool populate_apps_database(const char *file, bool is_psp) {
 	// Read icons database
-	SceUID f = sceIoOpen("ux0:data/VitaDB/icons.db", SCE_O_RDONLY, 0777);
-	//printf("f is %x\n", f);
-	size_t icons_db_size = sceIoRead(f, generic_mem_buffer, MEM_BUFFER_SIZE);
-	//printf("icons_db_size is %x\n", icons_db_size);
-	char *icons_db = (char *)vglMalloc(icons_db_size + 1);
-	sceClibMemcpy(icons_db, generic_mem_buffer, icons_db_size);
-	icons_db[icons_db_size] = 0;
-	sceIoClose(f);
-	
-	uint32_t missing_icons_num = 0;
-	AppSelection *missing_icons[2048];
+	robin_hood::unordered_flat_set<std::string> indexed_icons;
+	read_icon_index(indexed_icons);
+	std::vector<AppSelection *> missing_icons;
 
 	// Burning on screen the parsing text dialog
 	for (int i = 0; i < 3; i++) {
 		draw_text_dialog("Parsing apps list", true, !is_psp);
 	}
-	f = sceIoOpen(file, SCE_O_RDONLY, 0777);
+	SceUID f = sceIoOpen(file, SCE_O_RDONLY, 0777);
 	if (f >= 0) {
 		size_t len = sceIoLseek(f, 0, SCE_SEEK_END);
 		sceIoLseek(f, 0, SCE_SEEK_SET);
@@ -311,8 +333,8 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			node->state = APP_UNTRACKED;
 			node->score = 0.0f;
 			ptr = get_value_from_json(node->icon, ptr, "icon", nullptr);
-			if (!strstr(icons_db, node->icon)) {
-				missing_icons[missing_icons_num++] = node;
+			if (node->icon[0] && node->icon[1] && indexed_icons.insert(node->icon).second) {
+				missing_icons.push_back(node);
 				//printf("%s is missing [%s]\n", node->icon, name);
 			}
 			ptr = get_value_from_json(version, ptr, "version", nullptr);
@@ -417,22 +439,25 @@ bool populate_apps_database(const char *file, bool is_psp) {
 		}
 		
 		// Downloading missing icons
-		if (!update_detected) {
-			for (int i = 0; i < missing_icons_num; i++) {
+		if (!update_detected && !missing_icons.empty()) {
+			FILE *index = fopen("ux0:data/VitaDB/icons.db", "a");
+			for (size_t i = 0; i < missing_icons.size(); i++) {
 				char download_link[512];
 				sprintf(download_link, "https://www.rinnegatamante.eu/vitadb/icons/%s", missing_icons[i]->icon);
-				download_file(download_link, "Downloading missing icons", false, i + 1, missing_icons_num);
+				sceIoRemove(TEMP_DOWNLOAD_NAME);
+				download_file(download_link, "Downloading missing icons", false, i + 1, missing_icons.size());
 				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c", missing_icons[i]->icon[0], missing_icons[i]->icon[1]);
 				sceIoMkdir(download_link, 0777);
 				sprintf(download_link, "ux0:data/VitaDB/icons/%c%c/%s", missing_icons[i]->icon[0], missing_icons[i]->icon[1], missing_icons[i]->icon);
-				sceIoRename(TEMP_DOWNLOAD_NAME, download_link);
-				FILE *f = fopen("ux0:data/VitaDB/icons.db", "a");
-				fprintf(f, "%s\n", download_link);
-				fclose(f);
+				if (sceIoRename(TEMP_DOWNLOAD_NAME, download_link) >= 0 && index) {
+					fprintf(index, "%s\n", download_link);
+				}
+			}
+			if (index) {
+				fclose(index);
 			}
 		}
 	}
-	vglFree(icons_db);
 	//printf("finished parsing\n");
 	return true;
 }
