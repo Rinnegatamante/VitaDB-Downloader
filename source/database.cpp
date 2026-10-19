@@ -23,6 +23,8 @@
 #include <stdio.h>
 #include <malloc.h>
 #include <string.h>
+#include <algorithm>
+#include <cmath>
 #include <vitasdk.h>
 #include <vitaGL.h>
 #include "database.h"
@@ -257,6 +259,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			node->requirements = nullptr;
 			node->next_clash = nullptr;
 			node->prev_clash = nullptr;
+			node->score = 0.0f;
 			ptr = get_value_from_json(node->icon, ptr, "icon", nullptr);
 			if (!strstr(icons_db, node->icon)) {
 				missing_icons[missing_icons_num++] = node;
@@ -568,126 +571,55 @@ void remove_favorites(char *tid) {
 	}
 }
 
-static inline void swap_apps(AppSelection *prev, AppSelection *cur, AppSelection *next) {
-	if (prev)
-		prev->next = next;
-	cur->next = next->next;
-	next->next = cur;
-}
-
 void sort_apps_list(AppSelection **start, int sort_idx) {
 	// Ensuring clasher titleids check finished
 	sceKernelWaitThreadEnd(clash_thd, NULL, NULL);
-	//printf("sort_apps_list called\n");
 
 	// Checking for empty list
-	if (start == NULL) 
-		return; 
-	
-	bool swapped; 
-  
-	do {
-		AppSelection *lptr = NULL; 
-		AppSelection *ptr1 = *start; 
-		swapped = false; 
-		
-		int64_t d1, d2;
-		char *dummy;
-		while (ptr1->next) {
-			bool last_swapped = false;
-			AppSelection *old_next = ptr1->next;
-			switch (sort_idx) {
-			case SORT_APPS_NEWEST:
-				if (strcasecmp(ptr1->date, ptr1->next->date) < 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_OLDEST:
-				if (strcasecmp(ptr1->date, ptr1->next->date) > 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_MOST_DOWNLOADED:
-				d1 = strtoll(ptr1->downloads, &dummy, 10);
-				d2 = strtoll(ptr1->next->downloads, &dummy, 10);
-				if (d1 < d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_LEAST_DOWNLOADED:
-				d1 = strtoll(ptr1->downloads, &dummy, 10);
-				d2 = strtoll(ptr1->next->downloads, &dummy, 10);
-				if (d1 > d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = 1;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_A_Z:
-				if (strcasecmp(ptr1->name, ptr1->next->name) > 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_Z_A:
-				if (strcasecmp(ptr1->name, ptr1->next->name) < 0) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_SMALLEST:
-				d1 = strtoll(ptr1->size, &dummy, 10) + strtoll(ptr1->data_size, &dummy, 10);
-				d2 = strtoll(ptr1->next->size, &dummy, 10) + strtoll(ptr1->next->data_size, &dummy, 10);
-				if (d1 > d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_LARGEST:
-				d1 = strtoll(ptr1->size, &dummy, 10) + strtoll(ptr1->data_size, &dummy, 10);
-				d2 = strtoll(ptr1->next->size, &dummy, 10) + strtoll(ptr1->next->data_size, &dummy, 10);
-				if (d1 < d2) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_HIGHEST_SCORE:
-				if (ptr1->score < ptr1->next->score) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_APPS_LOWEST_SCORE:
-				if (ptr1->score > ptr1->next->score) {
-					swap_apps(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			default:
-				break;
-			}
-			if (!last_swapped) {
-				lptr = ptr1;
-				ptr1 = ptr1->next; 
-			} else {
-				if (*start == ptr1)
-					*start = old_next;
-				lptr = old_next;
-			}
-		} 
-	} while (swapped); 
+	if (!start) {
+		return;
+	}
+
+	std::vector<AppSelection *> sorted;
+	for (AppSelection *app = *start; app; app = app->next) {
+		sorted.push_back(app);
+		if (sort_idx == SORT_APPS_MOST_DOWNLOADED || sort_idx == SORT_APPS_LEAST_DOWNLOADED) {
+			app->sort_key = strtoll(app->downloads, nullptr, 10);
+		} else if (sort_idx == SORT_APPS_SMALLEST || sort_idx == SORT_APPS_LARGEST) {
+			app->sort_key = strtoll(app->size, nullptr, 10) + strtoll(app->data_size, nullptr, 10);
+		} else if ((sort_idx == SORT_APPS_HIGHEST_SCORE || sort_idx == SORT_APPS_LOWEST_SCORE) && std::isnan(app->score)) {
+			app->score = 0.0f;
+		}
+	}
+	std::stable_sort(sorted.begin(), sorted.end(), [sort_idx](const AppSelection *a, const AppSelection *b) {
+		switch (sort_idx) {
+		case SORT_APPS_NEWEST:
+			return strcasecmp(a->date, b->date) > 0;
+		case SORT_APPS_OLDEST:
+			return strcasecmp(a->date, b->date) < 0;
+		case SORT_APPS_A_Z:
+			return strcasecmp(a->name, b->name) < 0;
+		case SORT_APPS_Z_A:
+			return strcasecmp(a->name, b->name) > 0;
+		case SORT_APPS_MOST_DOWNLOADED:
+		case SORT_APPS_LARGEST:
+			return a->sort_key > b->sort_key;
+		case SORT_APPS_LEAST_DOWNLOADED:
+		case SORT_APPS_SMALLEST:
+			return a->sort_key < b->sort_key;
+		case SORT_APPS_HIGHEST_SCORE:
+			return a->score > b->score;
+		case SORT_APPS_LOWEST_SCORE:
+			return a->score < b->score;
+		default:
+			return false;
+		}
+	});
+	*start = sorted.front();
+	for (size_t i = 1; i < sorted.size(); ++i) {
+		sorted[i - 1]->next = sorted[i];
+	}
+	sorted.back()->next = nullptr;
 }
 
 void populate_themes_database(const char *file) {
@@ -761,55 +693,23 @@ void populate_themes_database(const char *file) {
 
 
 
-static inline void swap_themes(ThemeSelection *prev, ThemeSelection *cur, ThemeSelection *next) {
-	if (prev)
-		prev->next = next;
-	cur->next = next->next;
-	next->next = cur;
-}
-
 void sort_themes_list(ThemeSelection **start, int sort_idx) {
 	// Checking for empty list
-	if (start == NULL) 
-		return; 
-	
-	bool swapped; 
-  
-	do {
-		ThemeSelection *ptr1 = *start; 
-		ThemeSelection *lptr = NULL; 
-		swapped = false; 
+	if (start == NULL) {
+		return;
+	}
 
-		int64_t d1, d2;
-		while (ptr1->next) {
-			bool last_swapped = false;
-			ThemeSelection *old_next = ptr1->next;
-			switch (sort_idx) {
-			case SORT_THEMES_A_Z:
-				if (strcasecmp(ptr1->name, ptr1->next->name) > 0) {
-					swap_themes(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			case SORT_THEMES_Z_A:
-				if (strcasecmp(ptr1->name, ptr1->next->name) < 0) {
-					swap_themes(lptr, ptr1, ptr1->next); 
-					swapped = true;
-					last_swapped = true;
-				}
-				break;
-			default:
-				break;
-			}
-			if (!last_swapped) {
-				lptr = ptr1;
-				ptr1 = ptr1->next; 
-			} else {
-				if (*start == ptr1)
-					*start = old_next;
-				lptr = old_next;
-			}
-		} 
-	} while (swapped); 
+	std::vector<ThemeSelection *> sorted;
+	for (ThemeSelection *theme = *start; theme; theme = theme->next) {
+		sorted.push_back(theme);
+	}
+	std::stable_sort(sorted.begin(), sorted.end(), [sort_idx](const ThemeSelection *a, const ThemeSelection *b) {
+		int order = strcasecmp(a->name, b->name);
+		return sort_idx == SORT_THEMES_A_Z ? order < 0 : order > 0;
+	});
+	*start = sorted.front();
+	for (size_t i = 1; i < sorted.size(); ++i) {
+		sorted[i - 1]->next = sorted[i];
+	}
+	sorted.back()->next = nullptr;
 }
