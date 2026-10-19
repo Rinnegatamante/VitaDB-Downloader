@@ -28,6 +28,7 @@
 #include <vitasdk.h>
 #include <vitaGL.h>
 #include "database.h"
+#include "robin_hood.h"
 #include "dialogs.h"
 #include "network.h"
 #include "utils.h"
@@ -59,8 +60,6 @@ char *hardcoded_daemon_blacklist[] = {
 	"XASH00001"
 };
 
-static SceUID clash_thd;
-
 extern char boot_params[1024];
 extern AppSelection *to_download;
 
@@ -91,22 +90,17 @@ static const char *aux_main_files[6] = {
 	"game_data/game.pck" // Godot
 };
 
-static int clashThread(unsigned int args, void *arg) {
-	AppSelection *app = apps;
-	while (app) {
-		AppSelection *chk = app->next;
-		while (chk) {
-			if (!strcmp(chk->titleid, app->titleid)) {
-				app->next_clash = chk;
-				chk->prev_clash = app;
-				break;
-			}
-			chk = chk->next;
+static void populate_titleid_clashes(AppSelection *head) {
+	robin_hood::unordered_flat_map<std::string, AppSelection *> previous;
+	for (AppSelection *app = head; app; app = app->next) {
+		AppSelection *&prev = previous[app->titleid];
+		app->next_clash = nullptr;
+		app->prev_clash = prev;
+		if (prev) {
+			prev->next_clash = app;
 		}
-		app = app->next;
+		prev = app;
 	}
-	//printf("clash thread ended\n");
-	return sceKernelExitDeleteThread(0);
 }
 
 static char *get_value_from_json(char *dst, char *src, char *val, char **new_ptr) {
@@ -402,8 +396,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 		
 		if (!is_psp) {
 			// Populate TitleID clashes
-			clash_thd = sceKernelCreateThread("Clasher Thread", &clashThread, 0x10000100, 0x100000, 0, 0, NULL);
-			sceKernelStartThread(clash_thd, 0, NULL);
+			populate_titleid_clashes(apps);
 		}
 		
 		// Downloading missing icons
@@ -572,9 +565,6 @@ void remove_favorites(char *tid) {
 }
 
 void sort_apps_list(AppSelection **start, int sort_idx) {
-	// Ensuring clasher titleids check finished
-	sceKernelWaitThreadEnd(clash_thd, NULL, NULL);
-
 	// Checking for empty list
 	if (!start) {
 		return;
