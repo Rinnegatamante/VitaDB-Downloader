@@ -22,6 +22,7 @@
 #include <curl/curl.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <vitasdk.h>
 #include <vitaGL.h>
 #include "dialogs.h"
@@ -170,6 +171,13 @@ static size_t header_dummy_cb(char *buffer, size_t size, size_t nitems, void *us
 	return nitems;
 }
 
+// A single larger socket receive window avoids long TCP stalls on the Vita.
+static int serial_socket_options(void *dummy, curl_socket_t fd, curlsocktype dummy2) {
+	const int receive_buffer = 524288;
+	setsockopt((int)fd, SOL_SOCKET, SO_RCVBUF, &receive_buffer, sizeof(receive_buffer));
+	return CURL_SOCKOPT_OK;
+}
+
 static void startDownload(const char *url, time_t timestamp = 0) {
 	response_code = 0;
 	download_tstamp = 0;
@@ -193,6 +201,9 @@ static void startDownload(const char *url, time_t timestamp = 0) {
 	curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, bytes_string); // Dummy
 	curl_easy_setopt(curl_handle, CURLOPT_RESUME_FROM, downloaded_bytes);
 	curl_easy_setopt(curl_handle, CURLOPT_BUFFERSIZE, 524288);
+	if (strstr(url, "/vitadb/get_psarc_url.php") || strstr(url, "/vitadb/get_psarc_data.php")) {
+		curl_easy_setopt(curl_handle, CURLOPT_SOCKOPTFUNCTION, serial_socket_options);
+	}
 	struct curl_slist *headerchunk = NULL;
 	headerchunk = curl_slist_append(headerchunk, "Accept: */*");
 	headerchunk = curl_slist_append(headerchunk, "Content-Type: application/json");
