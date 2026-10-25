@@ -98,6 +98,7 @@ struct AppSelection {
 	char *requirements;
 	int state;
 	float score;
+	float review_score;
 	int review_count;
 	bool trophies;
 	uint8_t ai;

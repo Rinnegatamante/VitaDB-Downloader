@@ -307,6 +307,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			node->prev_clash = nullptr;
 			node->state = APP_UNTRACKED;
 			node->score = 0.0f;
+			node->review_score = -1.0f;
 			node->review_count = 0;
 			ptr = get_value_from_json(node->icon, ptr, "icon", nullptr);
 			if (node->icon[0] && node->icon[1] && indexed_icons.insert(node->icon).second) {
@@ -376,8 +377,15 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			if (!is_psp) {
 				ptr = get_value_from_json(smalldata, ptr, "score", nullptr);
 				node->score = atof(smalldata);
-				char *review_field = get_value_from_json(smalldata, ptr, "review_count", nullptr);
 				char *data_field = strstr(ptr, "\"data\":");
+				char *review_score_field = get_value_from_json(smalldata, ptr, "review_score", nullptr);
+				if (review_score_field && data_field && review_score_field < data_field &&
+					strcmp(smalldata, "null")) {
+					float review_score = atof(smalldata);
+					if (std::isfinite(review_score) && review_score >= 0.0f && review_score <= 100.0f)
+						node->review_score = review_score;
+				}
+				char *review_field = get_value_from_json(smalldata, ptr, "review_count", nullptr);
 				if (review_field && data_field && review_field < data_field) {
 					node->review_count = atoi(smalldata);
 				}

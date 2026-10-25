@@ -128,33 +128,99 @@ static void restore_navigation_focus(ImGuiID item_id, const ImRect& item_rect) {
 	context->NavDisableMouseHover = true;
 }
 
-static void draw_score_text(double score, const char *text) {
+static ImVec4 get_score_color(double score) {
+	if (score < 60.0) {
+		return ImVec4(0.85f, 0.20f, 0.20f, 1.0f);
+	}
+	if (score < 70.0) {
+		return ImVec4(0.95f, 0.55f, 0.15f, 1.0f);
+	}
+	if (score < 80.0) {
+		return ImVec4(0.95f, 0.80f, 0.15f, 1.0f);
+	}
 	if (score < 90.0) {
-		ImVec4 color;
-		if (score < 60.0)
-			color = ImVec4(0.85f, 0.20f, 0.20f, 1.0f);
-		else if (score < 70.0)
-			color = ImVec4(0.95f, 0.55f, 0.15f, 1.0f);
-		else if (score < 80.0)
-			color = ImVec4(0.95f, 0.80f, 0.15f, 1.0f);
-		else
-			color = ImVec4(0.25f, 0.75f, 0.35f, 1.0f);
+		return ImVec4(0.25f, 0.75f, 0.35f, 1.0f);
+	}
+
+	float pulse = (sinf((float)ImGui::GetTime() * 3.0f) + 1.0f) * 0.5f;
+	return ImVec4(0.25f + pulse * 0.20f, 0.75f + pulse * 0.25f, 0.35f + pulse * 0.20f, 1.0f);
+}
+
+static void draw_score_text(double score, const char *text) {
+	ImVec4 color = get_score_color(score);
+	if (score < 90.0) {
 		ImGui::TextColored(color, "%s", text);
 		return;
 	}
 
-	float t = (float)ImGui::GetTime();
-	float pulse = (sinf(t * 3.0f) + 1.0f) * 0.5f;
-	ImVec4 green(0.25f + pulse * 0.20f, 0.75f + pulse * 0.25f, 0.35f + pulse * 0.20f, 1.0f);
 	ImVec2 pos = ImGui::GetCursorScreenPos();
 	ImDrawList *draw = ImGui::GetWindowDrawList();
+	float pulse = (sinf((float)ImGui::GetTime() * 3.0f) + 1.0f) * 0.5f;
 	float glow_alpha = 0.10f + pulse * 0.20f;
 	ImU32 glow = ImGui::ColorConvertFloat4ToU32(ImVec4(0.25f, 1.0f, 0.40f, glow_alpha));
 	draw->AddText(ImVec2(pos.x - 1.0f, pos.y), glow, text);
 	draw->AddText(ImVec2(pos.x + 1.0f, pos.y), glow, text);
 	draw->AddText(ImVec2(pos.x, pos.y - 1.0f), glow, text);
 	draw->AddText(ImVec2(pos.x, pos.y + 1.0f), glow, text);
-	ImGui::TextColored(green, "%s", text);
+	ImGui::TextColored(color, "%s", text);
+}
+
+static const float REVIEWED_BADGE_RIGHT_X = 351.0f;
+
+static void draw_reviewed_title(const char *name, const ImVec2 &pos, float score) {
+	const float diamond_size = 12.0f;
+	const float name_gap = 6.0f;
+	const float score_gap = 5.0f;
+	const bool has_score = score >= 0.0f;
+
+	char score_label[16] = {};
+	if (has_score) {
+		sprintf(score_label, "%.1f", score);
+	}
+
+	float score_width = has_score ? ImGui::CalcTextSize(score_label).x : 0.0f;
+	float reserved = name_gap + diamond_size + (has_score ? score_gap + score_width : 0.0f);
+	float right = ImGui::GetWindowPos().x + REVIEWED_BADGE_RIGHT_X - 10.0f;
+	float available = right - pos.x - reserved;
+	if (available <= 0.0f) {
+		return;
+	}
+
+	ImDrawList *draw = ImGui::GetWindowDrawList();
+	ImU32 text_color = ImGui::GetColorU32(ImGuiCol_Text);
+	float name_width = ImGui::CalcTextSize(name).x;
+	float dots_width = ImGui::CalcTextSize("...").x;
+	bool truncated = name_width > available;
+	float visible_width = truncated ? available - dots_width - 2.0f : name_width;
+
+	if (visible_width > 0.0f) {
+		ImVec4 clip(pos.x, pos.y, pos.x + visible_width, pos.y + ImGui::GetFontSize());
+		draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), pos, text_color, name, nullptr, 0.0f, &clip);
+	}
+	if (truncated && available >= dots_width + 2.0f) {
+		draw->AddText(ImVec2(pos.x + available - dots_width, pos.y), text_color, "...");
+	}
+
+	float diamond_x = pos.x + (truncated ? available : name_width) + name_gap;
+	float cy = pos.y + ImGui::GetFontSize() * 0.5f;
+	ImVec4 score_color = has_score ? get_score_color(score) : ImVec4(0.65f, 0.80f, 0.92f, 1.0f);
+	ImU32 tint = ImGui::GetColorU32(score_color);
+	draw->AddQuadFilled(ImVec2(diamond_x + 6.0f, cy - 6.0f), ImVec2(diamond_x + 12.0f, cy), ImVec2(diamond_x + 6.0f, cy + 6.0f), ImVec2(diamond_x, cy), tint);
+
+	if (!has_score) {
+		return;
+	}
+
+	ImVec2 score_pos(diamond_x + diamond_size + score_gap, pos.y);
+	if (score >= 90.0f) {
+		float pulse = (sinf((float)ImGui::GetTime() * 3.0f) + 1.0f) * 0.5f;
+		ImU32 glow = ImGui::ColorConvertFloat4ToU32(ImVec4(0.25f, 1.0f, 0.40f, 0.10f + pulse * 0.20f));
+		draw->AddText(ImVec2(score_pos.x - 1.0f, score_pos.y), glow, score_label);
+		draw->AddText(ImVec2(score_pos.x + 1.0f, score_pos.y), glow, score_label);
+		draw->AddText(ImVec2(score_pos.x, score_pos.y - 1.0f), glow, score_label);
+		draw->AddText(ImVec2(score_pos.x, score_pos.y + 1.0f), glow, score_label);
+	}
+	draw->AddText(score_pos, tint, score_label);
 }
 
 static void get_preview_path(char *path, size_t size, AppSelection *game) {
@@ -1566,7 +1632,22 @@ extract_libshacccg:
 						sprintf(lbl, "##%d", button_ids[row]);
 						button_label = lbl;
 					}
-					if (ImGui::Button(button_label, ImVec2(-1.0f, 0.0f))) {
+					bool has_reviews = mode_idx == MODE_VITA_HBS && g->review_count > 0;
+					bool titled_button = has_reviews && button_ids[row] < 0;
+					if (titled_button) {
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+					}
+					bool clicked = ImGui::Button(button_label, ImVec2(-1.0f, 0.0f));
+					if (titled_button) {
+						ImGui::PopStyleColor();
+					}
+					ImVec2 button_min = ImGui::GetItemRectMin();
+					ImVec2 button_max = ImGui::GetItemRectMax();
+					if (titled_button) {
+						ImVec2 title_pos(button_min.x + ImGui::GetStyle().FramePadding.x, button_min.y + (button_max.y - button_min.y - ImGui::GetFontSize()) * 0.5f);
+						draw_reviewed_title(g->name, title_pos, g->review_score);
+					}
+					if (clicked) {
 						to_download = g;
 						restore_app_focus = g;
 					}
@@ -1576,13 +1657,14 @@ extract_libshacccg:
 						hovered_app_id = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemId;
 						hovered_app_rect = ImGui::GetCurrentContext()->CurrentWindow->DC.LastItemRect;
 						hovered_app_rect.Translate(ImVec2(-ImGui::GetWindowPos().x, -ImGui::GetWindowPos().y));
-						if (fast_increment)
+						if (fast_increment) {
 							increment_idx = 1;
-						else if (fast_decrement) {
-							if (decrement_stack_idx == 0)
+						} else if (fast_decrement) {
+							if (decrement_stack_idx == 0) {
 								fast_decrement = false;
-							else
+							} else {
 								decremented_app = decrement_stack[decrement_stack_idx >= 20 ? (decrement_stack_idx - 20) : 0];
+							}
 						}
 					} else if (increment_idx) {
 						increment_idx++;
@@ -1654,7 +1736,11 @@ extract_libshacccg:
 					}
 					if (reset_cursor) {
 						ImGui::SetCursorPos(ImVec2(x_offs, y));
-						ImGui::Text(g->name);
+						if (has_reviews) {
+							draw_reviewed_title(g->name, ImGui::GetCursorScreenPos(), g->review_score);
+						} else {
+							ImGui::Text(g->name);
+						}
 						ImGui::SetCursorPosY(next_row);
 					}
 				}
