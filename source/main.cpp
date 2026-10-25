@@ -489,7 +489,7 @@ bool filterVitaApps(AppSelection *p) {
 				}
 				break;
 			case FILTER_VITA_APPS_AI_ASSISTED:
-				if (p->ai != APP_HUMAN_MADE) {
+				if (p->ai == APP_AI_ASSISTED) {
 					filter_ret(true)
 				}
 				break;
@@ -550,7 +550,7 @@ bool filterPspApps(AppSelection *p) {
 				}
 				break;
 			case FILTER_PSP_APPS_AI_ASSISTED:
-				if (p->ai != APP_HUMAN_MADE) {
+				if (p->ai == APP_AI_ASSISTED) {
 					filter_ret(true)
 				}
 				break;
