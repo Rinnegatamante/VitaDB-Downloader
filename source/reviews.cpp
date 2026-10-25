@@ -194,6 +194,7 @@ static int reviews_thread(unsigned int args, void *arg) {
 	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
 	curl_slist_free_all(headers);
 	curl_easy_cleanup(curl);
+	parse_certified_reviews(response, entries, count, average);
 	reviews.swap(entries);
 	reviews_count = count;
 	reviews_average = average;

@@ -376,10 +376,10 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			if (!is_psp) {
 				ptr = get_value_from_json(smalldata, ptr, "score", nullptr);
 				node->score = atof(smalldata);
-				char *review_field = strstr(ptr, "\"review_count\": \"");
-				char *data_field = strstr(ptr, "\"data\": \"");
+				char *review_field = get_value_from_json(smalldata, ptr, "review_count", nullptr);
+				char *data_field = strstr(ptr, "\"data\":");
 				if (review_field && data_field && review_field < data_field) {
-					node->review_count = atoi(review_field + strlen("\"review_count\": \""));
+					node->review_count = atoi(smalldata);
 				}
 			}
 			ptr = get_value_from_json(fname, ptr, "data", nullptr);
