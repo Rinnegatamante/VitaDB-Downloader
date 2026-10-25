@@ -43,6 +43,20 @@ It's also possible to add more blacklisted homebrews (for example, if you use a 
 
 ## Changelog
 
+### v.2.8
+- Severely improved download times by optimizing SSL cryptographic resolutions and fine-tuning download buffer sizes. (Up to 2x faster)
+- Replaced Vibecoded Apps icon with a robot icon.
+- Severely reduced booting times with several optimizations in hot paths of the app and caching repeated calculations where possible.
+- Improved download errors resolutions and retries on unstable connections.
+- Added a new feature "View Certified Reviews" in the Manage sub-menu to read reviews for apps having one or more.
+- Added showcase of certified reviews score directly in the applications listing with an icon and a score nearby the application name.
+- Added a new filter "Unreviewed Apps" to hide/show applications without certified reviews.
+- Made so that the filter "AI Assisted Apps" does not hide Vibecoded Apps as well when anymore when disabled.
+- Drastically improved application framerate by implementing CPU culling into the ImGui renderer.
+- Drastically improved framerate when fast scrolling applications by implementing async icons loading and caching of a subset of icons.
+- Improved images loading (affects screenshots and icons) by using single I/O reads instead of small buffered ones.
+- Updated to latest vitaGL commit.
+
 ### v.2.7
 - Added separators between filters listing to make categories of filters clearly distinguishable.
 - Fixed a bug causing nightly builds powered by the recent CI support program in VitaDB to have broken Data Files downloads.
