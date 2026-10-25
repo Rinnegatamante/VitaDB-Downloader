@@ -35,6 +35,7 @@ static CURL *curl_handle = NULL;
 volatile uint64_t total_bytes = 0xFFFFFFFF;
 volatile uint64_t downloaded_bytes = 0;
 volatile uint8_t downloader_pass = 1;
+static volatile bool package_download_failed = false;
 volatile bool is_cancelable = false;
 volatile bool is_canceled = false;
 uint8_t *generic_mem_buffer = nullptr;
@@ -61,16 +62,25 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *stream) {
 		}
 	}
 	if (total_bytes > MEM_BUFFER_SIZE || fh >= 0) {
-		if (fh < 0)
+		if (fh < 0) {
 			fh = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
-		sceIoWrite(fh, ptr, nmemb);
+		}
+		if (fh < 0 || sceIoWrite(fh, ptr, nmemb) != (int)nmemb) {
+			package_download_failed = true;
+			return 0;
+		}
 	} else {
+		if (downloaded_bytes > MEM_BUFFER_SIZE || nmemb > MEM_BUFFER_SIZE - downloaded_bytes) {
+			package_download_failed = true;
+			return 0;
+		}
 		uint8_t *dst = &generic_mem_buffer[downloaded_bytes];
 		sceClibMemcpy(dst, ptr, nmemb);
 	}
 	downloaded_bytes += nmemb;
-	if (total_bytes < downloaded_bytes)
+	if (total_bytes < downloaded_bytes) {
 		total_bytes = downloaded_bytes;
+	}
 	return nmemb;
 }
 
@@ -415,17 +425,24 @@ int downloadThread(unsigned int args, void *arg) {
 	total_bytes = 180;
 	startDownload(final_url);
 	while (downloaded_bytes < total_bytes) {
-		if (is_cancelable && is_canceled) {
+		if ((is_cancelable && is_canceled) || package_download_failed) {
 			goto ABORT_DOWNLOAD;
 		}
 		startDownload(final_url);
 	}
-	if (downloaded_bytes > 180 && total_bytes <= MEM_BUFFER_SIZE) {
+	if (!package_download_failed && !is_canceled && downloaded_bytes > 180 && total_bytes <= MEM_BUFFER_SIZE) {
 		fh = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
-		sceIoWrite(fh, generic_mem_buffer, downloaded_bytes);
+		if (fh < 0 || sceIoWrite(fh, generic_mem_buffer, downloaded_bytes) !=
+			(int)downloaded_bytes)
+			package_download_failed = true;
 	}
 ABORT_DOWNLOAD:
-	sceIoClose(fh);
+	if (fh >= 0 && sceIoClose(fh) < 0) {
+		package_download_failed = true;
+	}
+	if (package_download_failed || is_canceled) {
+		sceIoRemove(TEMP_DOWNLOAD_NAME);
+	}
 	downloaded_bytes = total_bytes;
 	curl_easy_cleanup(curl_handle);
 	return sceKernelExitDeleteThread(0);
@@ -434,6 +451,7 @@ ABORT_DOWNLOAD:
 bool download_file(char *url, char *text, bool cancelable, int custom_index, int custom_num_passes, GLuint bg_tex) {
 	is_canceled = false;
 	is_cancelable = cancelable;
+	package_download_failed = false;
 	SceKernelThreadInfo info;
 	info.size = sizeof(SceKernelThreadInfo);
 	int res = 0;
@@ -448,10 +466,10 @@ bool download_file(char *url, char *text, bool cancelable, int custom_index, int
 	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
 	
 	if (is_cancelable) {
-		return !is_canceled;
+		return !is_canceled && !package_download_failed;
 	}
 	
-	return true;
+	return !package_download_failed;
 }
 
 void silent_download(char *url) {
@@ -471,6 +489,7 @@ void silent_download(char *url) {
 void early_download_file(char *url, char *text) {
 	is_canceled = false;
 	is_cancelable = false;
+	package_download_failed = false;
 	SceKernelThreadInfo info;
 	info.size = sizeof(SceKernelThreadInfo);
 	int res = 0;
