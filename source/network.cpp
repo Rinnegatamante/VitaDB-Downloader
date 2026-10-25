@@ -197,7 +197,73 @@ static int serial_socket_options(void *dummy, curl_socket_t fd, curlsocktype dum
 	return CURL_SOCKOPT_OK;
 }
 
-static void startDownload(const char *url, time_t timestamp = 0) {
+struct transfer_state {
+	uint64_t start_us;
+	uint64_t last_progress_us;
+	uint64_t last_poll_us;
+	curl_off_t last_bytes;
+};
+
+struct resume_hdr {
+	uint64_t first;
+	uint64_t total;
+	long status;
+	bool content_range_valid;
+	bool accepted;
+};
+
+static size_t resumed_header_cb(char *data, size_t size, size_t count, void *userdata) {
+	resume_hdr *headers = (resume_hdr *)userdata;
+	size_t length = size * count;
+	char line[512];
+	if (length >= sizeof(line))
+		return length;
+	memcpy(line, data, length);
+	line[length] = '\0';
+	if (!strncasecmp(line, "HTTP/", 5)) {
+		const char *status = strchr(line, ' ');
+		headers->status = status ? strtol(status + 1, NULL, 10) : 0;
+		headers->content_range_valid = false;
+		headers->accepted = false;
+	} else if (!strncasecmp(line, "Content-Range:", 14)) {
+		unsigned long long first = 0, last = 0, total = 0;
+		if (sscanf(line + 14, " bytes %llu-%llu/%llu",
+			&first, &last, &total) == 3 &&
+			first == headers->first && last >= first &&
+			total == headers->total && last < total)
+			headers->content_range_valid = true;
+	} else if ((line[0] == '\r' || line[0] == '\n') &&
+		headers->status >= 200 && headers->status < 300) {
+		headers->accepted = headers->status == 206 && headers->content_range_valid;
+		if (!headers->accepted) {
+			return 0; // Never append a full HTTP 200 response to a partial download.
+		}
+	}
+	return length;
+}
+
+static int serial_progress_cb(void *userdata, curl_off_t, curl_off_t downloaded,
+	curl_off_t, curl_off_t) {
+	transfer_state *state = (transfer_state*)userdata;
+	uint64_t now = (uint64_t)sceKernelGetSystemTimeWide();
+	if (downloaded > state->last_bytes)
+		state->last_progress_us = now;
+	state->last_bytes = downloaded;
+	// Force a fresh connection after four seconds without received bytes.
+	if ((downloaded > 0 && now - state->last_progress_us >= 4000000ULL) ||
+		(downloaded == 0 && now - state->start_us >= 12000000ULL))
+		return 1;
+	if (is_cancelable && now - state->last_poll_us >= 100000ULL) {
+		SceCtrlData pad;
+		if (sceCtrlPeekBufferPositive(0, &pad, 1) >= 0 && (pad.buttons & SCE_CTRL_CANCEL))
+			is_canceled = true;
+		state->last_poll_us = now;
+	}
+	return is_cancelable && is_canceled ? 1 : 0;
+}
+
+static CURLcode startDownload(const char *url, time_t timestamp = 0,
+	bool reliable = false) {
 	response_code = 0;
 	download_tstamp = 0;
 	curl_easy_reset(curl_handle);
@@ -223,16 +289,49 @@ static void startDownload(const char *url, time_t timestamp = 0) {
 	if (strstr(url, "/vitadb/get_psarc_url.php") || strstr(url, "/vitadb/get_psarc_data.php")) {
 		curl_easy_setopt(curl_handle, CURLOPT_SOCKOPTFUNCTION, serial_socket_options);
 	}
+	transfer_state transfer = {};
+	resume_hdr resume_headers = {};
+	if (reliable) {
+		transfer.start_us = (uint64_t)sceKernelGetSystemTimeWide();
+		transfer.last_progress_us = transfer.start_us;
+		curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0L);
+		curl_easy_setopt(curl_handle, CURLOPT_XFERINFOFUNCTION, serial_progress_cb);
+		curl_easy_setopt(curl_handle, CURLOPT_XFERINFODATA, &transfer);
+		curl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+		curl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_TIME, 8L);
+		curl_easy_setopt(curl_handle, CURLOPT_FRESH_CONNECT, 1L);
+		curl_easy_setopt(curl_handle, CURLOPT_FORBID_REUSE, 1L);
+		curl_easy_setopt(curl_handle, CURLOPT_FAILONERROR, 1L);
+		if (downloaded_bytes > 0) {
+			resume_headers.first = downloaded_bytes;
+			resume_headers.total = total_bytes;
+			curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, resumed_header_cb);
+			curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, &resume_headers);
+		}
+	}
 	struct curl_slist *headerchunk = NULL;
 	headerchunk = curl_slist_append(headerchunk, "Accept: */*");
 	headerchunk = curl_slist_append(headerchunk, "Content-Type: application/json");
 	headerchunk = curl_slist_append(headerchunk, "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36");
 	headerchunk = curl_slist_append(headerchunk, "Content-Length: 0");
 	curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headerchunk);
+	uint64_t bytes_before = downloaded_bytes;
 	CURLcode res = curl_easy_perform(curl_handle);
 	if (res == CURLE_OK) {
 		curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &response_code);
 	}
+	if (reliable && res == CURLE_OK) {
+		long http_status = 0;
+		curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &http_status);
+		if (http_status < 200 || http_status >= 300) {
+			res = CURLE_HTTP_RETURNED_ERROR;
+		}
+		if (bytes_before > 0 && !resume_headers.accepted) {
+			res = CURLE_HTTP_RETURNED_ERROR;
+		}
+	}
+	curl_slist_free_all(headerchunk);
+	return res;
 }
 
 static void startStream(const char *url) {
@@ -404,7 +503,6 @@ ABORT_DOWNLOAD:
 }
 
 int downloadThread(unsigned int args, void *arg) {
-	curl_handle = curl_easy_init();
 	//printf("downloading %s\n", generic_url);
 	char *url = (char *)generic_url;
 	char *space = strstr(url, " ");
@@ -423,18 +521,45 @@ int downloadThread(unsigned int args, void *arg) {
 	downloader_pass = 1;
 	downloaded_bytes = 0;
 	total_bytes = 180;
-	startDownload(final_url);
-	while (downloaded_bytes < total_bytes) {
-		if ((is_cancelable && is_canceled) || package_download_failed) {
+	// Only PSARC packages use the more aggressive timeout and safe resume path.
+	const bool reliable = strstr(final_url, "/vitadb/get_psarc_url.php") || strstr(final_url, "/vitadb/get_psarc_data.php");
+	const uint64_t started = (uint64_t)sceKernelGetSystemTimeWide();
+	int attempts = 0;
+	int empty_attempts = 0;
+	curl_handle = curl_easy_init();
+	if (!curl_handle) {
+		package_download_failed = true;
+		goto ABORT_DOWNLOAD;
+	}
+	do {
+		uint64_t before = downloaded_bytes;
+		CURLcode result = startDownload(final_url, 0, reliable);
+		if (is_cancelable && is_canceled) {
 			goto ABORT_DOWNLOAD;
 		}
-		startDownload(final_url);
-	}
+		if (package_download_failed) {
+			break;
+		}
+		if (reliable && (result == CURLE_HTTP_RETURNED_ERROR || (result != CURLE_OK && downloaded_bytes >= total_bytes))) {
+			package_download_failed = true;
+			break;
+		}
+		if (reliable && downloaded_bytes < total_bytes) {
+			empty_attempts = downloaded_bytes == before ? empty_attempts + 1 : 0;
+			if (++attempts >= 12 || empty_attempts >= 3 || (uint64_t)sceKernelGetSystemTimeWide() - started >= 120000000ULL) {
+				package_download_failed = true;
+				break;
+			}
+			sceKernelDelayThread(250000);
+		}
+	} while (downloaded_bytes < total_bytes);
 	if (!package_download_failed && !is_canceled && downloaded_bytes > 180 && total_bytes <= MEM_BUFFER_SIZE) {
 		fh = sceIoOpen(TEMP_DOWNLOAD_NAME, SCE_O_WRONLY | SCE_O_TRUNC | SCE_O_CREAT, 0777);
 		if (fh < 0 || sceIoWrite(fh, generic_mem_buffer, downloaded_bytes) !=
 			(int)downloaded_bytes)
 			package_download_failed = true;
+	} else if (reliable && downloaded_bytes <= 180) {
+		package_download_failed = true;
 	}
 ABORT_DOWNLOAD:
 	if (fh >= 0 && sceIoClose(fh) < 0) {
@@ -444,7 +569,9 @@ ABORT_DOWNLOAD:
 		sceIoRemove(TEMP_DOWNLOAD_NAME);
 	}
 	downloaded_bytes = total_bytes;
-	curl_easy_cleanup(curl_handle);
+	if (curl_handle) {
+		curl_easy_cleanup(curl_handle);
+	}
 	return sceKernelExitDeleteThread(0);
 }
 
