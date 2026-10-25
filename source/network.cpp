@@ -126,29 +126,38 @@ static size_t write_video_cb(void *ptr, size_t size, size_t nmemb, void *stream)
 time_t download_tstamp = 0;
 int response_code = 0;
 static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata) {
-	char *ptr = strcasestr(buffer, "Content-Length");
-	if (ptr != NULL) {
-		sscanf(ptr, "Content-Length: %llu", &total_bytes);
-#ifdef DEBUG_NET
-		sceClibPrintf("network.cpp: Detected total length of %llu bytes.\n", total_bytes);
-#endif
-	}
-	ptr = strcasestr(buffer, "Json-Length");
-	if (ptr != NULL) {
-		sscanf(ptr, "Json-Length: %llu", &total_bytes);
-#ifdef DEBUG_NET
-		sceClibPrintf("network.cpp: Detected total length of %llu bytes.\n", total_bytes);
-#endif
-	}
-	ptr = strcasestr(buffer, "Last-Modified:");
-	if (ptr != NULL) {
-		char date_string[128];
-		const char *data_start = ptr + 15; 
-		size_t date_len = size * nitems - (data_start - buffer);
-		if (date_len > 127) {
-			date_len = 127;
+	size_t length = size * nitems;
+	char line[512];
+	if (length >= sizeof(line))
+		return length;
+	memcpy(line, buffer, length);
+	line[length] = '\0';
+	if (!strncasecmp(line, "Content-Length:", 15)) {
+		unsigned long long response_length = 0;
+		if (sscanf(line + 15, "%llu", &response_length) == 1) {
+			total_bytes = response_length;
 		}
-		sceClibMemcpy(date_string, data_start, date_len);
+	#ifdef DEBUG_NET
+		sceClibPrintf("network.cpp: Detected total length of %llu bytes.\n", total_bytes);
+	#endif
+	} else if (!strncasecmp(line, "Json-Length:", 12)) {
+		unsigned long long response_length = 0;
+		if (sscanf(line + 12, "%llu", &response_length) == 1) {
+			total_bytes = response_length;
+		}
+	#ifdef DEBUG_NET
+		sceClibPrintf("network.cpp: Detected total length of %llu bytes.\n", total_bytes);
+	#endif
+	} else if (!strncasecmp(line, "Last-Modified:", 14)) {
+		char date_string[128];
+		const char *data_start = line + 14;
+		while (*data_start == ' ' || *data_start == '\t')
+			data_start++;
+		size_t date_len = strlen(data_start);
+		if (date_len >= sizeof(date_string)) {
+			date_len = sizeof(date_string) - 1;
+		}
+		memcpy(date_string, data_start, date_len);
 		date_string[date_len] = '\0';
 		for (size_t i = 0; i < date_len; i++) {
 			if (date_string[i] == '\r' || date_string[i] == '\n') {
@@ -164,11 +173,11 @@ static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata
 #endif		
 		}
 	}
-	return nitems;
+	return length;
 }
 
 static size_t header_dummy_cb(char *buffer, size_t size, size_t nitems, void *userdata) {
-	return nitems;
+	return size * nitems;
 }
 
 // A single larger socket receive window avoids long TCP stalls on the Vita.
