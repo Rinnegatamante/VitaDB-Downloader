@@ -35,6 +35,7 @@ static CURL *curl_handle = NULL;
 volatile uint64_t total_bytes = 0xFFFFFFFF;
 volatile uint64_t downloaded_bytes = 0;
 volatile uint8_t downloader_pass = 1;
+static volatile bool package_download_done = false;
 static volatile bool package_download_failed = false;
 volatile bool is_cancelable = false;
 volatile bool is_canceled = false;
@@ -572,30 +573,31 @@ ABORT_DOWNLOAD:
 	if (curl_handle) {
 		curl_easy_cleanup(curl_handle);
 	}
+	package_download_done = true;
 	return sceKernelExitDeleteThread(0);
 }
 
 bool download_file(char *url, char *text, bool cancelable, int custom_index, int custom_num_passes, GLuint bg_tex) {
 	is_canceled = false;
 	is_cancelable = cancelable;
+	package_download_done = false;
 	package_download_failed = false;
-	SceKernelThreadInfo info;
-	info.size = sizeof(SceKernelThreadInfo);
-	int res = 0;
 	SceUID thd = sceKernelCreateThread("Generic Downloader", &downloadThread, 0x10000100, 0x100000, 0, 0, NULL);
+	if (thd < 0) {
+		return false;
+	}
 	sprintf((char *)generic_url, url);
 	sceKernelStartThread(thd, 0, NULL);
 	do {
 		int pass_idx = custom_index >= 0 ? custom_index : downloader_pass;
 		int num_passes = custom_num_passes >= 0 ? custom_num_passes : 1;
 		draw_downloader_dialog(pass_idx, downloaded_bytes, total_bytes, text, num_passes, true, bg_tex);
-		res = sceKernelGetThreadInfo(thd, &info);
-	} while (info.status <= SCE_THREAD_DORMANT && res >= 0);
+	} while (!package_download_done);
 	
 	if (is_cancelable) {
 		return !is_canceled && !package_download_failed;
 	}
-	
+
 	return !package_download_failed;
 }
 
