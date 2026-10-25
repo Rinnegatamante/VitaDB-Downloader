@@ -50,10 +50,12 @@ enum {
 	SORT_APPS_SMALLEST,
 	SORT_APPS_LARGEST,
 	SORT_APPS_HIGHEST_SCORE,
-	SORT_APPS_LOWEST_SCORE
+	SORT_APPS_LOWEST_SCORE,
+	SORT_APPS_HIGHEST_REVIEWERS_SCORE,
+	SORT_APPS_LOWEST_REVIEWERS_SCORE
 };
 
-extern const char *sort_modes_apps_str[10];
+extern const char *sort_modes_apps_str[12];
 
 enum {
 	SORT_THEMES_A_Z,

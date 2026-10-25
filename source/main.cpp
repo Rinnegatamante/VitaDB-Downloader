@@ -365,6 +365,7 @@ enum {
 	FILTER_VITA_APPS_FAVORITES,
 	FILTER_VITA_APPS_NON_FREEWARE,
 	FILTER_VITA_APPS_TROPHY,
+	FILTER_VITA_APPS_UNREVIEWED,
 	FILTER_VITA_APPS_NOT_INSTALLED,
 	FILTER_VITA_APPS_OUTDATED,
 	FILTER_VITA_APPS_INSTALLED,
@@ -380,6 +381,7 @@ const char *filter_vita_apps_modes[] = {
 	"Favorites Apps",
 	"Non Freeware Apps",
 	"Apps with Trophies",
+	"Unreviewed Apps",
 	"Not Installed Apps",
 	"Outdated Apps",
 	"Installed Apps",
@@ -387,7 +389,7 @@ const char *filter_vita_apps_modes[] = {
 	"Vibecoded Apps",
 };
 
-bool filter_vita_apps_states[] = {true, true, true, true, true, true, true, true, true, true, true, true};
+bool filter_vita_apps_states[] = {true, true, true, true, true, true, true, true, true, true, true, true, true};
 
 enum {
 	FILTER_PSP_APPS_GAME,
@@ -485,6 +487,11 @@ bool filterVitaApps(AppSelection *p) {
 				break;
 			case FILTER_VITA_APPS_TROPHY:
 				if (p->trophies) {
+					filter_ret(true)
+				}
+				break;
+			case FILTER_VITA_APPS_UNREVIEWED:
+				if (p->review_count <= 0) {
 					filter_ret(true)
 				}
 				break;
@@ -1468,8 +1475,10 @@ extract_libshacccg:
 				ImGui::EndCombo();
 			}
 		} else {
+			// Certified reviews are available only for Vita homebrew.
+			const int sort_count = mode_idx == MODE_VITA_HBS ? sizeof(sort_modes_apps_str) / sizeof(*sort_modes_apps_str) : SORT_APPS_HIGHEST_REVIEWERS_SCORE;
 			if (ImGui::BeginCombo("##combo2", sort_modes_apps_str[sort_idx])) {
-				for (int n = 0; n < sizeof(sort_modes_apps_str) / sizeof(*sort_modes_apps_str); n++) {
+				for (int n = 0; n < sort_count; n++) {
 					bool is_selected = sort_idx == n;
 					if (ImGui::Selectable(sort_modes_apps_str[n], is_selected))
 						sort_idx = n;
@@ -2319,10 +2328,12 @@ extract_libshacccg:
 			go_to_top = true;
 			dirty_filter = true;
 		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !show_reviews && !trophies_feature && !extra_menu_invoked) {
-			if (mode_idx == MODE_THEMES)
+			if (mode_idx == MODE_THEMES) {
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_themes_str) / sizeof(sort_modes_themes_str[0]));
-			else
-				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_apps_str) / sizeof(sort_modes_apps_str[0]));
+			} else {
+				const int sort_count = mode_idx == MODE_VITA_HBS ? sizeof(sort_modes_apps_str) / sizeof(*sort_modes_apps_str) : SORT_APPS_HIGHEST_REVIEWERS_SCORE;
+				sort_idx = (sort_idx + 1) % sort_count;
+			}
 			go_to_top = true;
 		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES || strlen(hovered->trailer) > 5) && !show_changelog && !show_requirements && !show_reviews && !trophies_feature) {
 			if (mode_idx == MODE_THEMES) {

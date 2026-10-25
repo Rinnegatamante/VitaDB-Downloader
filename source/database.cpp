@@ -63,7 +63,7 @@ char *hardcoded_daemon_blacklist[] = {
 extern char boot_params[1024];
 extern AppSelection *to_download;
 
-const char *sort_modes_apps_str[10] = {
+const char *sort_modes_apps_str[12] = {
 	"Most Recent",
 	"Oldest",
 	"Most Downloaded",
@@ -73,7 +73,9 @@ const char *sort_modes_apps_str[10] = {
 	"Smallest",
 	"Largest",
 	"Highest Game Score",
-	"Lowest Game Score"
+	"Lowest Game Score",
+	"Highest Reviewers Score",
+	"Lowest Reviewers Score"
 };
 
 const char *sort_modes_themes_str[2] = {
@@ -632,6 +634,19 @@ void sort_apps_list(AppSelection **start, int sort_idx) {
 			return a->score > b->score;
 		case SORT_APPS_LOWEST_SCORE:
 			return a->score < b->score;
+		case SORT_APPS_HIGHEST_REVIEWERS_SCORE:
+		case SORT_APPS_LOWEST_REVIEWERS_SCORE: {
+			// Missing review scores always come last, regardless of direction.
+			const bool a_reviewed = a->review_count > 0 && std::isfinite(a->review_score) && a->review_score >= 0.0f && a->review_score <= 100.0f;
+			const bool b_reviewed = b->review_count > 0 && std::isfinite(b->review_score) && b->review_score >= 0.0f && b->review_score <= 100.0f;
+			if (a_reviewed != b_reviewed) {
+				return a_reviewed;
+			}
+			if (!a_reviewed) {
+				return false;
+			}
+			return sort_idx == SORT_APPS_HIGHEST_REVIEWERS_SCORE ? a->review_score > b->review_score : a->review_score < b->review_score;
+		}
 		default:
 			return false;
 		}
