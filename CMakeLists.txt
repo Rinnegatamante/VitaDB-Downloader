@@ -34,6 +34,7 @@ add_executable(VitaDB
 	source/player.cpp
 	source/promoter.cpp
 	source/renderer.cpp
+	source/reviews.cpp
 	source/sha1.c
 	source/unzip.c
 	source/utils.cpp

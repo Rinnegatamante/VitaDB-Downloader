@@ -52,6 +52,7 @@ void populate_pspemu_path();
 uint64_t get_free_storage();
 uint64_t get_total_storage();
 
+char *get_value_from_json(char *dst, char *src, const char *val, char **new_ptr);
 char *unescape(char *src);
 void calculate_md5(SceUID fd, char *hash);
 

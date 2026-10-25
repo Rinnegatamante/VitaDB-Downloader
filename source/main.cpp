@@ -38,6 +38,7 @@
 #include "network.h"
 #include "database.h"
 #include "renderer.h"
+#include "reviews.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -123,6 +124,35 @@ static void restore_navigation_focus(ImGuiID item_id, const ImRect& item_rect) {
 	context->NavAnyRequest = false;
 	context->NavDisableHighlight = false;
 	context->NavDisableMouseHover = true;
+}
+
+static void draw_score_text(double score, const char *text) {
+	if (score < 90.0) {
+		ImVec4 color;
+		if (score < 60.0)
+			color = ImVec4(0.85f, 0.20f, 0.20f, 1.0f);
+		else if (score < 70.0)
+			color = ImVec4(0.95f, 0.55f, 0.15f, 1.0f);
+		else if (score < 80.0)
+			color = ImVec4(0.95f, 0.80f, 0.15f, 1.0f);
+		else
+			color = ImVec4(0.25f, 0.75f, 0.35f, 1.0f);
+		ImGui::TextColored(color, "%s", text);
+		return;
+	}
+
+	float t = (float)ImGui::GetTime();
+	float pulse = (sinf(t * 3.0f) + 1.0f) * 0.5f;
+	ImVec4 green(0.25f + pulse * 0.20f, 0.75f + pulse * 0.25f, 0.35f + pulse * 0.20f, 1.0f);
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImDrawList *draw = ImGui::GetWindowDrawList();
+	float glow_alpha = 0.10f + pulse * 0.20f;
+	ImU32 glow = ImGui::ColorConvertFloat4ToU32(ImVec4(0.25f, 1.0f, 0.40f, glow_alpha));
+	draw->AddText(ImVec2(pos.x - 1.0f, pos.y), glow, text);
+	draw->AddText(ImVec2(pos.x + 1.0f, pos.y), glow, text);
+	draw->AddText(ImVec2(pos.x, pos.y - 1.0f), glow, text);
+	draw->AddText(ImVec2(pos.x, pos.y + 1.0f), glow, text);
+	ImGui::TextColored(green, "%s", text);
 }
 
 void load_preview(AppSelection *game) {
@@ -1151,6 +1181,9 @@ extract_libshacccg:
 	char right_str[64];
 	bool show_changelog = false;
 	bool show_requirements = false;
+	bool show_reviews = false;
+	char reviews_view_id[8] = {};
+	char reviews_view_name[192] = {};
 	bool calculate_right_len = true;
 	bool go_to_top = false;
 	bool fast_increment = false;
@@ -1667,30 +1700,9 @@ extract_libshacccg:
 						ImGui::TextColored(TextLabel, "Game Score:");
 						ImGui::SetCursorPosY(116);
 						ImGui::SetCursorPosX(320);
-						if (hovered->score < 60.0f)
-							ImGui::TextColored(ImVec4(0.85f, 0.20f, 0.20f, 1.0f), "%.1f", hovered->score);
-						else if (hovered->score < 70.0f)
-							ImGui::TextColored(ImVec4(0.95f, 0.55f, 0.15f, 1.0f), "%.1f", hovered->score);
-						else if (hovered->score < 80.0f)
-							ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.15f, 1.0f), "%.1f", hovered->score);
-						else if (hovered->score < 90.0f)
-							ImGui::TextColored(ImVec4(0.25f, 0.75f, 0.35f, 1.0f), "%.1f", hovered->score);
-						else {
-							float t = (float)ImGui::GetTime();
-							float pulse = (sinf(t * 3.0f) + 1.0f) * 0.5f;
-							ImVec4 green(0.25f + pulse * 0.20f, 0.75f + pulse * 0.25f, 0.35f + pulse * 0.20f, 1.0f);
-							ImVec2 pos = ImGui::GetCursorScreenPos();
-							char score_text[32];
-							sprintf(score_text, "%.1f", hovered->score);
-							ImDrawList *draw = ImGui::GetWindowDrawList();
-							float glow_alpha = 0.10f + pulse * 0.20f;
-							ImU32 glow = ImGui::ColorConvertFloat4ToU32(ImVec4(0.25f, 1.0f, 0.40f, glow_alpha));
-							draw->AddText(ImVec2(pos.x - 1.0f, pos.y), glow, score_text);
-							draw->AddText(ImVec2(pos.x + 1.0f, pos.y), glow, score_text);
-							draw->AddText(ImVec2(pos.x, pos.y - 1.0f), glow, score_text);
-							draw->AddText(ImVec2(pos.x, pos.y + 1.0f), glow, score_text);
-							ImGui::TextColored(green, "%.1f", hovered->score);
-						}
+						char score_text[32];
+						sprintf(score_text, "%.1f", hovered->score);
+						draw_score_text(hovered->score, score_text);
 					}
 					if (hovered->state != APP_UNTRACKED) {
 						ImGui::SetCursorPosY(132);
@@ -1773,20 +1785,30 @@ extract_libshacccg:
 				sceClibPrintf("Fatal error\n");
 				break;
 			}
-			if (hovered->blacklisted == APP_HARD_BLACKLISTED && hovered->state != APP_UNTRACKED) // Hardcoded blacklisted app can't be white/blacklisted
+			if (hovered->blacklisted == APP_HARD_BLACKLISTED && hovered->state != APP_UNTRACKED) { // Hardcoded blacklisted app can't be white/blacklisted
 				num_items--;
-			if (hovered->requirements)
+			}
+			if (hovered->requirements) {
 				num_items++;
-			if (strlen(hovered->screenshots) > 5)
+			}
+			if (strlen(hovered->screenshots) > 5) {
 				num_items++;
-			if (strlen(hovered->trailer) > 5)
+			}
+			if (strlen(hovered->trailer) > 5) {
 				num_items++;
-			if (strlen(hovered->source_page) > 5)
+			}
+			if (strlen(hovered->source_page) > 5) {
 				num_items++;
-			if (strlen(hovered->release_page) > 5)
+			}
+			if (strlen(hovered->release_page) > 5) {
 				num_items++;
-			if (hovered->trophies)
+			}
+			if (hovered->trophies) {
 				num_items++;
+			}
+			if (mode_idx == MODE_VITA_HBS && hovered->review_count > 0) {
+				num_items++;
+			}
 			int h = 33 + 24 * num_items;
 			int y = 272 - h / 2;
 			ImGui::SetNextWindowPos(ImVec2(280, y), ImGuiSetCond_Always);
@@ -1874,6 +1896,16 @@ extract_libshacccg:
 			if (hovered->trophies) {
 				if (ImGui::Button("View Available Trophies", ImVec2(-1.0f, 0.0f))) {
 					trophies_feature = FEATURE_LOADING;
+				}
+			}
+			if (mode_idx == MODE_VITA_HBS && hovered->review_count > 0) {
+				if (ImGui::Button("View Certified Reviews", ImVec2(-1.0f, 0.0f))) {
+					sprintf(reviews_view_id, "%s", hovered->id);
+					sprintf(reviews_view_name, "%s", hovered->name);
+					if (get_certified_reviews_status() != REVIEWS_LOADING) {
+						load_certified_reviews(reviews_view_id);
+					}
+					show_reviews = true;
 				}
 			}
 			if (hovered->requirements) {
@@ -1983,7 +2015,64 @@ extract_libshacccg:
 			ImGui::TextWrapped(hovered->requirements);
 			ImGui::End();
 		}
-		
+
+		if (show_reviews) {
+			char titlebar[256];
+			sprintf(titlebar, "%s Reviews (%s to close)", reviews_view_name, SCE_CTRL_CANCEL_LITERAL);
+			ImGui::SetNextWindowPos(ImVec2(80, 55), ImGuiSetCond_Always);
+			ImGui::SetNextWindowSize(ImVec2(800, 472), ImGuiSetCond_Always);
+			ImGui::Begin(titlebar, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+			uint8_t status = get_certified_reviews_status();
+			if (strcmp(get_certified_reviews_id(), reviews_view_id)) {
+				if (status != REVIEWS_LOADING) {
+					load_certified_reviews(reviews_view_id);
+					status = get_certified_reviews_status();
+				} else {
+					ImGui::Text("Waiting for the previous reviews request...");
+				}
+			}
+			if (!strcmp(get_certified_reviews_id(), reviews_view_id)) {
+				if (status == REVIEWS_LOADING) {
+					ImGui::Text("Loading certified reviews...");
+				} else if (status == REVIEWS_ERROR) {
+					ImGui::TextWrapped("%s", get_certified_reviews_error());
+					if (ImGui::Button("Retry", ImVec2(-1.0f, 0.0f))) {
+						load_certified_reviews(reviews_view_id);
+					}
+				} else if (status == REVIEWS_READY) {
+					int count = get_certified_reviews_count();
+					if (count == 0) { // This should never happen...
+						ImGui::Text("No certified reviews available.");
+					} else {
+						ImGui::TextColored(TextLabel, "Aggregate score:");
+						ImGui::SameLine(0.0f, 8.0f);
+						char average_text[32];
+						sprintf(average_text, "%.2f / 100", get_certified_reviews_average());
+						draw_score_text(get_certified_reviews_average(), average_text);
+						ImGui::SameLine(0.0f, 8.0f);
+						ImGui::Text("(%d reviews)", count);
+						ImGui::Separator();
+						const std::vector<review> &entries = get_certified_reviews();
+						for (size_t i = 0; i < entries.size(); i++) {
+							const review &review = entries[i];
+							char reviewer_label[256];
+							sprintf(reviewer_label, "Certified Review from %s###review_%u", review.reviewer.c_str(), (unsigned)i);
+							float score_width = ImGui::CalcTextSize("100.00 / 100").x;
+							float label_width = ImGui::GetContentRegionAvail().x - score_width - 16.0f;
+							ImGui::Selectable(reviewer_label, false, 0, ImVec2(label_width, 0.0f));
+							ImGui::SameLine(0.0f, 16.0f);
+							char score_text[32];
+							sprintf(score_text, "%.2f / 100", review.score);
+							draw_score_text(review.score, score_text);
+							ImGui::TextWrapped("%s", review.comment.c_str());
+							ImGui::Separator();
+						}
+					}
+				}
+			}
+			ImGui::End();
+		}
+
 		if (trophies_feature == FEATURE_ON) {
 			char titlebar[256];
 			sprintf(titlebar, "%s Trophies (%s to close)", hovered->name, SCE_CTRL_CANCEL_LITERAL);
@@ -2014,7 +2103,7 @@ extract_libshacccg:
 		
 		// Extra controls handling
 		sceCtrlPeekBufferPositive(0, &pad, 1);
-		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !trophies_feature && !extra_menu_invoked) {
+		if (pad.buttons & SCE_CTRL_LTRIGGER && !(oldpad & SCE_CTRL_LTRIGGER) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !show_reviews && !trophies_feature && !extra_menu_invoked) {
 			calculate_right_len = true;
 			old_sort_idx = -1;
 			sort_idx = 0;
@@ -2022,13 +2111,13 @@ extract_libshacccg:
 			mode_idx = (mode_idx + 1) % MODES_NUM;
 			go_to_top = true;
 			dirty_filter = true;
-		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !trophies_feature && !extra_menu_invoked) {
+		} else if (pad.buttons & SCE_CTRL_RTRIGGER && !(oldpad & SCE_CTRL_RTRIGGER) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !show_reviews && !trophies_feature && !extra_menu_invoked) {
 			if (mode_idx == MODE_THEMES)
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_themes_str) / sizeof(sort_modes_themes_str[0]));
 			else
 				sort_idx = (sort_idx + 1) % (sizeof(sort_modes_apps_str) / sizeof(sort_modes_apps_str[0]));
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES || strlen(hovered->trailer) > 5) && !show_changelog && !show_requirements && !trophies_feature) {
+		} else if (pad.buttons & SCE_CTRL_START && !(oldpad & SCE_CTRL_START) && hovered && (strlen(hovered->screenshots) > 5 || mode_idx == MODE_THEMES || strlen(hovered->trailer) > 5) && !show_changelog && !show_requirements && !show_reviews && !trophies_feature) {
 			if (mode_idx == MODE_THEMES) {
 				if (screenshots_feature) {
 					screenshots_feature = FEATURE_OFF;
@@ -2059,7 +2148,7 @@ extract_libshacccg:
 					screenshots_feature = FEATURE_LOADING;
 				}
 			}
-		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !trophies_feature) {
+		} else if (pad.buttons & SCE_CTRL_SELECT && !(oldpad & SCE_CTRL_SELECT) && !trailer_feature && !screenshots_feature && !show_changelog && !show_requirements && !show_reviews && !trophies_feature) {
 			if (mode_idx == MODE_THEMES) {
 				shuffle_themes = !shuffle_themes;
 				ThemeSelection *g = themes;
@@ -2086,7 +2175,7 @@ extract_libshacccg:
 					extra_menu_invoked = true;
 				}
 			}
-		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && !trailer_feature && !show_changelog && !show_requirements && !trophies_feature && (!extra_menu_invoked || screenshots_feature)) {
+		} else if (pad.buttons & SCE_CTRL_LEFT && !(oldpad & SCE_CTRL_LEFT) && !trailer_feature && !show_changelog && !show_requirements && !show_reviews && !trophies_feature && (!extra_menu_invoked || screenshots_feature)) {
 			if (screenshots_feature)
 				cur_ss_idx--;
 			else {
@@ -2094,13 +2183,17 @@ extract_libshacccg:
 				decrement_stack_idx = 0;
 				decremented_app = nullptr;
 			}
-		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT) && !trailer_feature && !show_changelog && !show_requirements && !trophies_feature && (!extra_menu_invoked || screenshots_feature)) {
+		} else if (pad.buttons & SCE_CTRL_RIGHT && !(oldpad & SCE_CTRL_RIGHT) && !trailer_feature && !show_changelog && !show_requirements && !show_reviews && !trophies_feature && (!extra_menu_invoked || screenshots_feature)) {
 			if (screenshots_feature)
 				cur_ss_idx++;
 			else
 				fast_increment = true;
 		} else if (pad.buttons & SCE_CTRL_CANCEL && !(oldpad & SCE_CTRL_CANCEL)) {
-			if (show_changelog) {
+			if (show_reviews) {
+				show_reviews = false;
+				if (!extra_menu_invoked)
+					restore_app_focus = hovered;
+			} else if (show_changelog) {
 				show_changelog = false;
 				free(changelog);
 			} else if (show_requirements) {
@@ -2132,10 +2225,10 @@ extract_libshacccg:
 				restore_app_focus = hovered;
 			} else
 				go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !trailer_feature && !screenshots_feature && !show_requirements && !trophies_feature && !show_changelog && !extra_menu_invoked) {
+		} else if (pad.buttons & SCE_CTRL_TRIANGLE && !(oldpad & SCE_CTRL_TRIANGLE) && !trailer_feature && !screenshots_feature && !show_requirements && !show_reviews && !trophies_feature && !show_changelog && !extra_menu_invoked) {
 			init_interactive_ime_dialog("Insert search term", app_name_filter);
 			go_to_top = true;
-		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !trailer_feature && !screenshots_feature && !show_requirements && !trophies_feature && !show_changelog && !extra_menu_invoked) {
+		} else if (pad.buttons & SCE_CTRL_SQUARE && !(oldpad & SCE_CTRL_SQUARE) && !trailer_feature && !screenshots_feature && !show_requirements && !show_reviews && !trophies_feature && !show_changelog && !extra_menu_invoked) {
 			if (mode_idx == MODE_VITA_HBS || mode_idx == MODE_PSP_HBS) {
 				if (hovered) {
 					if (hovered->favorites) {

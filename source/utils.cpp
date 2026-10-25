@@ -190,6 +190,65 @@ uint64_t get_total_storage() {
 	return total_storage;
 }
 
+char *get_value_from_json(char *dst, char *src, const char *val, char **new_ptr) {
+	char label[32];
+	int label_len = snprintf(label, sizeof(label), "\"%s\":", val);
+	if (!src || label_len <= 0 || label_len >= (int)sizeof(label)) {
+		return nullptr;
+	}
+	char *ptr = strstr(src, label);
+	if (!ptr) {
+		return nullptr;
+	}
+	ptr += label_len;
+	while (*ptr == ' ' || *ptr == '\t' || *ptr == '\r' || *ptr == '\n') {
+		ptr++;
+	}
+	bool is_string = *ptr == '\"';
+	if (is_string) {
+		ptr++;
+	}
+	char *end = ptr;
+	if (is_string) {
+		while (*end && *end != '\"') {
+			if (*end == '\\' && end[1]) {
+				end++;
+			}
+			end++;
+		}
+		if (*end != '\"') {
+			return nullptr;
+		}
+	} else {
+		while (*end && *end != ',' && *end != '}' && *end != ']' &&
+			*end != ' ' && *end != '\t' && *end != '\r' && *end != '\n') {
+			end++;
+		}
+		if (end == ptr) {
+			return nullptr;
+		}
+	}
+	size_t len = end - ptr;
+	if (!dst) {
+		if (!new_ptr) {
+			return nullptr;
+		}
+		*new_ptr = nullptr;
+		if (len) {
+			dst = (char *)malloc(len + 1);
+			if (!dst) {
+				return nullptr;
+			}
+			*new_ptr = dst;
+		}
+	}
+	if (dst) {
+		memcpy(dst, ptr, len);
+		dst[len] = 0;
+	}
+	return is_string ? end + 1 : end;
+}
+
 char *unescape(char *src) {
 	char *res = src;
 	uint32_t i = 0;

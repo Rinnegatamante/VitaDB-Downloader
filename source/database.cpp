@@ -103,32 +103,6 @@ static void populate_titleid_clashes(AppSelection *head) {
 	}
 }
 
-static char *get_value_from_json(char *dst, char *src, char *val, char **new_ptr) {
-	char label[32];
-	int label_len = sprintf(label, "\"%s\": \"", val);
-	//printf("label: %s\n", label);
-	char *ptr = strstr(src, label);
-	if (!ptr) {
-		return nullptr;
-	}
-	ptr += label_len;
-	//printf("ptr is: %X\n", ptr);
-	char *end2 = strstr(ptr, (val[0] == 'l' || val[0] == 'c') ? "\"," : "\"");
-	if (dst == nullptr) {
-		if (end2 - ptr > 0) {
-			dst = (char *)malloc(end2 - ptr + 1);
-			*new_ptr = dst;
-		} else {
-			*new_ptr = nullptr;
-			return end2 + 1;
-		}
-	}
-	//printf("size: %d\n", end2 - ptr);
-	memcpy(dst, ptr, end2 - ptr);
-	dst[end2 - ptr] = 0;
-	return end2 + 1;
-}
-
 static std::string filesystem_key(const char *name) {
 	std::string key(name);
 	for (char &c : key) {
@@ -318,7 +292,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			}
 		}
 		do {
-			char name[128], version[64], fname[128], fname2[128], smalldata[4];
+			char name[128], version[64], fname[128], fname2[128], smalldata[16];
 			ptr = get_value_from_json(name, ptr, "name", nullptr);
 			//printf("parsing %s\n", name);
 			if (!ptr) {
@@ -333,6 +307,7 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			node->prev_clash = nullptr;
 			node->state = APP_UNTRACKED;
 			node->score = 0.0f;
+			node->review_count = 0;
 			ptr = get_value_from_json(node->icon, ptr, "icon", nullptr);
 			if (node->icon[0] && node->icon[1] && indexed_icons.insert(node->icon).second) {
 				missing_icons.push_back(node);
@@ -401,6 +376,11 @@ bool populate_apps_database(const char *file, bool is_psp) {
 			if (!is_psp) {
 				ptr = get_value_from_json(smalldata, ptr, "score", nullptr);
 				node->score = atof(smalldata);
+				char *review_field = strstr(ptr, "\"review_count\": \"");
+				char *data_field = strstr(ptr, "\"data\": \"");
+				if (review_field && data_field && review_field < data_field) {
+					node->review_count = atoi(review_field + strlen("\"review_count\": \""));
+				}
 			}
 			ptr = get_value_from_json(fname, ptr, "data", nullptr);
 			node->has_data = strlen(fname) > 5;
